@@ -1,0 +1,56 @@
+name: Feature
+description: Nouvelle fonctionnalité Atlasia
+title: "[Feature] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Pourquoi cette feature ? quel problème elle résout ?
+    validations:
+      required: true
+
+  - type: textarea
+    id: ac
+    attributes:
+      label: Critères d'acceptation (3+)
+      description: Liste testable de critères (Given/When/Then ou bullets)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ui_impact
+    attributes:
+      label: Impact UI / parcours ?
+      options:
+        - "Non"
+        - "Oui"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: api_db_impact
+    attributes:
+      label: Impact API / DB ?
+      options:
+        - "Non"
+        - "Oui"
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Hors périmètre / non-objectifs
+      description: Ce qui n'est pas demandé
+    validations:
+      required: false
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risques / dépendances
+      description: risques techniques, métier, perf, sécurité
+    validations:
+      required: false

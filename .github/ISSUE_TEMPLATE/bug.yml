@@ -1,0 +1,44 @@
+name: Bug
+description: Déclarer un bug Atlasia
+title: "[Bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Étapes pour reproduire (1..n)
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Résultat attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Résultat actuel
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / captures
+      description: Coller les logs pertinents (ou lien)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: ui_impact
+    attributes:
+      label: Impact UI / parcours ?
+      options:
+        - "Non"
+        - "Oui"
+    validations:
+      required: true

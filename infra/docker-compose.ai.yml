@@ -1,0 +1,27 @@
+services:
+  ai-orchestrator:
+    build: ../ai-orchestrator
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://ai-db:5432/ai
+      DB_USER: ai
+      DB_PASSWORD: ai
+      ORCHESTRATOR_TOKEN: "${ORCHESTRATOR_TOKEN}"
+      REPO_ALLOWLIST: "backend/,frontend/,docs/,infra/,ai/"
+      WORKFLOW_PROTECT: ".github/workflows/"
+    depends_on:
+      - ai-db
+    ports:
+      - "8088:8080"
+
+  ai-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ai
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ai
+    volumes:
+      - ai_db:/var/lib/postgresql/data
+
+volumes:
+  ai_db:

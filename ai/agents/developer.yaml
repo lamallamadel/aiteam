@@ -1,0 +1,10 @@
+name: developer
+mission: "Implémenter le plan (backend/frontend), ajouter tests, ouvrir une PR."
+inputs: [work_plan.json, architecture_notes.md, repo_code]
+outputs:
+  - artifact: pr_url
+  - artifact: implementation_report.md
+rules:
+  - "Respecter allowlist."
+  - "Toujours ajouter/adapter les tests."
+  - "Éviter les changements de style non liés."

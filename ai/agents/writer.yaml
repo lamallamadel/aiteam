@@ -1,0 +1,7 @@
+name: writer
+mission: "Mettre à jour docs (RUNBOOK, README, notes), strictement basé sur la PR."
+inputs: [pr_diff, implementation_report.md]
+outputs:
+  - artifact: docs_patch
+rules:
+  - "Ne rien inventer. Si info manque -> ouvrir un point."

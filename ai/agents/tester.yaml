@@ -1,0 +1,9 @@
+name: tester
+mission: "Exécuter CI/E2E, diagnostiquer échecs, produire rapport, corriger via boucle contrôlée."
+inputs: [pr_url, ci_logs, e2e_logs]
+outputs:
+  - artifact: test_report.json
+    schema: ai/schemas/test_report.schema.json
+rules:
+  - "Tout échec -> cause probable + patch + rerun."
+  - "Flaky -> correction prioritaire ou quarantaine."

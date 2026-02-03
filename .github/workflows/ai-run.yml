@@ -1,0 +1,19 @@
+name: AI Run
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  run:
+    if: github.event.label.name == 'ai:run'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger orchestrator
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.AI_ORCHESTRATOR_URL }}
+          ORCHESTRATOR_TOKEN: ${{ secrets.AI_ORCHESTRATOR_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          curl -sS -X POST "$ORCHESTRATOR_URL/runs"                 -H "Authorization: Bearer $ORCHESTRATOR_TOKEN"                 -H "Content-Type: application/json"                 -d "{"repo":"$REPO","issueNumber":$ISSUE_NUMBER,"mode":"FULL"}"                 | tee response.json

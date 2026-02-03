@@ -1,0 +1,9 @@
+name: qualifier
+mission: "Clarifier règles métier, cas limites, données de test, et plan de travail."
+inputs: [ticket_plan.json, docs/DOMAIN_GLOSSARY.md, docs/ADR/*]
+outputs:
+  - artifact: work_plan.json
+    schema: ai/schemas/work_plan.schema.json
+rules:
+  - "Convertir le flou en critères testables."
+  - "Toute hypothèse doit être explicitée + associée à un test."
