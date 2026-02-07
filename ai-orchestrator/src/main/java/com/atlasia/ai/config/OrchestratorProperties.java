@@ -7,11 +7,18 @@ public record OrchestratorProperties(
         String token,
         String repoAllowlist,
         String workflowProtectPrefix,
-        GitHub github
+        GitHub github,
+        Llm llm
 ) {
     public record GitHub(
             String appId,
             String privateKeyPath,
             String installationId
+    ) {}
+    
+    public record Llm(
+            String endpoint,
+            String model,
+            String apiKey
     ) {}
 }
