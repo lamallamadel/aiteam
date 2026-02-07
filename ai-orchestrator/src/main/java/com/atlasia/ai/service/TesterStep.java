@@ -1,5 +1,7 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.service.observability.CorrelationIdHolder;
+import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,12 +27,14 @@ public class TesterStep implements AgentStep {
     private final GitHubApiClient gitHubApiClient;
     private final LlmService llmService;
     private final ObjectMapper objectMapper;
+    private final OrchestratorMetrics metrics;
     private final Random random = new Random();
 
-    public TesterStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper) {
+    public TesterStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper, OrchestratorMetrics metrics) {
         this.gitHubApiClient = gitHubApiClient;
         this.llmService = llmService;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     @Override
@@ -62,9 +66,10 @@ public class TesterStep implements AgentStep {
                 log.info("CI passed on attempt {}", ciAttempts);
             } else if (ciAttempts < MAX_CI_ITERATIONS) {
                 notes.add("CI failed on attempt " + ciAttempts + ", applying fix");
-                log.warn("CI failed on attempt {}, will attempt fix", ciAttempts);
+                log.warn("CI failed on attempt {}, will attempt fix, correlationId={}", ciAttempts, CorrelationIdHolder.getCorrelationId());
                 applyFix(context, ciStatus);
                 context.getRunEntity().incrementCiFixCount();
+                metrics.recordCiFixAttempt();
             } else {
                 notes.add("CI failed after " + MAX_CI_ITERATIONS + " attempts");
                 log.error("CI failed after {} attempts", MAX_CI_ITERATIONS);
@@ -85,9 +90,10 @@ public class TesterStep implements AgentStep {
                 log.info("E2E passed on attempt {}", e2eAttempts);
             } else if (e2eAttempts < MAX_E2E_ITERATIONS) {
                 notes.add("E2E failed on attempt " + e2eAttempts + ", applying fix");
-                log.warn("E2E failed on attempt {}, will attempt fix", e2eAttempts);
+                log.warn("E2E failed on attempt {}, will attempt fix, correlationId={}", e2eAttempts, CorrelationIdHolder.getCorrelationId());
                 applyE2eFix(context, e2eStatus);
                 context.getRunEntity().incrementE2eFixCount();
+                metrics.recordE2eFixAttempt();
             } else {
                 notes.add("E2E failed after " + MAX_E2E_ITERATIONS + " attempts");
                 log.error("E2E failed after {} attempts", MAX_E2E_ITERATIONS);

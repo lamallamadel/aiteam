@@ -1,5 +1,7 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.service.exception.OrchestratorException;
+
 public class EscalationException extends Exception {
     private final String escalationJson;
 

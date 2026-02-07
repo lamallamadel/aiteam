@@ -22,3 +22,7 @@ Thumbs.db
 test-results/
 playwright-report/
 coverage/
+
+# Logs
+logs/
+*.log

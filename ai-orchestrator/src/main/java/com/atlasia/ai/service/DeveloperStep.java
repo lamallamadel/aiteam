@@ -2,6 +2,8 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunArtifactEntity;
+import com.atlasia.ai.service.exception.AgentStepException;
+import com.atlasia.ai.service.exception.OrchestratorException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,7 +93,8 @@ public class DeveloperStep implements AgentStep {
         } catch (Exception e) {
             log.error("Failed to execute developer step for issue #{}: {}", 
                     context.getRunEntity().getIssueNumber(), e.getMessage(), e);
-            throw new DeveloperStepException("Code implementation failed: " + e.getMessage(), e);
+            throw new AgentStepException("Code implementation failed: " + e.getMessage(), e, 
+                    "DEVELOPER", "execute", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
         }
     }
 
@@ -634,7 +637,8 @@ public class DeveloperStep implements AgentStep {
                         log.debug("Created blob {} for {} ({} bytes)", blobSha, path, content.length());
                     } catch (Exception e) {
                         log.error("Failed to create blob for {}: {}", path, e.getMessage());
-                        throw new DeveloperStepException("Failed to create blob for file: " + path, e);
+                        throw new AgentStepException("Failed to create blob for file: " + path, e, 
+                                "DEVELOPER", "applyChanges", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
                     }
                 }
                 
@@ -683,7 +687,8 @@ public class DeveloperStep implements AgentStep {
             return commitSha;
         } catch (Exception e) {
             log.error("Failed to apply multi-file changes: {}", e.getMessage(), e);
-            throw new DeveloperStepException("Failed to apply code changes to branch: " + branchName, e);
+            throw new AgentStepException("Failed to apply code changes to branch: " + branchName, e, 
+                    "DEVELOPER", "applyChanges", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
         }
     }
 
@@ -903,15 +908,5 @@ public class DeveloperStep implements AgentStep {
         
         public String getExplanation() { return explanation; }
         public void setExplanation(String explanation) { this.explanation = explanation; }
-    }
-    
-    public static class DeveloperStepException extends RuntimeException {
-        public DeveloperStepException(String message) {
-            super(message);
-        }
-        
-        public DeveloperStepException(String message, Throwable cause) {
-            super(message, cause);
-        }
     }
 }

@@ -4,6 +4,11 @@ import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.exception.OrchestratorException;
+import com.atlasia.ai.service.exception.WorkflowException;
+import com.atlasia.ai.service.observability.CorrelationIdHolder;
+import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -15,7 +20,7 @@ import java.util.UUID;
 
 @Service
 public class WorkflowEngine {
-    private static final Logger logger = LoggerFactory.getLogger(WorkflowEngine.class);
+    private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private final RunRepository runRepository;
     private final JsonSchemaValidator schemaValidator;
@@ -25,6 +30,7 @@ public class WorkflowEngine {
     private final DeveloperStep developerStep;
     private final TesterStep testerStep;
     private final WriterStep writerStep;
+    private final OrchestratorMetrics metrics;
 
     public WorkflowEngine(
             RunRepository runRepository,
@@ -34,7 +40,8 @@ public class WorkflowEngine {
             ArchitectStep architectStep,
             DeveloperStep developerStep,
             TesterStep testerStep,
-            WriterStep writerStep) {
+            WriterStep writerStep,
+            OrchestratorMetrics metrics) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
         this.pmStep = pmStep;
@@ -43,19 +50,40 @@ public class WorkflowEngine {
         this.developerStep = developerStep;
         this.testerStep = testerStep;
         this.writerStep = writerStep;
+        this.metrics = metrics;
     }
 
     @Async("workflowExecutor")
     public void executeWorkflowAsync(UUID runId) {
-        RunEntity runEntity = runRepository.findById(runId).orElseThrow(
-            () -> new IllegalArgumentException("Run not found: " + runId)
-        );
-        executeWorkflow(runEntity);
+        String correlationId = CorrelationIdHolder.generateCorrelationId();
+        CorrelationIdHolder.setCorrelationId(correlationId);
+        CorrelationIdHolder.setRunId(runId);
+        
+        try {
+            RunEntity runEntity = runRepository.findById(runId).orElseThrow(
+                () -> new WorkflowException("Run not found: " + runId, runId, "INIT", 
+                        OrchestratorException.RecoveryStrategy.FAIL_FAST)
+            );
+            
+            log.info("Starting async workflow execution: runId={}, correlationId={}", runId, correlationId);
+            executeWorkflow(runEntity);
+        } finally {
+            CorrelationIdHolder.clear();
+        }
     }
 
     @Transactional
     public void executeWorkflow(RunEntity runEntity) {
+        Timer.Sample workflowTimer = metrics.startWorkflowTimer();
+        long startTime = System.currentTimeMillis();
+        
+        metrics.recordWorkflowExecution();
+        
         try {
+            log.info("Starting workflow execution: runId={}, issueNumber={}, repo={}, correlationId={}", 
+                    runEntity.getId(), runEntity.getIssueNumber(), runEntity.getRepo(), 
+                    CorrelationIdHolder.getCorrelationId());
+            
             String[] repoParts = runEntity.getRepo().split("/");
             String owner = repoParts[0];
             String repo = repoParts[1];
@@ -73,93 +101,260 @@ public class WorkflowEngine {
             runEntity.setCurrentAgent(null);
             runRepository.save(runEntity);
             
-            logger.info("Workflow completed successfully for run: {}", runEntity.getId());
+            long duration = System.currentTimeMillis() - startTime;
+            workflowTimer.stop(metrics.startWorkflowTimer());
+            metrics.recordWorkflowSuccess(duration);
+            
+            log.info("Workflow completed successfully: runId={}, duration={}ms, correlationId={}", 
+                    runEntity.getId(), duration, CorrelationIdHolder.getCorrelationId());
 
         } catch (EscalationException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            workflowTimer.stop(metrics.startWorkflowTimer());
+            metrics.recordWorkflowEscalation(duration);
             handleEscalation(runEntity, e);
+        } catch (OrchestratorException e) {
+            long duration = System.currentTimeMillis() - startTime;
+            workflowTimer.stop(metrics.startWorkflowTimer());
+            metrics.recordWorkflowFailure(duration);
+            handleOrchestratorException(runEntity, e);
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            workflowTimer.stop(metrics.startWorkflowTimer());
+            metrics.recordWorkflowFailure(duration);
             handleFailure(runEntity, e);
         }
     }
 
     private void executePmStep(RunContext context) throws Exception {
-        logger.info("Executing PM step for run: {}", context.getRunEntity().getId());
+        String agentName = "PM";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.PM);
-        runEntity.setCurrentAgent("PM");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing PM step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.PM);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = pmStep.execute(context);
-        schemaValidator.validate(artifact, "ticket_plan.schema.json");
-        
-        context.setTicketPlan(artifact);
-        persistArtifact(runEntity, "PM", "ticket_plan.json", artifact);
+            String artifact = pmStep.execute(context);
+            schemaValidator.validate(artifact, "ticket_plan.schema.json");
+            
+            context.setTicketPlan(artifact);
+            persistArtifact(runEntity, agentName, "ticket_plan.json", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("PM step completed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("PM step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void executeQualifierStep(RunContext context) throws Exception {
-        logger.info("Executing Qualifier step for run: {}", context.getRunEntity().getId());
+        String agentName = "QUALIFIER";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.QUALIFIER);
-        runEntity.setCurrentAgent("QUALIFIER");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing Qualifier step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.QUALIFIER);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = qualifierStep.execute(context);
-        schemaValidator.validate(artifact, "work_plan.schema.json");
-        
-        context.setWorkPlan(artifact);
-        persistArtifact(runEntity, "QUALIFIER", "work_plan.json", artifact);
+            String artifact = qualifierStep.execute(context);
+            schemaValidator.validate(artifact, "work_plan.schema.json");
+            
+            context.setWorkPlan(artifact);
+            persistArtifact(runEntity, agentName, "work_plan.json", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Qualifier step completed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Qualifier step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void executeArchitectStep(RunContext context) throws Exception {
-        logger.info("Executing Architect step for run: {}", context.getRunEntity().getId());
+        String agentName = "ARCHITECT";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.ARCHITECT);
-        runEntity.setCurrentAgent("ARCHITECT");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing Architect step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.ARCHITECT);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = architectStep.execute(context);
-        persistArtifact(runEntity, "ARCHITECT", "architecture_notes.md", artifact);
+            String artifact = architectStep.execute(context);
+            persistArtifact(runEntity, agentName, "architecture_notes.md", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Architect step completed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Architect step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void executeDeveloperStep(RunContext context) throws Exception {
-        logger.info("Executing Developer step for run: {}", context.getRunEntity().getId());
+        String agentName = "DEVELOPER";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.DEVELOPER);
-        runEntity.setCurrentAgent("DEVELOPER");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing Developer step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.DEVELOPER);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = developerStep.execute(context);
-        persistArtifact(runEntity, "DEVELOPER", "pr_url", artifact);
+            String artifact = developerStep.execute(context);
+            persistArtifact(runEntity, agentName, "pr_url", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Developer step completed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Developer step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void executeTesterStep(RunContext context) throws Exception {
-        logger.info("Executing Tester step for run: {}", context.getRunEntity().getId());
+        String agentName = "TESTER";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.TESTER);
-        runEntity.setCurrentAgent("TESTER");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing Tester step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.TESTER);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = testerStep.execute(context);
-        schemaValidator.validate(artifact, "test_report.schema.json");
-        
-        persistArtifact(runEntity, "TESTER", "test_report.json", artifact);
+            String artifact = testerStep.execute(context);
+            schemaValidator.validate(artifact, "test_report.schema.json");
+            
+            persistArtifact(runEntity, agentName, "test_report.json", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Tester step completed: runId={}, duration={}ms, ciFixCount={}, e2eFixCount={}, correlationId={}", 
+                    context.getRunEntity().getId(), duration, runEntity.getCiFixCount(), 
+                    runEntity.getE2eFixCount(), CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Tester step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void executeWriterStep(RunContext context) throws Exception {
-        logger.info("Executing Writer step for run: {}", context.getRunEntity().getId());
+        String agentName = "WRITER";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
         
-        RunEntity runEntity = context.getRunEntity();
-        runEntity.setStatus(RunStatus.WRITER);
-        runEntity.setCurrentAgent("WRITER");
-        runRepository.save(runEntity);
+        try {
+            log.info("Executing Writer step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.WRITER);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
 
-        String artifact = writerStep.execute(context);
-        persistArtifact(runEntity, "WRITER", "docs_update", artifact);
+            String artifact = writerStep.execute(context);
+            persistArtifact(runEntity, agentName, "docs_update", artifact);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Writer step completed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Writer step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
     }
 
     private void persistArtifact(RunEntity runEntity, String agentName, String artifactType, String payload) {
@@ -171,26 +366,63 @@ public class WorkflowEngine {
         );
         runEntity.addArtifact(artifact);
         runRepository.save(runEntity);
+        
+        log.debug("Persisted artifact: runId={}, agentName={}, artifactType={}, correlationId={}", 
+                runEntity.getId(), agentName, artifactType, CorrelationIdHolder.getCorrelationId());
     }
 
     private void handleEscalation(RunEntity runEntity, EscalationException e) {
-        logger.warn("Workflow escalated for run: {}", runEntity.getId());
+        log.warn("Workflow escalated: runId={}, agent={}, correlationId={}", 
+                runEntity.getId(), runEntity.getCurrentAgent(), CorrelationIdHolder.getCorrelationId());
         
         try {
             schemaValidator.validate(e.getEscalationJson(), "escalation.schema.json");
             persistArtifact(runEntity, runEntity.getCurrentAgent(), "escalation.json", e.getEscalationJson());
         } catch (Exception validationError) {
-            logger.error("Failed to validate escalation JSON", validationError);
+            log.error("Failed to validate escalation JSON: runId={}, correlationId={}", 
+                    runEntity.getId(), CorrelationIdHolder.getCorrelationId(), validationError);
         }
         
         runEntity.setStatus(RunStatus.ESCALATED);
         runRepository.save(runEntity);
     }
 
-    private void handleFailure(RunEntity runEntity, Exception e) {
-        logger.error("Workflow failed for run: {}", runEntity.getId(), e);
+    private void handleOrchestratorException(RunEntity runEntity, OrchestratorException e) {
+        log.error("Workflow failed with orchestrator exception: runId={}, errorCode={}, recoveryStrategy={}, retryable={}, correlationId={}", 
+                runEntity.getId(), e.getErrorCode(), e.getRecoveryStrategy(), e.isRetryable(), 
+                CorrelationIdHolder.getCorrelationId(), e);
         
         runEntity.setStatus(RunStatus.FAILED);
         runRepository.save(runEntity);
+        
+        persistErrorArtifact(runEntity, e);
+    }
+
+    private void handleFailure(RunEntity runEntity, Exception e) {
+        log.error("Workflow failed with unexpected exception: runId={}, agent={}, correlationId={}", 
+                runEntity.getId(), runEntity.getCurrentAgent(), CorrelationIdHolder.getCorrelationId(), e);
+        
+        runEntity.setStatus(RunStatus.FAILED);
+        runRepository.save(runEntity);
+        
+        persistErrorArtifact(runEntity, e);
+    }
+    
+    private void persistErrorArtifact(RunEntity runEntity, Exception e) {
+        try {
+            String errorDetails = String.format(
+                    "Error: %s\nMessage: %s\nAgent: %s\nCorrelationId: %s",
+                    e.getClass().getSimpleName(),
+                    e.getMessage(),
+                    runEntity.getCurrentAgent(),
+                    CorrelationIdHolder.getCorrelationId()
+            );
+            
+            persistArtifact(runEntity, runEntity.getCurrentAgent() != null ? runEntity.getCurrentAgent() : "UNKNOWN", 
+                    "error_details", errorDetails);
+        } catch (Exception persistError) {
+            log.error("Failed to persist error artifact: runId={}, correlationId={}", 
+                    runEntity.getId(), CorrelationIdHolder.getCorrelationId(), persistError);
+        }
     }
 }
