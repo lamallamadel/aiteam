@@ -230,4 +230,31 @@ public class GitHubApiClient {
                 .bodyToMono(Map.class)
                 .block();
     }
+
+    public List<Map<String, Object>> listIssueComments(String owner, String repo, int issueNumber) {
+        List<Map> rawList = webClient.get()
+                .uri("/repos/{owner}/{repo}/issues/{issue_number}/comments", owner, repo, issueNumber)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToFlux(Map.class)
+                .collectList()
+                .block();
+        return (List) rawList;
+    }
+
+    public void addLabelsToIssue(String owner, String repo, int issueNumber, List<String> labels) {
+        Map<String, Object> requestBody = Map.of("labels", labels);
+
+        webClient.post()
+                .uri("/repos/{owner}/{repo}/issues/{issue_number}/labels", owner, repo, issueNumber)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Void.class)
+                .block();
+    }
 }
