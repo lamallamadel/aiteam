@@ -186,4 +186,48 @@ public class GitHubApiClient {
                 .bodyToMono(String.class)
                 .block();
     }
+
+    public Map<String, Object> getPullRequest(String owner, String repo, int pullNumber) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/pulls/{pull_number}", owner, repo, pullNumber)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> listPullRequestCommits(String owner, String repo, int pullNumber) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/pulls/{pull_number}/commits", owner, repo, pullNumber)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> getCommitStatus(String owner, String repo, String ref) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/commits/{ref}/status", owner, repo, ref)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> listCheckRunsForRef(String owner, String repo, String ref) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/commits/{ref}/check-runs", owner, repo, ref)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
 }
