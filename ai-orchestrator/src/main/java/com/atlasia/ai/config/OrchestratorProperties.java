@@ -6,5 +6,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record OrchestratorProperties(
         String token,
         String repoAllowlist,
-        String workflowProtectPrefix
-) {}
+        String workflowProtectPrefix,
+        GitHub github
+) {
+    public record GitHub(
+            String appId,
+            String privateKeyPath,
+            String installationId
+    ) {}
+}

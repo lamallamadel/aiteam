@@ -1,1 +1,24 @@
+# Maven
 **/target/*
+
+# Java/IDE
+*.iml
+.idea/
+.classpath
+.project
+.settings/
+
+# Node/Frontend
+node_modules/
+dist/
+.angular/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test reports
+test-results/
+playwright-report/
+coverage/

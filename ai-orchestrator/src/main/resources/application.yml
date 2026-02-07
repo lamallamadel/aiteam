@@ -25,3 +25,7 @@ atlasia:
     token: ${ORCHESTRATOR_TOKEN:changeme}
     repoAllowlist: ${REPO_ALLOWLIST:backend/,frontend/,docs/,infra/,ai/}
     workflowProtectPrefix: ${WORKFLOW_PROTECT:.github/workflows/}
+    github:
+      app-id: ${GITHUB_APP_ID:}
+      private-key-path: ${GITHUB_PRIVATE_KEY_PATH:}
+      installation-id: ${GITHUB_INSTALLATION_ID:}
