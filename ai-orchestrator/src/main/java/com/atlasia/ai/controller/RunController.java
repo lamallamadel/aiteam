@@ -4,6 +4,7 @@ import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.api.RunResponse;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
+import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -41,14 +42,14 @@ public class RunController {
                 request.repo(),
                 request.issueNumber(),
                 request.mode(),
-                "RECEIVED",
+                RunStatus.RECEIVED,
                 Instant.now()
         );
         runRepository.save(entity);
 
         // Scaffold: dans une version complète, on enqueue un job ici (async) et on exécute le workflow.
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(new RunResponse(id, entity.getStatus(), entity.getCreatedAt()));
+                .body(new RunResponse(id, entity.getStatus().name(), entity.getCreatedAt()));
     }
 
     @GetMapping("/{id}")
