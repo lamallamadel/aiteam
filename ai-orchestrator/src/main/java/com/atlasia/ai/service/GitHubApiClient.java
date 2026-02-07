@@ -296,4 +296,101 @@ public class GitHubApiClient {
                 .bodyToMono(Map.class)
                 .block();
     }
+
+    public Map<String, Object> createBlob(String owner, String repo, String content, String encoding) {
+        Map<String, Object> requestBody = Map.of(
+                "content", content,
+                "encoding", encoding
+        );
+
+        return webClient.post()
+                .uri("/repos/{owner}/{repo}/git/blobs", owner, repo)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> createTree(String owner, String repo, List<Map<String, Object>> tree, String baseTree) {
+        Map<String, Object> requestBody = new java.util.HashMap<>();
+        requestBody.put("tree", tree);
+        if (baseTree != null && !baseTree.isEmpty()) {
+            requestBody.put("base_tree", baseTree);
+        }
+
+        return webClient.post()
+                .uri("/repos/{owner}/{repo}/git/trees", owner, repo)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> createCommit(String owner, String repo, String message, String tree, List<String> parents, Map<String, Object> author, Map<String, Object> committer) {
+        Map<String, Object> requestBody = new java.util.HashMap<>();
+        requestBody.put("message", message);
+        requestBody.put("tree", tree);
+        requestBody.put("parents", parents);
+        if (author != null) {
+            requestBody.put("author", author);
+        }
+        if (committer != null) {
+            requestBody.put("committer", committer);
+        }
+
+        return webClient.post()
+                .uri("/repos/{owner}/{repo}/git/commits", owner, repo)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> updateReference(String owner, String repo, String ref, String sha, boolean force) {
+        Map<String, Object> requestBody = Map.of(
+                "sha", sha,
+                "force", force
+        );
+
+        return webClient.patch()
+                .uri("/repos/{owner}/{repo}/git/refs/{ref}", owner, repo, ref)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> getCommit(String owner, String repo, String sha) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/git/commits/{sha}", owner, repo, sha)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public Map<String, Object> compareCommits(String owner, String repo, String base, String head) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/compare/{base}...{head}", owner, repo, base, head)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
 }
