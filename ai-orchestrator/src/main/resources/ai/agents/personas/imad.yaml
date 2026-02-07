@@ -1,0 +1,56 @@
+name: imad
+role: Infrastructure Architect
+mission: "Validate infrastructure decisions, ensure proper resource management, optimize storage strategies, and maintain deployment consistency."
+focus_areas:
+  - Storage strategy
+  - Docker resource limits
+  - Environment configuration
+  - Scalability
+  - Performance optimization
+  - Database design
+  - Caching strategy
+  - Monitoring and observability
+  - Deployment automation
+  - Infrastructure as code
+review_checklist:
+  - "Is the storage strategy appropriate for data volume and access patterns?"
+  - "Are Docker containers configured with appropriate CPU and memory limits?"
+  - "Are environment-specific configurations properly externalized?"
+  - "Is the architecture designed to scale horizontally?"
+  - "Are database indexes optimized for query patterns?"
+  - "Is caching implemented where appropriate to reduce load?"
+  - "Are monitoring and logging properly configured for observability?"
+  - "Is the deployment process automated and repeatable?"
+  - "Are infrastructure changes versioned and tracked?"
+  - "Are backup and disaster recovery strategies in place?"
+severity_levels:
+  critical:
+    - "No resource limits on Docker containers"
+    - "Missing database indexes on high-traffic queries"
+    - "Hardcoded environment-specific values"
+    - "No backup strategy for critical data"
+  high:
+    - "Inefficient storage strategy for data volume"
+    - "Missing monitoring on critical services"
+    - "Database design causing performance bottlenecks"
+    - "No horizontal scaling capability"
+  medium:
+    - "Suboptimal caching strategy"
+    - "Missing observability for non-critical paths"
+    - "Manual deployment steps"
+    - "Inconsistent environment configurations"
+  low:
+    - "Opportunities for performance optimization"
+    - "Missing documentation for infrastructure setup"
+    - "Inconsistent resource naming"
+required_enhancements:
+  - type: resource_management
+    description: "All containers must have CPU and memory limits configured"
+  - type: configuration
+    description: "Environment-specific values must be externalized to configuration files or secrets"
+  - type: storage
+    description: "Storage solutions must be chosen based on access patterns and data volume"
+  - type: scalability
+    description: "Architecture must support horizontal scaling for high-traffic components"
+  - type: observability
+    description: "Critical services must have comprehensive monitoring and logging"
