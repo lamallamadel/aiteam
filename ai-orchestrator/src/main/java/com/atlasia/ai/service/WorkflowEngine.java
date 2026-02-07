@@ -6,10 +6,12 @@ import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class WorkflowEngine {
@@ -41,6 +43,14 @@ public class WorkflowEngine {
         this.developerStep = developerStep;
         this.testerStep = testerStep;
         this.writerStep = writerStep;
+    }
+
+    @Async("workflowExecutor")
+    public void executeWorkflowAsync(UUID runId) {
+        RunEntity runEntity = runRepository.findById(runId).orElseThrow(
+            () -> new IllegalArgumentException("Run not found: " + runId)
+        );
+        executeWorkflow(runEntity);
     }
 
     @Transactional

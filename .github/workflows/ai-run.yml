@@ -16,4 +16,47 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          curl -sS -X POST "$ORCHESTRATOR_URL/runs"                 -H "Authorization: Bearer $ORCHESTRATOR_TOKEN"                 -H "Content-Type: application/json"                 -d "{"repo":"$REPO","issueNumber":$ISSUE_NUMBER,"mode":"FULL"}"                 | tee response.json
+          response=$(curl -sS -X POST "$ORCHESTRATOR_URL/runs" \
+            -H "Authorization: Bearer $ORCHESTRATOR_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"repo\":\"$REPO\",\"issueNumber\":$ISSUE_NUMBER,\"mode\":\"FULL\"}")
+          
+          echo "$response" | tee response.json
+          RUN_ID=$(echo "$response" | jq -r '.id')
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+      
+      - name: Poll for completion
+        env:
+          ORCHESTRATOR_URL: ${{ secrets.AI_ORCHESTRATOR_URL }}
+          ORCHESTRATOR_TOKEN: ${{ secrets.AI_ORCHESTRATOR_TOKEN }}
+        run: |
+          MAX_ATTEMPTS=360
+          SLEEP_INTERVAL=10
+          attempt=0
+          
+          while [ $attempt -lt $MAX_ATTEMPTS ]; do
+            response=$(curl -sS -X GET "$ORCHESTRATOR_URL/runs/$RUN_ID" \
+              -H "Authorization: Bearer $ORCHESTRATOR_TOKEN")
+            
+            status=$(echo "$response" | jq -r '.status')
+            current_agent=$(echo "$response" | jq -r '.currentAgent // "none"')
+            
+            echo "Attempt $((attempt + 1))/$MAX_ATTEMPTS: Status=$status, CurrentAgent=$current_agent"
+            
+            if [ "$status" = "DONE" ]; then
+              echo "Workflow completed successfully"
+              exit 0
+            elif [ "$status" = "FAILED" ]; then
+              echo "Workflow failed"
+              exit 1
+            elif [ "$status" = "ESCALATED" ]; then
+              echo "Workflow escalated and requires human intervention"
+              exit 1
+            fi
+            
+            attempt=$((attempt + 1))
+            sleep $SLEEP_INTERVAL
+          done
+          
+          echo "Timeout waiting for workflow completion"
+          exit 1

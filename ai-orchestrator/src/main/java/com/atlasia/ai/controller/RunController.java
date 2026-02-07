@@ -1,11 +1,15 @@
 package com.atlasia.ai.controller;
 
+import com.atlasia.ai.api.ArtifactResponse;
+import com.atlasia.ai.api.EscalationDecisionRequest;
 import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.api.RunResponse;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.WorkflowEngine;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +17,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/runs")
@@ -21,10 +27,12 @@ public class RunController {
 
     private final RunRepository runRepository;
     private final OrchestratorProperties props;
+    private final WorkflowEngine workflowEngine;
 
-    public RunController(RunRepository runRepository, OrchestratorProperties props) {
+    public RunController(RunRepository runRepository, OrchestratorProperties props, WorkflowEngine workflowEngine) {
         this.runRepository = runRepository;
         this.props = props;
+        this.workflowEngine = workflowEngine;
     }
 
     @PostMapping
@@ -47,18 +55,107 @@ public class RunController {
         );
         runRepository.save(entity);
 
-        // Scaffold: dans une version complète, on enqueue un job ici (async) et on exécute le workflow.
+        workflowEngine.executeWorkflowAsync(id);
+
         return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .body(new RunResponse(id, entity.getStatus().name(), entity.getCreatedAt()));
+                .body(toRunResponse(entity));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RunEntity> get(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                         @PathVariable("id") UUID id) {
+    public ResponseEntity<RunResponse> get(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id
+    ) {
         if (!isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return runRepository.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+        return runRepository.findById(id)
+                .map(this::toRunResponse)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}/artifacts")
+    public ResponseEntity<List<ArtifactResponse>> getArtifacts(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id
+    ) {
+        if (!isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        
+        return runRepository.findById(id)
+                .map(run -> run.getArtifacts().stream()
+                        .map(artifact -> new ArtifactResponse(
+                                artifact.getId(),
+                                artifact.getAgentName(),
+                                artifact.getArtifactType(),
+                                artifact.getPayload(),
+                                artifact.getCreatedAt()
+                        ))
+                        .collect(Collectors.toList()))
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{id}/escalation-decision")
+    public ResponseEntity<Void> handleEscalationDecision(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @Valid @RequestBody EscalationDecisionRequest request
+    ) {
+        if (!isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        return runRepository.findById(id)
+                .map(run -> {
+                    if (run.getStatus() != RunStatus.ESCALATED) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).<Void>build();
+                    }
+
+                    RunArtifactEntity decisionArtifact = new RunArtifactEntity(
+                            "HUMAN",
+                            "escalation_decision.json",
+                            String.format("{\"decision\":\"%s\",\"guidance\":\"%s\"}",
+                                    request.decision(),
+                                    request.guidance() != null ? request.guidance() : ""),
+                            Instant.now()
+                    );
+                    run.addArtifact(decisionArtifact);
+                    
+                    if ("PROCEED".equalsIgnoreCase(request.decision())) {
+                        workflowEngine.executeWorkflowAsync(id);
+                    } else if ("ABORT".equalsIgnoreCase(request.decision())) {
+                        run.setStatus(RunStatus.FAILED);
+                    }
+                    
+                    runRepository.save(run);
+                    return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    private RunResponse toRunResponse(RunEntity entity) {
+        List<RunResponse.ArtifactSummary> artifactSummaries = entity.getArtifacts().stream()
+                .map(artifact -> new RunResponse.ArtifactSummary(
+                        artifact.getId(),
+                        artifact.getAgentName(),
+                        artifact.getArtifactType(),
+                        artifact.getCreatedAt()
+                ))
+                .collect(Collectors.toList());
+
+        return new RunResponse(
+                entity.getId(),
+                entity.getStatus().name(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt(),
+                entity.getCurrentAgent(),
+                entity.getCiFixCount(),
+                entity.getE2eFixCount(),
+                artifactSummaries
+        );
     }
 
     private boolean isAuthorized(String authorization) {
