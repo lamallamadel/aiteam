@@ -6,6 +6,7 @@ public enum RunStatus {
     QUALIFIER,
     ARCHITECT,
     DEVELOPER,
+    REVIEW,
     TESTER,
     WRITER,
     DONE,

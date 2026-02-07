@@ -14,6 +14,7 @@ public class RunContext {
     private String architectureNotes;
     private String prUrl;
     private String branchName;
+    private DeveloperStep.CodeChanges codeChanges;
 
     public RunContext(RunEntity runEntity, String owner, String repo) {
         this.runEntity = runEntity;
@@ -79,5 +80,13 @@ public class RunContext {
 
     public void setBranchName(String branchName) {
         this.branchName = branchName;
+    }
+
+    public DeveloperStep.CodeChanges getCodeChanges() {
+        return codeChanges;
+    }
+
+    public void setCodeChanges(DeveloperStep.CodeChanges codeChanges) {
+        this.codeChanges = codeChanges;
     }
 }

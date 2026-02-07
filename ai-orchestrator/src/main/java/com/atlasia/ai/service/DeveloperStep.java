@@ -66,6 +66,8 @@ public class DeveloperStep implements AgentStep {
 
             validateCodeChanges(codeChanges);
 
+            context.setCodeChanges(codeChanges);
+
             String commitSha = applyMultiFileChanges(context, owner, repo, branchName, baseSha, codeChanges);
             log.info("Created commit {} on branch {}", commitSha, branchName);
 

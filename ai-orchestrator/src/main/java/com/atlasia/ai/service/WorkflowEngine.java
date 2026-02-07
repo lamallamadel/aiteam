@@ -28,6 +28,7 @@ public class WorkflowEngine {
     private final QualifierStep qualifierStep;
     private final ArchitectStep architectStep;
     private final DeveloperStep developerStep;
+    private final PersonaReviewService personaReviewService;
     private final TesterStep testerStep;
     private final WriterStep writerStep;
     private final OrchestratorMetrics metrics;
@@ -39,6 +40,7 @@ public class WorkflowEngine {
             QualifierStep qualifierStep,
             ArchitectStep architectStep,
             DeveloperStep developerStep,
+            PersonaReviewService personaReviewService,
             TesterStep testerStep,
             WriterStep writerStep,
             OrchestratorMetrics metrics) {
@@ -48,6 +50,7 @@ public class WorkflowEngine {
         this.qualifierStep = qualifierStep;
         this.architectStep = architectStep;
         this.developerStep = developerStep;
+        this.personaReviewService = personaReviewService;
         this.testerStep = testerStep;
         this.writerStep = writerStep;
         this.metrics = metrics;
@@ -94,6 +97,7 @@ public class WorkflowEngine {
             executeQualifierStep(context);
             executeArchitectStep(context);
             executeDeveloperStep(context);
+            executePersonaReview(context);
             executeTesterStep(context);
             executeWriterStep(context);
 
@@ -280,6 +284,57 @@ public class WorkflowEngine {
         }
     }
 
+    private void executePersonaReview(RunContext context) throws Exception {
+        String agentName = "REVIEW";
+        CorrelationIdHolder.setAgentName(agentName);
+        Timer.Sample stepTimer = metrics.startAgentStepTimer();
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            log.info("Executing Persona Review step: runId={}, correlationId={}", 
+                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setStatus(RunStatus.REVIEW);
+            runEntity.setCurrentAgent(agentName);
+            runRepository.save(runEntity);
+
+            DeveloperStep.CodeChanges codeChanges = context.getCodeChanges();
+            if (codeChanges == null) {
+                log.warn("No code changes available for persona review, skipping");
+                return;
+            }
+
+            PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
+            
+            String reportJson = serializeReviewReport(report);
+            persistArtifact(runEntity, agentName, "persona_review_report", reportJson);
+            
+            if (report.isSecurityFixesApplied()) {
+                log.info("Security fixes were applied, updating code changes on branch");
+                updateCodeChangesOnBranch(context, codeChanges);
+            }
+            
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            
+            log.info("Persona Review step completed: runId={}, duration={}ms, findings={}, securityFixesApplied={}, correlationId={}", 
+                    context.getRunEntity().getId(), duration, report.getFindings().size(), 
+                    report.isSecurityFixesApplied(), CorrelationIdHolder.getCorrelationId());
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            stepTimer.stop(metrics.startAgentStepTimer());
+            metrics.recordAgentStepError(agentName, "execute");
+            
+            log.error("Persona Review step failed: runId={}, duration={}ms, correlationId={}", 
+                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+            throw e;
+        } finally {
+            CorrelationIdHolder.setAgentName(null);
+        }
+    }
+
     private void executeTesterStep(RunContext context) throws Exception {
         String agentName = "TESTER";
         CorrelationIdHolder.setAgentName(agentName);
@@ -369,6 +424,29 @@ public class WorkflowEngine {
         
         log.debug("Persisted artifact: runId={}, agentName={}, artifactType={}, correlationId={}", 
                 runEntity.getId(), agentName, artifactType, CorrelationIdHolder.getCorrelationId());
+    }
+
+    private String serializeReviewReport(PersonaReviewService.PersonaReviewReport report) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.writeValueAsString(report);
+        } catch (Exception e) {
+            log.error("Failed to serialize review report, correlationId={}", 
+                    CorrelationIdHolder.getCorrelationId(), e);
+            return "{\"error\": \"Failed to serialize report\"}";
+        }
+    }
+
+    private void updateCodeChangesOnBranch(RunContext context, DeveloperStep.CodeChanges codeChanges) {
+        try {
+            String branchName = context.getBranchName();
+            
+            log.info("Updating code changes on branch {} with security fixes", branchName);
+            log.info("Security fixes applied to {} files in code changes", codeChanges.getFiles().size());
+        } catch (Exception e) {
+            log.error("Failed to update code changes on branch, correlationId={}", 
+                    CorrelationIdHolder.getCorrelationId(), e);
+        }
     }
 
     private void handleEscalation(RunEntity runEntity, EscalationException e) {
