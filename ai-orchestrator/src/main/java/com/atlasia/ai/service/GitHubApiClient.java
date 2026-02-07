@@ -257,4 +257,43 @@ public class GitHubApiClient {
                 .bodyToMono(Void.class)
                 .block();
     }
+
+    public Map<String, Object> getRepoContent(String owner, String repo, String path) {
+        return webClient.get()
+                .uri("/repos/{owner}/{repo}/contents/{path}", owner, repo, path)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
+
+    public List<Map<String, Object>> listRepoContents(String owner, String repo, String path) {
+        List<Map> rawList = webClient.get()
+                .uri("/repos/{owner}/{repo}/contents/{path}", owner, repo, path)
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToFlux(Map.class)
+                .collectList()
+                .block();
+        return (List) rawList;
+    }
+
+    public Map<String, Object> getRepoTree(String owner, String repo, String sha, boolean recursive) {
+        String recursiveParam = recursive ? "1" : "0";
+        return webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                    .path("/repos/{owner}/{repo}/git/trees/{sha}")
+                    .queryParam("recursive", recursiveParam)
+                    .build(owner, repo, sha))
+                .header("Authorization", "Bearer " + getToken())
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28")
+                .retrieve()
+                .bodyToMono(Map.class)
+                .block();
+    }
 }
