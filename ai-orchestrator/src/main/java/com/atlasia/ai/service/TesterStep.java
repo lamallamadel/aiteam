@@ -23,11 +23,13 @@ public class TesterStep implements AgentStep {
     private static final Duration WORKFLOW_TIMEOUT = Duration.ofMinutes(30);
     
     private final GitHubApiClient gitHubApiClient;
+    private final LlmService llmService;
     private final ObjectMapper objectMapper;
     private final Random random = new Random();
 
-    public TesterStep(GitHubApiClient gitHubApiClient, ObjectMapper objectMapper) {
+    public TesterStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper) {
         this.gitHubApiClient = gitHubApiClient;
+        this.llmService = llmService;
         this.objectMapper = objectMapper;
     }
 
@@ -383,6 +385,7 @@ public class TesterStep implements AgentStep {
     private FailureDiagnostics parseWorkflowLogs(String logs, String checkName) {
         FailureDiagnostics diagnostics = new FailureDiagnostics();
         diagnostics.checkName = checkName;
+        diagnostics.rawLogs = logs;
         
         List<String> compileErrors = extractCompileErrors(logs);
         List<String> testFailures = extractTestFailures(logs);
@@ -643,60 +646,436 @@ public class TesterStep implements AgentStep {
     }
 
     private void applyFix(RunContext context, CiStatus status) throws Exception {
-        log.info("Applying fix for CI failures");
+        log.info("Analyzing CI failures and generating fix for issue #{}", context.getRunEntity().getIssueNumber());
+        
+        String owner = context.getOwner();
+        String repo = context.getRepo();
+        String branchName = context.getBranchName();
+        
+        FailureDiagnostics aggregatedDiagnostics = aggregateCiFailures(status);
+        
+        FixPatch fixPatch = generateFixWithLlm(context, aggregatedDiagnostics, "CI");
+        
+        if (fixPatch == null || fixPatch.getFiles() == null || fixPatch.getFiles().isEmpty()) {
+            log.warn("LLM did not generate any fix patches for CI failures");
+            throw new IllegalStateException("Unable to generate fix for CI failures");
+        }
+        
+        log.info("Generated fix with {} file changes", fixPatch.getFiles().size());
+        
+        Map<String, Object> branchRef = gitHubApiClient.getReference(owner, repo, "heads/" + branchName);
+        Map<String, Object> branchObject = (Map<String, Object>) branchRef.get("object");
+        String currentSha = (String) branchObject.get("sha");
+        
+        String commitSha = applyFixPatch(context, owner, repo, branchName, currentSha, fixPatch, "CI");
+        log.info("Applied CI fix with commit {}", commitSha);
+        
+        log.info("Waiting for CI to re-run after fix...");
+        Thread.sleep(10000);
     }
 
     private void applyE2eFix(RunContext context, E2eStatus status) throws Exception {
-        log.info("Applying fix for E2E failures");
+        log.info("Analyzing E2E failures and generating fix for issue #{}", context.getRunEntity().getIssueNumber());
+        
+        String owner = context.getOwner();
+        String repo = context.getRepo();
+        String branchName = context.getBranchName();
+        
+        FailureDiagnostics aggregatedDiagnostics = aggregateE2eFailures(status);
+        
+        FixPatch fixPatch = generateFixWithLlm(context, aggregatedDiagnostics, "E2E");
+        
+        if (fixPatch == null || fixPatch.getFiles() == null || fixPatch.getFiles().isEmpty()) {
+            log.warn("LLM did not generate any fix patches for E2E failures");
+            throw new IllegalStateException("Unable to generate fix for E2E failures");
+        }
+        
+        log.info("Generated fix with {} file changes", fixPatch.getFiles().size());
+        
+        Map<String, Object> branchRef = gitHubApiClient.getReference(owner, repo, "heads/" + branchName);
+        Map<String, Object> branchObject = (Map<String, Object>) branchRef.get("object");
+        String currentSha = (String) branchObject.get("sha");
+        
+        String commitSha = applyFixPatch(context, owner, repo, branchName, currentSha, fixPatch, "E2E");
+        log.info("Applied E2E fix with commit {}", commitSha);
+        
+        log.info("Waiting for E2E to re-run after fix...");
+        Thread.sleep(10000);
+    }
+
+    private FailureDiagnostics aggregateCiFailures(CiStatus status) {
+        FailureDiagnostics diagnostics = new FailureDiagnostics();
+        diagnostics.checkName = "CI";
+        diagnostics.summary = status.error != null ? status.error : "CI failures detected";
+        diagnostics.failures = status.failures;
+        diagnostics.failureType = "CI_FAILURE";
+        
+        StringBuilder rawLogs = new StringBuilder();
+        for (String failure : status.failures) {
+            rawLogs.append(failure).append("\n\n");
+        }
+        diagnostics.rawLogs = rawLogs.toString();
+        
+        return diagnostics;
+    }
+
+    private FailureDiagnostics aggregateE2eFailures(E2eStatus status) {
+        FailureDiagnostics diagnostics = new FailureDiagnostics();
+        diagnostics.checkName = "E2E";
+        diagnostics.summary = status.error != null ? status.error : "E2E failures detected";
+        diagnostics.failures = status.failures;
+        diagnostics.failureType = "E2E_FAILURE";
+        
+        StringBuilder rawLogs = new StringBuilder();
+        for (String failure : status.failures) {
+            rawLogs.append(failure).append("\n\n");
+        }
+        diagnostics.rawLogs = rawLogs.toString();
+        
+        return diagnostics;
+    }
+
+    private FixPatch generateFixWithLlm(RunContext context, FailureDiagnostics diagnostics, String testType) {
+        try {
+            String systemPrompt = buildFixSystemPrompt();
+            String userPrompt = buildFixUserPrompt(context, diagnostics, testType);
+            Map<String, Object> schema = buildFixPatchSchema();
+            
+            log.info("Requesting LLM to generate {} fix for issue #{}", testType, context.getRunEntity().getIssueNumber());
+            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            
+            if (llmResponse == null || llmResponse.trim().isEmpty()) {
+                throw new IllegalStateException("LLM returned empty fix response");
+            }
+            
+            log.debug("Received fix patch from LLM ({} characters)", llmResponse.length());
+            FixPatch fixPatch = objectMapper.readValue(llmResponse, FixPatch.class);
+            
+            validateFixPatch(fixPatch);
+            
+            return fixPatch;
+        } catch (Exception e) {
+            log.error("Failed to generate fix with LLM: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    private String buildFixSystemPrompt() {
+        return """
+            You are an expert software engineer specializing in debugging and fixing test failures.
+            
+            Your task is to analyze CI/E2E test failure logs and generate minimal, targeted patches to fix the issues.
+            
+            Key principles:
+            - Generate MINIMAL patches - only fix what's broken, don't refactor or add features
+            - Target SPECIFIC failures - address the exact error messages and stack traces
+            - Maintain EXISTING patterns - follow the codebase's conventions and style
+            - Be CONSERVATIVE - prefer small, safe changes over large rewrites
+            - Focus on CORRECTNESS - ensure your fix resolves the root cause
+            
+            Common failure types and fixes:
+            1. Compilation errors: Fix syntax, imports, type mismatches
+            2. Test failures: Fix assertion logic, test setup, mock configurations
+            3. Lint errors: Fix code style, unused imports, formatting issues
+            4. E2E failures: Fix selectors, timing issues, API responses, test data
+            
+            For each file to fix:
+            - Provide the complete file path
+            - Provide the complete updated file content
+            - Explain what was wrong and how you fixed it
+            
+            DO NOT:
+            - Add new features or refactor unrelated code
+            - Make assumptions about requirements beyond fixing the failure
+            - Modify files that aren't related to the failure
+            - Change test expectations unless they're clearly wrong
+            
+            Be precise, minimal, and focused on resolving the specific failures.
+            """;
+    }
+
+    private String buildFixUserPrompt(RunContext context, FailureDiagnostics diagnostics, String testType) {
+        StringBuilder prompt = new StringBuilder();
+        
+        prompt.append("# ").append(testType).append(" Test Failure Analysis\n\n");
+        prompt.append("## Issue Information\n");
+        prompt.append("**Issue #").append(context.getRunEntity().getIssueNumber()).append("**\n\n");
+        
+        prompt.append("## Failure Summary\n");
+        prompt.append("**Type:** ").append(diagnostics.failureType).append("\n");
+        prompt.append("**Summary:** ").append(diagnostics.summary).append("\n\n");
+        
+        if (!diagnostics.compileErrors.isEmpty()) {
+            prompt.append("## Compilation Errors\n");
+            for (String error : diagnostics.compileErrors) {
+                prompt.append("- ").append(error).append("\n");
+            }
+            prompt.append("\n");
+        }
+        
+        if (!diagnostics.testFailures.isEmpty()) {
+            prompt.append("## Test Failures\n");
+            for (String failure : diagnostics.testFailures) {
+                prompt.append("- ").append(failure).append("\n");
+            }
+            prompt.append("\n");
+        }
+        
+        if (!diagnostics.lintIssues.isEmpty()) {
+            prompt.append("## Lint Issues\n");
+            for (String issue : diagnostics.lintIssues) {
+                prompt.append("- ").append(issue).append("\n");
+            }
+            prompt.append("\n");
+        }
+        
+        if (diagnostics.buildError != null) {
+            prompt.append("## Build Error\n");
+            prompt.append(diagnostics.buildError).append("\n\n");
+        }
+        
+        if (diagnostics.rawLogs != null && !diagnostics.rawLogs.isEmpty()) {
+            String logExcerpt = diagnostics.rawLogs.length() > 5000 
+                ? diagnostics.rawLogs.substring(0, 5000) + "\n... (truncated)"
+                : diagnostics.rawLogs;
+            prompt.append("## Relevant Log Excerpt\n");
+            prompt.append("```\n").append(logExcerpt).append("\n```\n\n");
+        }
+        
+        prompt.append("## Fix Requirements\n");
+        prompt.append("Generate minimal patches to fix ONLY the failures listed above.\n");
+        prompt.append("- Provide complete file contents for each file that needs changes\n");
+        prompt.append("- Target the specific errors and failures\n");
+        prompt.append("- Don't add features or refactor unrelated code\n");
+        prompt.append("- Follow existing code patterns and conventions\n");
+        prompt.append("- Explain the root cause and your fix approach\n\n");
+        
+        return prompt.toString();
+    }
+
+    private Map<String, Object> buildFixPatchSchema() {
+        Map<String, Object> schema = new HashMap<>();
+        schema.put("type", "object");
+        schema.put("additionalProperties", false);
+        
+        Map<String, Object> properties = new HashMap<>();
+        
+        properties.put("rootCause", Map.of(
+            "type", "string",
+            "description", "Brief explanation of the root cause of the failure"
+        ));
+        
+        properties.put("fixStrategy", Map.of(
+            "type", "string",
+            "description", "Brief explanation of the fix strategy"
+        ));
+        
+        properties.put("files", Map.of(
+            "type", "array",
+            "description", "List of file patches to apply",
+            "items", Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "path", Map.of("type", "string", "description", "Full file path from repository root"),
+                    "content", Map.of("type", "string", "description", "Complete updated file content"),
+                    "explanation", Map.of("type", "string", "description", "What was wrong and how this fixes it")
+                ),
+                "required", List.of("path", "content", "explanation"),
+                "additionalProperties", false
+            ),
+            "minItems", 1,
+            "maxItems", 5
+        ));
+        
+        schema.put("properties", properties);
+        schema.put("required", List.of("rootCause", "fixStrategy", "files"));
+        
+        return schema;
+    }
+
+    private void validateFixPatch(FixPatch fixPatch) {
+        if (fixPatch.getFiles() == null || fixPatch.getFiles().isEmpty()) {
+            throw new IllegalArgumentException("Fix patch must contain at least one file");
+        }
+        
+        if (fixPatch.getFiles().size() > 5) {
+            log.warn("Fix patch contains {} files, which may be too many for a minimal fix", fixPatch.getFiles().size());
+        }
+        
+        for (FilePatch file : fixPatch.getFiles()) {
+            if (file.getPath() == null || file.getPath().isEmpty()) {
+                throw new IllegalArgumentException("File path cannot be empty in fix patch");
+            }
+            
+            if (file.getContent() == null || file.getContent().isEmpty()) {
+                throw new IllegalArgumentException("File content cannot be empty in fix patch: " + file.getPath());
+            }
+            
+            if (file.getPath().contains("..") || file.getPath().startsWith("/")) {
+                throw new IllegalArgumentException("Invalid file path in fix patch: " + file.getPath());
+            }
+        }
+    }
+
+    private String applyFixPatch(RunContext context, String owner, String repo, 
+                                 String branchName, String baseSha, FixPatch fixPatch, String fixType) throws Exception {
+        log.info("Applying {} fix patch with {} file changes", fixType, fixPatch.getFiles().size());
+        
+        List<Map<String, Object>> treeEntries = new ArrayList<>();
+        
+        for (FilePatch filePatch : fixPatch.getFiles()) {
+            String path = filePatch.getPath();
+            String content = filePatch.getContent();
+            
+            Map<String, Object> blob = gitHubApiClient.createBlob(owner, repo, content, "utf-8");
+            String blobSha = (String) blob.get("sha");
+            
+            if (blobSha == null || blobSha.isEmpty()) {
+                throw new IllegalStateException("Blob creation returned null SHA for: " + path);
+            }
+            
+            Map<String, Object> treeEntry = new HashMap<>();
+            treeEntry.put("path", path);
+            treeEntry.put("mode", "100644");
+            treeEntry.put("type", "blob");
+            treeEntry.put("sha", blobSha);
+            
+            treeEntries.add(treeEntry);
+            log.debug("Created blob {} for {} ({} bytes)", blobSha, path, content.length());
+        }
+        
+        Map<String, Object> newTree = gitHubApiClient.createTree(owner, repo, treeEntries, baseSha);
+        String treeSha = (String) newTree.get("sha");
+        
+        if (treeSha == null || treeSha.isEmpty()) {
+            throw new IllegalStateException("Tree creation returned null SHA");
+        }
+        
+        String commitMessage = buildFixCommitMessage(context, fixPatch, fixType);
+        Map<String, Object> author = buildAuthorInfo();
+        Map<String, Object> committer = buildCommitterInfo();
+        
+        Map<String, Object> newCommit = gitHubApiClient.createCommit(
+            owner, 
+            repo, 
+            commitMessage, 
+            treeSha, 
+            List.of(baseSha),
+            author,
+            committer
+        );
+        String commitSha = (String) newCommit.get("sha");
+        
+        if (commitSha == null || commitSha.isEmpty()) {
+            throw new IllegalStateException("Commit creation returned null SHA");
+        }
+        
+        gitHubApiClient.updateReference(owner, repo, "heads/" + branchName, commitSha, false);
+        log.info("Updated branch {} with fix commit {}", branchName, commitSha);
+        
+        return commitSha;
+    }
+
+    private String buildFixCommitMessage(RunContext context, FixPatch fixPatch, String fixType) {
+        StringBuilder message = new StringBuilder();
+        
+        message.append("fix: Auto-fix ").append(fixType).append(" test failures for issue #")
+               .append(context.getRunEntity().getIssueNumber()).append("\n\n");
+        
+        message.append("Root cause: ").append(fixPatch.getRootCause()).append("\n\n");
+        message.append("Fix strategy: ").append(fixPatch.getFixStrategy()).append("\n\n");
+        
+        message.append("Files changed:\n");
+        for (FilePatch file : fixPatch.getFiles()) {
+            message.append("- ").append(file.getPath()).append(": ").append(file.getExplanation()).append("\n");
+        }
+        
+        return message.toString();
+    }
+
+    private Map<String, Object> buildAuthorInfo() {
+        Map<String, Object> author = new HashMap<>();
+        author.put("name", "Atlasia AI Bot");
+        author.put("email", "ai-bot@atlasia.io");
+        author.put("date", Instant.now().toString());
+        return author;
+    }
+
+    private Map<String, Object> buildCommitterInfo() {
+        Map<String, Object> committer = new HashMap<>();
+        committer.put("name", "Atlasia AI Bot");
+        committer.put("email", "ai-bot@atlasia.io");
+        committer.put("date", Instant.now().toString());
+        return committer;
     }
 
     private String createEscalation(RunContext context, String blocker, Object statusObj) throws Exception {
         List<String> evidence = new ArrayList<>();
         evidence.add("PR: " + context.getPrUrl());
-        evidence.add("CI attempts: " + context.getRunEntity().getCiFixCount());
-        evidence.add("E2E attempts: " + context.getRunEntity().getE2eFixCount());
+        evidence.add("Branch: " + context.getBranchName());
+        evidence.add("CI fix attempts: " + context.getRunEntity().getCiFixCount());
+        evidence.add("E2E fix attempts: " + context.getRunEntity().getE2eFixCount());
+        
+        List<String> detailedFailures = new ArrayList<>();
         
         if (statusObj instanceof CiStatus) {
             CiStatus ciStatus = (CiStatus) statusObj;
             if (ciStatus.error != null) {
-                evidence.add("CI Error: " + ciStatus.error);
+                evidence.add("CI Error Summary: " + ciStatus.error);
             }
             if (!ciStatus.failures.isEmpty()) {
-                evidence.add("Failures: " + String.join(", ", ciStatus.failures.subList(0, Math.min(3, ciStatus.failures.size()))));
+                detailedFailures.addAll(ciStatus.failures);
+                evidence.add("CI Failure Count: " + ciStatus.failures.size());
             }
         } else if (statusObj instanceof E2eStatus) {
             E2eStatus e2eStatus = (E2eStatus) statusObj;
             if (e2eStatus.error != null) {
-                evidence.add("E2E Error: " + e2eStatus.error);
+                evidence.add("E2E Error Summary: " + e2eStatus.error);
             }
             if (!e2eStatus.failures.isEmpty()) {
-                evidence.add("E2E Failures: " + String.join(", ", e2eStatus.failures.subList(0, Math.min(3, e2eStatus.failures.size()))));
+                detailedFailures.addAll(e2eStatus.failures);
+                evidence.add("E2E Failure Count: " + e2eStatus.failures.size());
             }
         }
         
-        Map<String, Object> escalation = Map.of(
-            "context", "Testing phase for issue #" + context.getRunEntity().getIssueNumber(),
-            "blocker", blocker,
-            "options", List.of(
-                Map.of(
-                    "name", "Manual intervention",
-                    "pros", List.of("Can address complex issues", "Human judgment"),
-                    "cons", List.of("Requires time", "May delay delivery"),
-                    "risk", "LOW"
-                ),
-                Map.of(
-                    "name", "Revert changes",
-                    "pros", List.of("Quick resolution", "Maintains stability"),
-                    "cons", List.of("No progress on issue", "Wasted effort"),
-                    "risk", "LOW"
-                )
-            ),
-            "recommendation", "Manual intervention",
-            "decisionNeeded", "How to proceed with failing tests",
-            "evidence", evidence
-        );
+        Map<String, Object> escalationData = new LinkedHashMap<>();
+        escalationData.put("context", "Testing phase for issue #" + context.getRunEntity().getIssueNumber());
+        escalationData.put("blocker", blocker);
+        escalationData.put("prUrl", context.getPrUrl());
+        escalationData.put("branchName", context.getBranchName());
+        escalationData.put("ciFixAttempts", context.getRunEntity().getCiFixCount());
+        escalationData.put("e2eFixAttempts", context.getRunEntity().getE2eFixCount());
+        escalationData.put("evidence", evidence);
+        escalationData.put("detailedFailures", detailedFailures.subList(0, Math.min(10, detailedFailures.size())));
+        escalationData.put("timestamp", Instant.now().toString());
         
-        throw new EscalationException(objectMapper.writeValueAsString(escalation));
+        escalationData.put("options", List.of(
+            Map.of(
+                "name", "Manual intervention",
+                "pros", List.of("Can address complex issues", "Human judgment", "Deep debugging possible"),
+                "cons", List.of("Requires time", "May delay delivery", "Needs human availability"),
+                "risk", "LOW"
+            ),
+            Map.of(
+                "name", "Revert changes and retry",
+                "pros", List.of("Quick resolution", "Maintains stability", "Can start fresh"),
+                "cons", List.of("No progress on issue", "Wasted effort", "May hit same issues"),
+                "risk", "MEDIUM"
+            ),
+            Map.of(
+                "name", "Increase fix iteration limits",
+                "pros", List.of("May resolve with more attempts", "Automatic resolution possible"),
+                "cons", List.of("May waste more time", "Could make things worse", "Delays escalation"),
+                "risk", "HIGH"
+            )
+        ));
+        
+        escalationData.put("recommendation", "Manual intervention");
+        escalationData.put("decisionNeeded", "How to proceed with failing tests after exhausting automated fix attempts");
+        
+        String escalationJson = objectMapper.writeValueAsString(escalationData);
+        
+        throw new EscalationException(escalationJson);
     }
 
     private static class CiStatus {
@@ -732,9 +1111,41 @@ public class TesterStep implements AgentStep {
         String checkName;
         String failureType;
         String summary;
+        String rawLogs;
         List<String> compileErrors = new ArrayList<>();
         List<String> testFailures = new ArrayList<>();
         List<String> lintIssues = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
         String buildError;
+    }
+
+    public static class FixPatch {
+        private String rootCause;
+        private String fixStrategy;
+        private List<FilePatch> files;
+
+        public String getRootCause() { return rootCause; }
+        public void setRootCause(String rootCause) { this.rootCause = rootCause; }
+
+        public String getFixStrategy() { return fixStrategy; }
+        public void setFixStrategy(String fixStrategy) { this.fixStrategy = fixStrategy; }
+
+        public List<FilePatch> getFiles() { return files; }
+        public void setFiles(List<FilePatch> files) { this.files = files; }
+    }
+
+    public static class FilePatch {
+        private String path;
+        private String content;
+        private String explanation;
+
+        public String getPath() { return path; }
+        public void setPath(String path) { this.path = path; }
+
+        public String getContent() { return content; }
+        public void setContent(String content) { this.content = content; }
+
+        public String getExplanation() { return explanation; }
+        public void setExplanation(String explanation) { this.explanation = explanation; }
     }
 }
