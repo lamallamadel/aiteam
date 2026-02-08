@@ -35,7 +35,11 @@ public class GitHubApiClient {
     }
 
     private String getToken() {
-        return gitHubAppService.getInstallationToken();
+        String appToken = gitHubAppService.getInstallationToken();
+        if (appToken != null) {
+            return appToken;
+        }
+        return properties.token();
     }
 
     @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")

@@ -11,8 +11,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.PrivateKey;
 import java.time.Instant;
 import java.util.Date;
@@ -24,14 +22,31 @@ public class GitHubAppService {
     private final WebClient webClient;
     private final PrivateKey privateKey;
 
-    public GitHubAppService(OrchestratorProperties properties, WebClient.Builder webClientBuilder) throws IOException {
+    public GitHubAppService(OrchestratorProperties properties, WebClient.Builder webClientBuilder) {
         this.properties = properties;
         this.webClient = webClientBuilder.baseUrl("https://api.github.com").build();
-        this.privateKey = loadPrivateKey(properties.github().privateKeyPath());
+        this.privateKey = loadPrivateKeySafely(properties.github().privateKeyPath());
+    }
+
+    private PrivateKey loadPrivateKeySafely(String path) {
+        if (path == null || path.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return loadPrivateKey(path);
+        } catch (IOException e) {
+            org.slf4j.LoggerFactory.getLogger(GitHubAppService.class)
+                    .error("Failed to load GitHub App private key from {}: {}", path, e.getMessage());
+            return null;
+        }
     }
 
     private PrivateKey loadPrivateKey(String path) throws IOException {
-        String content = Files.readString(Paths.get(path));
+        java.nio.file.Path keyPath = java.nio.file.Paths.get(path);
+        if (!java.nio.file.Files.isRegularFile(keyPath)) {
+            throw new IOException("Not a regular file: " + path);
+        }
+        String content = java.nio.file.Files.readString(keyPath);
         try (PEMParser pemParser = new PEMParser(new StringReader(content))) {
             Object object = pemParser.readObject();
             JcaPEMKeyConverter converter = new JcaPEMKeyConverter();
@@ -56,8 +71,14 @@ public class GitHubAppService {
     }
 
     public String getInstallationToken() {
+        if (privateKey == null) {
+            return null;
+        }
         String jwt = generateJWT();
         String installationId = properties.github().installationId();
+        if (installationId == null || installationId.trim().isEmpty()) {
+            return null;
+        }
 
         Map<String, Object> response = webClient.post()
                 .uri("/app/installations/{installation_id}/access_tokens", installationId)
@@ -67,6 +88,6 @@ public class GitHubAppService {
                 .bodyToMono(Map.class)
                 .block();
 
-        return (String) response.get("token");
+        return response != null ? (String) response.get("token") : null;
     }
 }
