@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -35,11 +36,36 @@ public class GitHubApiClient {
     }
 
     private String getToken() {
+        String githubToken = CorrelationIdHolder.getGitHubToken();
+        if (StringUtils.hasText(githubToken)) {
+            return githubToken;
+        }
+
         String appToken = gitHubAppService.getInstallationToken();
         if (appToken != null) {
             return appToken;
         }
         return properties.token();
+    }
+
+    public boolean isValidToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            return false;
+        }
+        try {
+            webClient.get()
+                    .uri("/user")
+                    .header("Authorization", "Bearer " + token)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+            return true;
+        } catch (Exception e) {
+            log.warn("Invalid GitHub token provided: {}", e.getMessage());
+            return false;
+        }
     }
 
     @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")

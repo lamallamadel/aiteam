@@ -240,7 +240,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflowAsync(runId);
+                workflowEngine.executeWorkflowAsync(runId, "test-token");
 
                 Thread.sleep(100);
 
@@ -254,7 +254,7 @@ class WorkflowEngineTest {
                 UUID runId = UUID.randomUUID();
                 when(runRepository.findById(runId)).thenReturn(Optional.empty());
 
-                assertDoesNotThrow(() -> workflowEngine.executeWorkflowAsync(runId));
+                assertDoesNotThrow(() -> workflowEngine.executeWorkflowAsync(runId, "test-token"));
         }
 
         @Test

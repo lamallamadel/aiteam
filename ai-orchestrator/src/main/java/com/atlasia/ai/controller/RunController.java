@@ -9,6 +9,7 @@ import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.GitHubApiClient;
 import com.atlasia.ai.service.WorkflowEngine;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,17 +29,20 @@ public class RunController {
     private final RunRepository runRepository;
     private final OrchestratorProperties props;
     private final WorkflowEngine workflowEngine;
+    private final GitHubApiClient gitHubApiClient;
 
-    public RunController(RunRepository runRepository, OrchestratorProperties props, WorkflowEngine workflowEngine) {
+    public RunController(RunRepository runRepository, OrchestratorProperties props,
+            WorkflowEngine workflowEngine, GitHubApiClient gitHubApiClient) {
         this.runRepository = runRepository;
         this.props = props;
         this.workflowEngine = workflowEngine;
+        this.gitHubApiClient = gitHubApiClient;
     }
 
     @GetMapping
     public ResponseEntity<List<RunResponse>> listRuns(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (!isAuthorized(authorization)) {
+        if (getValidatedToken(authorization) == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         List<RunResponse> runs = runRepository.findAll().stream()
@@ -52,7 +56,8 @@ public class RunController {
     public ResponseEntity<RunResponse> createRun(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody RunRequest request) {
-        if (!isAuthorized(authorization)) {
+        String token = getValidatedToken(authorization);
+        if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -66,7 +71,7 @@ public class RunController {
                 Instant.now());
         runRepository.save(entity);
 
-        workflowEngine.executeWorkflowAsync(id);
+        workflowEngine.executeWorkflowAsync(id, token);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(toRunResponse(entity));
@@ -76,7 +81,7 @@ public class RunController {
     public ResponseEntity<RunResponse> get(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (!isAuthorized(authorization)) {
+        if (getValidatedToken(authorization) == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -89,7 +94,7 @@ public class RunController {
     public ResponseEntity<List<ArtifactResponse>> getArtifacts(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (!isAuthorized(authorization)) {
+        if (getValidatedToken(authorization) == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -111,7 +116,8 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @Valid @RequestBody EscalationDecisionRequest request) {
-        if (!isAuthorized(authorization)) {
+        String token = getValidatedToken(authorization);
+        if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -131,7 +137,7 @@ public class RunController {
                     run.addArtifact(decisionArtifact);
 
                     if ("PROCEED".equalsIgnoreCase(request.decision())) {
-                        workflowEngine.executeWorkflowAsync(id);
+                        workflowEngine.executeWorkflowAsync(id, token);
                     } else if ("ABORT".equalsIgnoreCase(request.decision())) {
                         run.setStatus(RunStatus.FAILED);
                     }
@@ -164,17 +170,26 @@ public class RunController {
                 artifactSummaries);
     }
 
-    private boolean isAuthorized(String authorization) {
-        if (!StringUtils.hasText(props.token()))
-            return false;
+    private String getValidatedToken(String authorization) {
         if (!StringUtils.hasText(authorization))
-            return false;
+            return null;
 
         String prefix = "Bearer ";
         if (!authorization.startsWith(prefix))
-            return false;
+            return null;
 
         String token = authorization.substring(prefix.length()).trim();
-        return props.token().equals(token);
+
+        // 1. Check if it's the admin token
+        if (StringUtils.hasText(props.token()) && props.token().equals(token)) {
+            return null; // Return null means use default credentials (app token or properties token)
+        }
+
+        // 2. Check if it's a valid GitHub token
+        if (gitHubApiClient.isValidToken(token)) {
+            return token;
+        }
+
+        return null;
     }
 }

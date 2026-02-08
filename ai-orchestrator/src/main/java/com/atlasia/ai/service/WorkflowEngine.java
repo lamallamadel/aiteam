@@ -57,10 +57,11 @@ public class WorkflowEngine {
     }
 
     @Async("workflowExecutor")
-    public void executeWorkflowAsync(UUID runId) {
+    public void executeWorkflowAsync(UUID runId, String gitHubToken) {
         String correlationId = CorrelationIdHolder.generateCorrelationId();
         CorrelationIdHolder.setCorrelationId(correlationId);
         CorrelationIdHolder.setRunId(runId);
+        CorrelationIdHolder.setGitHubToken(gitHubToken);
 
         try {
             RunEntity runEntity = runRepository.findById(runId).orElseThrow(
