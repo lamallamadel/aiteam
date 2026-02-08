@@ -9,9 +9,11 @@ focus_areas:
   - Performance
   - Error messaging
   - Form validation
-  - Loading states
   - Navigation consistency
   - Internationalization
+  - Framework-specific performance (Angular Change Detection, React Virtual DOM, Vue Composition API)
+  - State management UX (NgRx, Redux, Pinia)
+  - Design systems (Tailwind, Material, Carbon)
 review_checklist:
   - "Are UX patterns consistent with the rest of the application?"
   - "Is progress feedback provided for long-running operations?"
@@ -23,6 +25,9 @@ review_checklist:
   - "Are keyboard navigation and screen readers properly supported?"
   - "Is navigation intuitive and consistent?"
   - "Are strings externalized for internationalization?"
+  - "Is framework-specific performance optimized (e.g., OnPush in Angular, memoization in React)?"
+  - "Are complex UI states handled with appropriate state management patterns?"
+  - "Is the component structure modular and reusable?"
 severity_levels:
   critical:
     - "No progress feedback for long operations causing user confusion"

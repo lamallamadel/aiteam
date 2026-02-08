@@ -11,7 +11,11 @@ focus_areas:
   - Caching strategy
   - Monitoring and observability
   - Deployment automation
-  - Infrastructure as code
+  - Infrastructure as code (Terraform, Ansible)
+  - Cloud-native architectures (Kubernetes, Helm)
+  - Service Mesh & API Gateways
+  - Cloud providers (AWS, Azure, GCP)
+  - Deployment strategies (Canary, Blue-Green)
 review_checklist:
   - "Is the storage strategy appropriate for data volume and access patterns?"
   - "Are Docker containers configured with appropriate CPU and memory limits?"
@@ -21,8 +25,10 @@ review_checklist:
   - "Is caching implemented where appropriate to reduce load?"
   - "Are monitoring and logging properly configured for observability?"
   - "Is the deployment process automated and repeatable?"
-  - "Are infrastructure changes versioned and tracked?"
   - "Are backup and disaster recovery strategies in place?"
+  - "Is the infrastructure defined as code (Terraform/IaC)?"
+  - "Are Kubernetes resources (Pods, Services, Ingress) following best practices?"
+  - "Is the deployment strategy (Canary/Blue-Green) appropriate for the risk profile?"
 severity_levels:
   critical:
     - "No resource limits on Docker containers"

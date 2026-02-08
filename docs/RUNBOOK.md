@@ -1,22 +1,34 @@
-# Runbook — Atlasia (template)
+# Runbook - Atlasia AI Orchestrator
 
-## Prérequis
-- Java 17
-- Node 20+
-- Docker Desktop / Docker Engine
+## Prerequisites
+- Java 17+
+- Node.js 18+
+- Docker & Docker Compose
+- GitHub Token with repo/workflow scopes
 
-## Backend
-- Build & tests: `cd backend && ./mvnw clean verify`
-- Run local (exemple): `cd backend && ./mvnw spring-boot:run`
+## Backend Setup
+```powershell
+cd ai-orchestrator
+mvn clean install
+mvn spring-boot:run
+```
 
-## Frontend
-- Install: `cd frontend && npm ci`
-- Run: `cd frontend && npm run start`
-- Lint: `cd frontend && npm run lint`
-- Unit tests: `cd frontend && npm test -- --watch=false`
+## Frontend Setup
+```powershell
+cd frontend
+npm install
+npm run start
+```
 
-## E2E (fast)
-- `cd frontend && npm run e2e:fast`
+## AI Analytics & Learning
+Advanced analytics endpoints are available:
+- **Run Summary**: `GET /api/analytics/runs/summary`
+- **Agent Performance**: `GET /api/analytics/agents/performance`
+- **Escalation Insights**: `GET /api/analytics/escalations/insights`
+- **Persona Effectiveness**: `GET /api/analytics/personas/effectiveness`
 
-## Infra
-- (À compléter selon votre `infra/docker-compose.yml`)
+## E2E Testing
+```powershell
+cd frontend
+npm run e2e:fast
+```

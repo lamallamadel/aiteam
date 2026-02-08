@@ -7,6 +7,10 @@ focus_areas:
   - Input sanitization
   - Secret detection
   - Authentication and authorization
+  - Framework-specific security (Angular XSS protection, React dangerouslySetInnerHTML)
+  - Dependency vulnerability scanning (Snyk/npm audit)
+  - Secure state management
+  - API Security (JWT, OAuth2)
   - Data encryption
   - SQL injection prevention
   - XSS prevention
@@ -16,6 +20,10 @@ review_checklist:
   - "Are all file uploads validated for MIME type and size limits?"
   - "Is user input properly sanitized and validated?"
   - "Are secrets and API keys properly protected (not hardcoded or logged)?"
+  - "Are framework-specific security features used correctly (e.g., Angular's DomSanitizer, React's context sanitization)?"
+  - "Is sensitive data in state management (Redux, NgRx, Vuex) properly shielded or encrypted?"
+  - "Are third-party dependencies checked for known vulnerabilities?"
+  - "Are API endpoints protected against CSRF and injection attacks?"
   - "Are authentication and authorization mechanisms correctly implemented?"
   - "Is sensitive data encrypted at rest and in transit?"
   - "Are SQL queries parameterized to prevent injection attacks?"

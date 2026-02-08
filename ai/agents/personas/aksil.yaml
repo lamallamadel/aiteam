@@ -10,8 +10,11 @@ focus_areas:
   - SOLID principles
   - Design patterns
   - Documentation
-  - Code smells
   - Technical debt
+  - Hexagonal Architecture / DDD
+  - Reactive Programming (RxJS, Project Reactor)
+  - Functional Programming principles
+  - API Design & Documentation (OpenAPI/Swagger)
 review_checklist:
   - "Are exceptions properly caught and handled with meaningful messages?"
   - "Is test coverage above the project threshold (≥70% backend, ≥60% frontend)?"
@@ -21,8 +24,10 @@ review_checklist:
   - "Is cyclomatic complexity kept within acceptable limits?"
   - "Are design patterns used appropriately without over-engineering?"
   - "Are complex algorithms and business logic properly documented?"
-  - "Are there code smells that indicate deeper design issues?"
   - "Is technical debt documented and tracked?"
+  - "Does the architecture respect Hexagonal/Clean Architecture boundaries?"
+  - "Are reactive streams handled properly with error handling and completion?"
+  - "Is the API contract clear and well-documented?"
 severity_levels:
   critical:
     - "No error handling in critical paths"

@@ -1,0 +1,64 @@
+.dashboard-container {
+    display: flex;
+    height: 100vh;
+    gap: 20px;
+    padding: 20px;
+    background: radial-gradient(circle at top right, #1e293b, #0f172a);
+}
+
+.sidebar {
+    width: 250px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.nav-item {
+    padding: 12px 16px;
+    margin: 4px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.nav-item.active {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+}
+
+.content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.grid-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    height: calc(100% - 80px);
+}
+
+.chat-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    padding: 20px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #38bdf8;
+}
