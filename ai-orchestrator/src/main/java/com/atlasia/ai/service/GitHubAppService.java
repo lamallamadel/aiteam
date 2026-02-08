@@ -30,11 +30,13 @@ public class GitHubAppService {
 
     private PrivateKey loadPrivateKeySafely(String path) {
         if (path == null || path.trim().isEmpty()) {
+            org.slf4j.LoggerFactory.getLogger(GitHubAppService.class)
+                    .info("No GitHub App private key path provided - skipping GitHub App authentication.");
             return null;
         }
         try {
             return loadPrivateKey(path);
-        } catch (IOException e) {
+        } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(GitHubAppService.class)
                     .error("Failed to load GitHub App private key from {}: {}", path, e.getMessage());
             return null;
