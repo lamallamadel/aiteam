@@ -254,7 +254,7 @@ public class WorkflowEngine {
         long startTime = System.currentTimeMillis();
         
         try {
-            log.info("Executing Developer step: runId={}, correlationId={}", 
+            log.info("Executing Developer step (code generation only): runId={}, correlationId={}", 
                     context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
             
             RunEntity runEntity = context.getRunEntity();
@@ -262,19 +262,18 @@ public class WorkflowEngine {
             runEntity.setCurrentAgent(agentName);
             runRepository.save(runEntity);
 
-            String artifact = developerStep.execute(context);
-            persistArtifact(runEntity, agentName, "pr_url", artifact);
+            developerStep.generateCode(context);
             
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.startAgentStepTimer());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(agentName, "generate", duration);
             
-            log.info("Developer step completed: runId={}, duration={}ms, correlationId={}", 
+            log.info("Developer step (code generation) completed: runId={}, duration={}ms, correlationId={}", 
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.startAgentStepTimer());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(agentName, "generate");
             
             log.error("Developer step failed: runId={}, duration={}ms, correlationId={}", 
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -308,20 +307,21 @@ public class WorkflowEngine {
             PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
             
             String reportJson = serializeReviewReport(report);
+            
+            schemaValidator.validate(reportJson, "persona_review.schema.json");
+            
             persistArtifact(runEntity, agentName, "persona_review_report", reportJson);
             
-            if (report.isSecurityFixesApplied()) {
-                log.info("Security fixes were applied, updating code changes on branch");
-                updateCodeChangesOnBranch(context, codeChanges);
-            }
+            String prUrl = developerStep.commitAndCreatePullRequest(context, codeChanges);
+            persistArtifact(runEntity, "DEVELOPER", "pr_url", prUrl);
             
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.startAgentStepTimer());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
             
-            log.info("Persona Review step completed: runId={}, duration={}ms, findings={}, securityFixesApplied={}, correlationId={}", 
+            log.info("Persona Review step completed: runId={}, duration={}ms, findings={}, securityFixesApplied={}, prUrl={}, correlationId={}", 
                     context.getRunEntity().getId(), duration, report.getFindings().size(), 
-                    report.isSecurityFixesApplied(), CorrelationIdHolder.getCorrelationId());
+                    report.isSecurityFixesApplied(), prUrl, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.startAgentStepTimer());
@@ -429,23 +429,90 @@ public class WorkflowEngine {
     private String serializeReviewReport(PersonaReviewService.PersonaReviewReport report) {
         try {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.writeValueAsString(report);
+            java.util.Map<String, Object> reportData = new java.util.HashMap<>();
+            
+            reportData.put("personaName", "merged");
+            
+            java.util.List<java.util.Map<String, Object>> riskFindings = new java.util.ArrayList<>();
+            for (PersonaReviewService.PersonaReview review : report.getFindings()) {
+                for (PersonaReviewService.PersonaIssue issue : review.getIssues()) {
+                    java.util.Map<String, Object> finding = new java.util.HashMap<>();
+                    finding.put("severity", issue.getSeverity());
+                    finding.put("category", review.getPersonaRole());
+                    finding.put("description", issue.getDescription());
+                    finding.put("location", issue.getFilePath());
+                    finding.put("impact", issue.getRecommendation());
+                    riskFindings.add(finding);
+                }
+            }
+            reportData.put("riskFindings", riskFindings);
+            
+            java.util.List<java.util.Map<String, Object>> enhancements = new java.util.ArrayList<>();
+            for (PersonaReviewService.PersonaReview review : report.getFindings()) {
+                for (PersonaReviewService.PersonaEnhancement enhancement : review.getEnhancements()) {
+                    java.util.Map<String, Object> enh = new java.util.HashMap<>();
+                    enh.put("type", enhancement.getCategory());
+                    enh.put("description", enhancement.getDescription());
+                    enh.put("priority", "medium");
+                    enh.put("suggestedApproach", enhancement.getBenefit());
+                    enhancements.add(enh);
+                }
+            }
+            reportData.put("requiredEnhancements", enhancements);
+            
+            java.util.Map<String, Object> assessment = new java.util.HashMap<>();
+            
+            int criticalCount = 0, highCount = 0, mediumCount = 0, lowCount = 0;
+            for (PersonaReviewService.PersonaReview review : report.getFindings()) {
+                for (PersonaReviewService.PersonaIssue issue : review.getIssues()) {
+                    switch (issue.getSeverity().toLowerCase()) {
+                        case "critical" -> criticalCount++;
+                        case "high" -> highCount++;
+                        case "medium" -> mediumCount++;
+                        case "low" -> lowCount++;
+                    }
+                }
+            }
+            
+            String status;
+            if (criticalCount > 0) {
+                status = "rejected";
+            } else if (report.isSecurityFixesApplied() || highCount > 0) {
+                status = "changes_required";
+            } else if (mediumCount > 0 || lowCount > 0) {
+                status = "approved_with_minor_issues";
+            } else {
+                status = "approved";
+            }
+            
+            assessment.put("status", status);
+            assessment.put("summary", "Reviewed by " + report.getFindings().size() + " personas. " +
+                    "Found " + criticalCount + " critical, " + highCount + " high, " + 
+                    mediumCount + " medium, and " + lowCount + " low severity issues." +
+                    (report.isSecurityFixesApplied() ? " Security fixes have been auto-applied." : ""));
+            assessment.put("criticalIssueCount", criticalCount);
+            assessment.put("highIssueCount", highCount);
+            assessment.put("mediumIssueCount", mediumCount);
+            assessment.put("lowIssueCount", lowCount);
+            reportData.put("overallAssessment", assessment);
+            
+            java.util.List<String> positiveFindings = new java.util.ArrayList<>();
+            java.util.List<String> recommendations = new java.util.ArrayList<>();
+            for (PersonaReviewService.PersonaReview review : report.getFindings()) {
+                if (review.getOverallAssessment() != null && !review.getOverallAssessment().toLowerCase().contains("failed")) {
+                    positiveFindings.add("[" + review.getPersonaName() + "] " + review.getOverallAssessment());
+                }
+            }
+            recommendations.addAll(report.getMergedRecommendations());
+            
+            reportData.put("positiveFindings", positiveFindings);
+            reportData.put("recommendations", recommendations);
+            
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(reportData);
         } catch (Exception e) {
             log.error("Failed to serialize review report, correlationId={}", 
                     CorrelationIdHolder.getCorrelationId(), e);
             return "{\"error\": \"Failed to serialize report\"}";
-        }
-    }
-
-    private void updateCodeChangesOnBranch(RunContext context, DeveloperStep.CodeChanges codeChanges) {
-        try {
-            String branchName = context.getBranchName();
-            
-            log.info("Updating code changes on branch {} with security fixes", branchName);
-            log.info("Security fixes applied to {} files in code changes", codeChanges.getFiles().size());
-        } catch (Exception e) {
-            log.error("Failed to update code changes on branch, correlationId={}", 
-                    CorrelationIdHolder.getCorrelationId(), e);
         }
     }
 

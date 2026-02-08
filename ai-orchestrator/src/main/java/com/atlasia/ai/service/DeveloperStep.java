@@ -34,7 +34,13 @@ public class DeveloperStep implements AgentStep {
 
     @Override
     public String execute(RunContext context) throws Exception {
-        log.info("Starting code implementation for issue #{}", context.getRunEntity().getIssueNumber());
+        generateCode(context);
+        DeveloperStep.CodeChanges codeChanges = context.getCodeChanges();
+        return commitAndCreatePullRequest(context, codeChanges);
+    }
+
+    public void generateCode(RunContext context) throws Exception {
+        log.info("Starting code generation for issue #{}", context.getRunEntity().getIssueNumber());
         
         try {
             String branchName = context.getBranchName();
@@ -68,6 +74,27 @@ public class DeveloperStep implements AgentStep {
 
             context.setCodeChanges(codeChanges);
 
+            log.info("Code generation completed for issue #{}", context.getRunEntity().getIssueNumber());
+        } catch (Exception e) {
+            log.error("Failed to generate code for issue #{}: {}", 
+                    context.getRunEntity().getIssueNumber(), e.getMessage(), e);
+            throw new AgentStepException("Code generation failed: " + e.getMessage(), e, 
+                    "DEVELOPER", "generateCode", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
+        }
+    }
+
+    public String commitAndCreatePullRequest(RunContext context, CodeChanges codeChanges) throws Exception {
+        log.info("Starting commit and PR creation for issue #{}", context.getRunEntity().getIssueNumber());
+        
+        try {
+            String branchName = context.getBranchName();
+            String owner = context.getOwner();
+            String repo = context.getRepo();
+
+            Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
+            Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
+            String baseSha = (String) mainObject.get("sha");
+
             String commitSha = applyMultiFileChanges(context, owner, repo, branchName, baseSha, codeChanges);
             log.info("Created commit {} on branch {}", commitSha, branchName);
 
@@ -93,10 +120,10 @@ public class DeveloperStep implements AgentStep {
             log.info("Created pull request: {}", prUrl);
             return prUrl;
         } catch (Exception e) {
-            log.error("Failed to execute developer step for issue #{}: {}", 
+            log.error("Failed to commit and create PR for issue #{}: {}", 
                     context.getRunEntity().getIssueNumber(), e.getMessage(), e);
-            throw new AgentStepException("Code implementation failed: " + e.getMessage(), e, 
-                    "DEVELOPER", "execute", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
+            throw new AgentStepException("Commit and PR creation failed: " + e.getMessage(), e, 
+                    "DEVELOPER", "commitAndCreatePullRequest", OrchestratorException.RecoveryStrategy.ESCALATE_TO_HUMAN);
         }
     }
 
