@@ -1,59 +1,141 @@
-# Dashboard
+# Atlasia Frontend Dashboard
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.1.3.
+Angular-based frontend for the Atlasia AI Orchestrator with comprehensive run analytics and monitoring.
 
-## Development server
+## Structure
 
-To start a local development server, run:
-
-```bash
-ng serve
+```
+src/app/
+├── components/           # UI Components
+│   ├── analytics-dashboard.component.ts  # Analytics dashboard with charts
+│   ├── dashboard-home.component.ts       # Home dashboard landing page
+│   ├── run-list.component.ts             # Paginated run history with filters
+│   ├── run-detail.component.ts           # Individual run details view
+│   ├── chat-interface.ts                 # Chat interface component
+│   └── index.ts                          # Component exports
+├── services/             # Services
+│   └── analytics.service.ts              # Analytics & Run API service
+├── models/               # Data models
+│   └── index.ts                          # Model interfaces
+├── app.ts                # Root component
+├── app.routes.ts         # Application routing
+└── app.config.ts         # Application configuration
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Features
 
-## Code scaffolding
+### Dashboard Home (`/dashboard`)
+- Quick stats overview (total runs, success rate, active runs, escalations)
+- Recent activity feed
+- Quick action cards for navigation
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+### Run List (`/runs`)
+- Paginated run history table
+- Status filters (All, Done, Failed, Escalated, In Progress)
+- Search by repository
+- Status badges with color coding
+- Click to view run details
+
+### Run Detail (`/runs/:id`)
+- Complete run information
+- Artifact listing
+- Status tracking
+
+### Analytics Dashboard (`/analytics`)
+- Success rate trend chart (line chart)
+- Agent performance metrics (bar chart)
+- Status distribution (doughnut chart)
+- Persona effectiveness breakdown
+- Configuration recommendations
+
+## Components
+
+### RunListComponent
+Displays paginated run history with:
+- Status filtering
+- Repository search
+- Fix count indicators
+- Time-based formatting
+- Clickable rows for details
+
+### AnalyticsDashboardComponent
+Comprehensive analytics using ng2-charts:
+- Real-time metrics cards
+- Interactive Chart.js visualizations
+- Agent performance tracking
+- Persona effectiveness scoring
+
+### DashboardHomeComponent
+Landing page with:
+- Quick stats overview
+- Recent activity
+- Navigation shortcuts
+
+### RunDetailComponent
+Detailed view showing:
+- Run metadata
+- Artifact history
+- Status information
+
+## Services
+
+### AnalyticsService
+HTTP service for backend API:
+- `getSummary()` - Get analytics summary
+- `getAgentPerformance()` - Get agent performance metrics
+- `getEscalationInsights()` - Get escalation analysis
+- `getPersonaEffectiveness()` - Get persona effectiveness data
+- `getRun(id)` - Get individual run details
+- `getRunArtifacts(id)` - Get run artifacts
+
+## Models
+
+All TypeScript interfaces in `models/index.ts`:
+- `Run` - Run entity
+- `AnalyticsSummary` - Analytics summary data
+- `AgentPerformance` - Agent performance metrics
+- `PersonaEffectiveness` - Persona learning data
+- `EscalationInsight` - Escalation analysis
+
+## Dependencies
+
+- **Angular 21+** - Framework
+- **Chart.js** - Charting library
+- **ng2-charts** - Angular Chart.js wrapper
+- **RxJS** - Reactive programming
+
+## Development
 
 ```bash
-ng generate component component-name
+# Install dependencies
+npm ci
+
+# Start dev server
+npm run start
+
+# Build for production
+npm run build
+
+# Run tests
+npm test
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Routing
 
-```bash
-ng generate --help
-```
+- `/` → Redirects to `/dashboard`
+- `/dashboard` → Dashboard home
+- `/runs` → Run list with filters
+- `/runs/:id` → Run detail view
+- `/analytics` → Analytics dashboard
 
-## Building
+## Styling
 
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- Glass morphism design system
+- Dark theme with accent colors
+- Responsive grid layouts
+- Custom scrollbars
+- Status-based color coding:
+  - Green: Success/Done
+  - Red: Failed
+  - Yellow: Escalated/Warning
+  - Blue: In Progress/Info

@@ -2,9 +2,9 @@
   <aside class="sidebar glass-panel">
     <h1 class="accent-gradient">Atlasia AI</h1>
     <nav>
-      <a class="nav-item active">Dashboard</a>
-      <a class="nav-item">Runs</a>
-      <a class="nav-item">Analytics</a>
+      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Dashboard</a>
+      <a routerLink="/runs" routerLinkActive="active" class="nav-item">Runs</a>
+      <a routerLink="/analytics" routerLinkActive="active" class="nav-item">Analytics</a>
     </nav>
   </aside>
 
@@ -13,21 +13,8 @@
       <h2>Orchestrator Control Center</h2>
     </header>
 
-    <div class="grid-layout">
-      <section class="chat-section glass-panel">
-        <app-chat-interface></app-chat-interface>
-      </section>
-
-      <section class="analytics-section">
-        <div class="stats-grid">
-          <div class="stat-card glass-panel premium-card">
-             <h3>Success Rate</h3>
-             <div class="stat-value">94%</div>
-          </div>
-          <!-- More stat cards will go here -->
-        </div>
-        <app-analytics-dashboard></app-analytics-dashboard>
-      </section>
+    <div class="main-content">
+      <router-outlet></router-outlet>
     </div>
   </main>
 </div>

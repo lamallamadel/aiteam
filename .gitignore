@@ -13,6 +13,11 @@ node_modules/
 dist/
 .angular/
 *.log
+/package.json
+/package-lock.json
+package-lock.json
+/ai-orchestrator/frontend/
+/ai-orchestrator/package.json
 
 # OS
 .DS_Store
