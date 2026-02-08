@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  ai-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ai}
+      POSTGRES_USER: ${DB_USER:-ai}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ai}
+    volumes:
+      - ai_db_dev_data:/var/lib/postgresql/data
+    networks:
+      - ai_dev_network
+
+  ai-orchestrator:
+    build:
+      context: ./ai-orchestrator
+      dockerfile: Dockerfile
+    # In dev, we might want to mount the source for code changes, 
+    # but since it's Java (needs compile), we'll stick to a build-on-start or simple restart
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://ai-db:5432/${DB_NAME:-ai}
+      DB_USER: ${DB_USER:-ai}
+      DB_PASSWORD: ${DB_PASSWORD:-ai}
+      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN}
+    depends_on:
+      - ai-db
+    ports:
+      - "8080:8080"
+    networks:
+      - ai_dev_network
+
+  ai-dashboard-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - ai-orchestrator
+    networks:
+      - ai_dev_network
+
+networks:
+  ai_dev_network:
+    driver: bridge
+
+volumes:
+  ai_db_dev_data:

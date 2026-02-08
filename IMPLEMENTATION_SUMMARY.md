@@ -19,6 +19,11 @@ Following a global review, the orchestrator has been upgraded with cross-run int
 - **Complementary Skills**: All personas updated with framework-specific expertise (Angular, React, Vue).
 - **Security & Cloud-Native**: Enhanced `aabo` with dependency scanning and `imad` with Kubernetes/IaC expertise.
 
+### 4. Full Stack Dockerization (Dev/Prod)
+- **Production Mode**: Multi-stage builds with Nginx for a lightweight, secure deployment (`docker compose up`).
+- **Development Mode**: Bind mounts and hot-reload (`ng serve`) for seamless local coding (`docker compose -f docker-compose.dev.yml up`).
+- **Environment Management**: Unified `.env` file for centralized configuration of secrets and DB settings.
+
 ## Documentation Reference
 - [GLOBAL_REVIEW.md](file:///c:/Users/a891780/Atlasia-ai-pack/docs/GLOBAL_REVIEW.md)
 - [RUNBOOK.md](file:///c:/Users/a891780/Atlasia-ai-pack/docs/RUNBOOK.md)
