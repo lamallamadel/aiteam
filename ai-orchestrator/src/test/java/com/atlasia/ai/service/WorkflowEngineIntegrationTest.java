@@ -123,7 +123,7 @@ class WorkflowEngineIntegrationTest {
                 runEntity = runRepository.save(runEntity);
                 assertNotNull(runEntity.getId());
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
                 assertEquals(RunStatus.DONE, savedRun.getStatus());
@@ -142,7 +142,7 @@ class WorkflowEngineIntegrationTest {
 
                 runEntity = runRepository.save(runEntity);
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
                 assertFalse(savedRun.getArtifacts().isEmpty());
@@ -174,7 +174,7 @@ class WorkflowEngineIntegrationTest {
                         return "{\"issueId\":123}";
                 });
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity finalRun = runRepository.findById(runEntity.getId()).orElseThrow();
                 assertEquals(RunStatus.DONE, finalRun.getStatus());
@@ -195,7 +195,7 @@ class WorkflowEngineIntegrationTest {
                 when(qualifierStep.execute(any(RunContext.class)))
                                 .thenThrow(new RuntimeException("Step failed"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
                 assertEquals(RunStatus.FAILED, savedRun.getStatus());
@@ -217,7 +217,7 @@ class WorkflowEngineIntegrationTest {
                 when(testerStep.execute(any(RunContext.class)))
                                 .thenThrow(new EscalationException(escalationJson));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
                 assertEquals(RunStatus.ESCALATED, savedRun.getStatus());
@@ -247,8 +247,8 @@ class WorkflowEngineIntegrationTest {
                 run1 = runRepository.save(run1);
                 run2 = runRepository.save(run2);
 
-                workflowEngine.executeWorkflow(run1);
-                workflowEngine.executeWorkflow(run2);
+                workflowEngine.executeWorkflow(run1.getId());
+                workflowEngine.executeWorkflow(run2.getId());
 
                 RunEntity savedRun1 = runRepository.findById(run1.getId()).orElseThrow();
                 RunEntity savedRun2 = runRepository.findById(run2.getId()).orElseThrow();
@@ -288,7 +288,7 @@ class WorkflowEngineIntegrationTest {
 
                 runEntity = runRepository.save(runEntity);
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
 
@@ -319,7 +319,7 @@ class WorkflowEngineIntegrationTest {
                         return "{\"ciStatus\":\"GREEN\"}";
                 });
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runId).orElseThrow();
                 assertEquals(1, savedRun.getCiFixCount());
@@ -341,7 +341,7 @@ class WorkflowEngineIntegrationTest {
                 when(architectStep.execute(any(RunContext.class)))
                                 .thenThrow(new RuntimeException("Architecture analysis failed"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 RunEntity savedRun = runRepository.findById(runEntity.getId()).orElseThrow();
 

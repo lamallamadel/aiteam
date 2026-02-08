@@ -87,7 +87,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(pmStep).execute(any(RunContext.class));
                 verify(qualifierStep).execute(any(RunContext.class));
@@ -112,7 +112,7 @@ class WorkflowEngineTest {
                 when(pmStep.execute(any(RunContext.class)))
                                 .thenThrow(new RuntimeException("PM step failed"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(pmStep).execute(any(RunContext.class));
                 verify(qualifierStep, never()).execute(any(RunContext.class));
@@ -131,7 +131,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class)))
                                 .thenThrow(new EscalationException(escalationJson));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(testerStep).execute(any(RunContext.class));
                 verify(writerStep, never()).execute(any(RunContext.class));
@@ -150,7 +150,7 @@ class WorkflowEngineTest {
                                                 "PM",
                                                 com.atlasia.ai.service.exception.OrchestratorException.RecoveryStrategy.RETRY_WITH_BACKOFF));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
                 verify(metrics).recordWorkflowFailure(anyLong());
@@ -165,7 +165,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 assertEquals(6, runEntity.getArtifacts().size());
 
@@ -198,7 +198,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(runRepository).save(
                                 argThat(run -> run.getStatus() == RunStatus.PM && "PM".equals(run.getCurrentAgent())));
@@ -222,7 +222,7 @@ class WorkflowEngineTest {
                 doThrow(new IllegalArgumentException("Schema validation failed"))
                                 .when(schemaValidator).validate(anyString(), eq("ticket_plan.schema.json"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
                 verify(qualifierStep, never()).execute(any(RunContext.class));
@@ -280,7 +280,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(pmStep).execute(
                                 argThat(ctx -> "testowner".equals(ctx.getOwner()) && "testrepo".equals(ctx.getRepo())));
@@ -291,7 +291,7 @@ class WorkflowEngineTest {
                 when(pmStep.execute(any(RunContext.class)))
                                 .thenThrow(new RuntimeException("Test error message"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "error_details".equals(a.getArtifactType())));
@@ -315,7 +315,7 @@ class WorkflowEngineTest {
                 when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
                 verify(metrics).recordAgentStepExecution(eq("QUALIFIER"), eq("execute"), anyLong());
@@ -331,7 +331,7 @@ class WorkflowEngineTest {
                 when(qualifierStep.execute(any(RunContext.class)))
                                 .thenThrow(new RuntimeException("Qualifier failed"));
 
-                workflowEngine.executeWorkflow(runEntity);
+                workflowEngine.executeWorkflow(runEntity.getId());
 
                 verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
                 verify(metrics).recordAgentStepError(eq("QUALIFIER"), eq("execute"));

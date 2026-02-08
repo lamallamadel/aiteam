@@ -64,19 +64,19 @@ public class WorkflowEngine {
         CorrelationIdHolder.setGitHubToken(gitHubToken);
 
         try {
-            RunEntity runEntity = runRepository.findById(runId).orElseThrow(
-                    () -> new WorkflowException("Run not found: " + runId, runId, "INIT",
-                            OrchestratorException.RecoveryStrategy.FAIL_FAST));
-
             log.info("Starting async workflow execution: runId={}, correlationId={}", runId, correlationId);
-            executeWorkflow(runEntity);
+            executeWorkflow(runId);
         } finally {
             CorrelationIdHolder.clear();
         }
     }
 
     @Transactional
-    public void executeWorkflow(RunEntity runEntity) {
+    public void executeWorkflow(UUID runId) {
+        RunEntity runEntity = runRepository.findById(runId).orElseThrow(
+                () -> new WorkflowException("Run not found: " + runId, runId, "INIT",
+                        OrchestratorException.RecoveryStrategy.FAIL_FAST));
+
         Timer.Sample workflowTimer = metrics.startWorkflowTimer();
         long startTime = System.currentTimeMillis();
 
