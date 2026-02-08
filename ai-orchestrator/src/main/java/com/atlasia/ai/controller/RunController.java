@@ -35,11 +35,23 @@ public class RunController {
         this.workflowEngine = workflowEngine;
     }
 
+    @GetMapping
+    public ResponseEntity<List<RunResponse>> listRuns(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (!isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<RunResponse> runs = runRepository.findAll().stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(this::toRunResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(runs);
+    }
+
     @PostMapping
     public ResponseEntity<RunResponse> createRun(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @Valid @RequestBody RunRequest request
-    ) {
+            @Valid @RequestBody RunRequest request) {
         if (!isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -51,8 +63,7 @@ public class RunController {
                 request.issueNumber(),
                 request.mode(),
                 RunStatus.RECEIVED,
-                Instant.now()
-        );
+                Instant.now());
         runRepository.save(entity);
 
         workflowEngine.executeWorkflowAsync(id);
@@ -64,8 +75,7 @@ public class RunController {
     @GetMapping("/{id}")
     public ResponseEntity<RunResponse> get(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable("id") UUID id
-    ) {
+            @PathVariable("id") UUID id) {
         if (!isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -78,12 +88,11 @@ public class RunController {
     @GetMapping("/{id}/artifacts")
     public ResponseEntity<List<ArtifactResponse>> getArtifacts(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @PathVariable("id") UUID id
-    ) {
+            @PathVariable("id") UUID id) {
         if (!isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        
+
         return runRepository.findById(id)
                 .map(run -> run.getArtifacts().stream()
                         .map(artifact -> new ArtifactResponse(
@@ -91,8 +100,7 @@ public class RunController {
                                 artifact.getAgentName(),
                                 artifact.getArtifactType(),
                                 artifact.getPayload(),
-                                artifact.getCreatedAt()
-                        ))
+                                artifact.getCreatedAt()))
                         .collect(Collectors.toList()))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -102,8 +110,7 @@ public class RunController {
     public ResponseEntity<Void> handleEscalationDecision(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
-            @Valid @RequestBody EscalationDecisionRequest request
-    ) {
+            @Valid @RequestBody EscalationDecisionRequest request) {
         if (!isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -120,16 +127,15 @@ public class RunController {
                             String.format("{\"decision\":\"%s\",\"guidance\":\"%s\"}",
                                     request.decision(),
                                     request.guidance() != null ? request.guidance() : ""),
-                            Instant.now()
-                    );
+                            Instant.now());
                     run.addArtifact(decisionArtifact);
-                    
+
                     if ("PROCEED".equalsIgnoreCase(request.decision())) {
                         workflowEngine.executeWorkflowAsync(id);
                     } else if ("ABORT".equalsIgnoreCase(request.decision())) {
                         run.setStatus(RunStatus.FAILED);
                     }
-                    
+
                     runRepository.save(run);
                     return ResponseEntity.ok().<Void>build();
                 })
@@ -142,28 +148,31 @@ public class RunController {
                         artifact.getId(),
                         artifact.getAgentName(),
                         artifact.getArtifactType(),
-                        artifact.getCreatedAt()
-                ))
+                        artifact.getCreatedAt()))
                 .collect(Collectors.toList());
 
         return new RunResponse(
                 entity.getId(),
+                entity.getRepo(),
+                entity.getIssueNumber(),
                 entity.getStatus().name(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getCurrentAgent(),
                 entity.getCiFixCount(),
                 entity.getE2eFixCount(),
-                artifactSummaries
-        );
+                artifactSummaries);
     }
 
     private boolean isAuthorized(String authorization) {
-        if (!StringUtils.hasText(props.token())) return false;
-        if (!StringUtils.hasText(authorization)) return false;
+        if (!StringUtils.hasText(props.token()))
+            return false;
+        if (!StringUtils.hasText(authorization))
+            return false;
 
         String prefix = "Bearer ";
-        if (!authorization.startsWith(prefix)) return false;
+        if (!authorization.startsWith(prefix))
+            return false;
 
         String token = authorization.substring(prefix.length()).trim();
         return props.token().equals(token);

@@ -3,3 +3,5 @@ export { DashboardHomeComponent } from './dashboard-home.component';
 export { RunListComponent } from './run-list.component';
 export { RunDetailComponent } from './run-detail.component';
 export { ChatInterfaceComponent } from './chat-interface';
+export { ChatDashboardComponent } from './chat-dashboard.component';
+export { ConversationListComponent } from './conversation-list.component';
