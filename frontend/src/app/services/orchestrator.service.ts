@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse } from '../models/orchestrator.model';
 
 @Injectable({
     providedIn: 'root'
