@@ -19,8 +19,18 @@ docker compose -f infra/docker-compose.ai.yml up -d  # Start infrastructure
 - **Frontend**: Node 20+, Angular (inferred), Playwright E2E
 - **Infra**: Docker Compose, Postgres 16
 
+## Gems & Personas
+The orchestrator is powered by specialized AI "Gems":
+- **Aabo**: Security & Infrastructure
+- **Aksil**: Architecture & Performance
+- **Imad**: Full-stack & Cloud-Native
+- **Tiziri**: UX & Product Strategy
+
+Access them directly via the "Chat Mode" in the UI.
+
 ## Architecture
-Monorepo with `/ai-orchestrator` (REST API), `/frontend` (UI), `/ai` (agent governance), `/infra` (Docker setup). Backend uses layered architecture: controller → repository → entity.
+Monorepo with `/ai-orchestrator` (Spring Boot API), `/frontend` (Angular UI), `/ai` (agent configurations), `/infra` (Docker setup). 
+The system uses a **Dual-Mode** engine (Code vs Chat) to provide both autonomous engineering and lightweight AI dialogue.
 
 ## Code Style
 - Java: Package structure `com.atlasia.ai.{controller,model,persistence,api,config}`

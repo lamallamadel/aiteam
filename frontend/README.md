@@ -120,9 +120,16 @@ npm run build
 npm test
 ```
 
+### Chat Interface (`/chat`)
+- **Dual Mode**: Switch between active runs and gem chat.
+- **Gems Navigation**: Sidebar integration for accessing specialized AI personas.
+- **Interactive Dialogue**: Direct chat with typing indicators and persona-specific branding.
+
 ## Routing
 
-- `/` → Redirects to `/dashboard`
+- `/` → Redirects to `/chat`
+- `/chat` → Active run or new run creation
+- `/chat/gem/:persona` → Direct chat with a specific Gem
 - `/dashboard` → Dashboard home
 - `/runs` → Run list with filters
 - `/runs/:id` → Run detail view

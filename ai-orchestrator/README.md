@@ -8,16 +8,14 @@ Il sert à déclencher un "run" depuis GitHub Actions (label `ai:run`), et à tr
 - Exporter `ORCHESTRATOR_TOKEN`
 - Lancer l'app
 
-## API
-- POST `/runs` (Authorization: Bearer <token>)
-  Payload:
-  ```json
-  {"repo":"owner/repo","issueNumber":123,"mode":"FULL"}
-  ```
-  Réponse: 202 Accepted avec id du run.
+## Fonctionnalités Clés
+- **Workflow Engine**: Enchaînement automatique (PM -> Architect -> Developer -> Tester -> Writer).
+- **GitHub Integration**: Gestion des issues, création de branches, commits, et Pull Requests.
+- **Resilience**: Support des dépôts vides (initial commit) et gestion des erreurs d'API GitHub.
+- **Chat Mode (Gems)**: API pour le dialogue direct avec les personas AI (`/api/chat/{personaName}`).
 
-## À implémenter ensuite
-- GitHub App auth + APIs (issues/PR/actions)
-- Workflow engine (Qualifier->Architect->Dev->Tester->Writer->PM)
-- Artifact store et schémas JSON
-- Boucles de fix CI/E2E contrôlées
+## API
+- `POST /api/runs`: Déclencher un orchestrateur complet.
+- `GET /api/runs`: Liste des runs.
+- `GET /api/personas`: Liste des "Gems" disponibles.
+- `POST /api/chat/{personaName}`: Chat direct avec un Gem.

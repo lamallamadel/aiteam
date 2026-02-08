@@ -15,11 +15,16 @@ Following a global review, the orchestrator has been upgraded with cross-run int
 - **Interactive Chat**: Specialized chat interface visualizing live orchestration steps.
 - **Analytics Visualization**: Real-time metrics for orchestrator success rates and agent efficiency.
 
-### 3. Enriched Persona Governance
-- **Complementary Skills**: All personas updated with framework-specific expertise (Angular, React, Vue).
-- **Security & Cloud-Native**: Enhanced `aabo` with dependency scanning and `imad` with Kubernetes/IaC expertise.
+### 3. AI Workshop (Dual-Mode Interface)
+- **Code Mode**: Full autonomous agent pipeline (PM, Architect, Developer) for deep engineering tasks and PR generation.
+- **Chat Mode (Gems)**: Direct line to specialized AI Personas (Aabo, Aksil, etc.) for lightweight brainstorming, prompt engineering, and research.
+- **Dynamic Sidebar**: Navigation hub for discovering and interacting with "Gems" without needing a repository context.
 
-### 4. Full Stack Dockerization (Dev/Prod)
+### 4. Repository Resilience & Empty Repo Support
+- **Zero-State Support**: The orchestrator now detect empty repositories (missing `main` branch) and performs initial commits to jumpstart the development workflow.
+- **Improved GitHub Client**: Robust handling of 404/409 conflicts and automatic base64 encoding for new file creations.
+
+### 5. Full Stack Dockerization (Dev/Prod)
 - **Production Mode**: Multi-stage builds with Nginx for a lightweight, secure deployment (`docker compose up`).
 - **Development Mode**: Bind mounts and hot-reload (`ng serve`) for seamless local coding (`docker compose -f docker-compose.dev.yml up`).
 - **Environment Management**: Unified `.env` file for centralized configuration of secrets and DB settings.
