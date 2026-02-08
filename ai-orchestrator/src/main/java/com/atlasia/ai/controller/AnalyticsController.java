@@ -1,50 +1,51 @@
 package com.atlasia.ai.controller;
 
-import com.atlasia.ai.api.dto.AgentPerformanceDto;
-import com.atlasia.ai.api.dto.AnalyticsSummaryDto;
-import com.atlasia.ai.api.dto.EscalationInsightDto;
-import com.atlasia.ai.api.dto.PersonaEffectivenessDto;
+import com.atlasia.ai.api.dto.*;
 import com.atlasia.ai.service.AnalyticsService;
-import com.atlasia.ai.service.EscalationAnalyzerService;
-import com.atlasia.ai.service.PersonaLearningService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/analytics")
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
-    private final EscalationAnalyzerService escalationAnalyzerService;
-    private final PersonaLearningService personaLearningService;
 
-    public AnalyticsController(AnalyticsService analyticsService,
-            EscalationAnalyzerService escalationAnalyzerService,
-            PersonaLearningService personaLearningService) {
+    public AnalyticsController(AnalyticsService analyticsService) {
         this.analyticsService = analyticsService;
-        this.escalationAnalyzerService = escalationAnalyzerService;
-        this.personaLearningService = personaLearningService;
     }
 
     @GetMapping("/runs/summary")
-    public ResponseEntity<AnalyticsSummaryDto> getRunSummary() {
-        return ResponseEntity.ok(analyticsService.getSummary());
+    public ResponseEntity<RunsSummaryDto> getRunsSummary(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
+        return ResponseEntity.ok(analyticsService.getRunsSummary(startDate, endDate));
     }
 
     @GetMapping("/agents/performance")
-    public ResponseEntity<AgentPerformanceDto> getAgentPerformance() {
-        return ResponseEntity.ok(analyticsService.getPerformance());
+    public ResponseEntity<AgentsPerformanceDto> getAgentsPerformance(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
+        return ResponseEntity.ok(analyticsService.getAgentsPerformance(startDate, endDate));
     }
 
-    @GetMapping("/escalations/insights")
-    public ResponseEntity<EscalationInsightDto> getEscalationInsights() {
-        return ResponseEntity.ok(escalationAnalyzerService.analyzeEscalations());
+    @GetMapping("/personas/findings")
+    public ResponseEntity<PersonasFindingsDto> getPersonasFindings(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
+        return ResponseEntity.ok(analyticsService.getPersonasFindings(startDate, endDate));
     }
 
-    @GetMapping("/personas/effectiveness")
-    public ResponseEntity<PersonaEffectivenessDto> getPersonaEffectiveness() {
-        return ResponseEntity.ok(personaLearningService.analyzeEffectiveness());
+    @GetMapping("/fix-loops")
+    public ResponseEntity<FixLoopsDto> getFixLoops(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
+        return ResponseEntity.ok(analyticsService.getFixLoops(startDate, endDate));
     }
 }
