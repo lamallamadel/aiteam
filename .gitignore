@@ -31,3 +31,6 @@ coverage/
 # Logs
 logs/
 *.log
+
+# Escalation insights
+insights/

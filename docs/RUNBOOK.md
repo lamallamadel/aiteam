@@ -1,57 +1,57 @@
-# Runbook - Atlasia AI Orchestrator
+# Escalation Analytics
 
-## Prerequisites
-- Java 17+
-- Node.js 18+
-- Docker & Docker Compose
-- GitHub Token with repo/workflow scopes
+## Overview
+The Escalation Analyzer Service provides insights into recurring failure patterns across workflow runs by mining escalation.json artifacts.
 
-## Quick Start with Docker
-The easiest way to start the stack is using Docker Compose.
+## API Endpoint
 
-1.  **Configure Environment**: Edit the `.env` file at the root and provide your `ORCHESTRATOR_TOKEN`.
-2.  **Choose your Mode**:
+### POST /api/analytics/escalations/insights
+Triggers analysis of all escalated runs and generates an escalation insights report.
 
-### 🛠️ Development Mode (Hot-Reload)
-Perfect for active coding. Frontend uses `ng serve` (port 4200) and code changes are reflected instantly.
-```powershell
-docker compose -f docker-compose.dev.yml up --build
-```
-- **Dashboard (Dev)**: `http://localhost:4200`
-- **Backend**: `http://localhost:8080`
-
-### 🚀 Production Mode
-Optimized build. Frontend is served via Nginx (port 80).
-```powershell
-docker compose up --build
-```
-- **Dashboard (Prod)**: `http://localhost:80`
-- **Backend**: `http://localhost:8088`
-
-## Manual Setup
-### Backend Setup
-```powershell
-cd ai-orchestrator
-mvn clean install
-mvn spring-boot:run
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/analytics/escalations/insights
 ```
 
-## Frontend Setup
-```powershell
-cd frontend
-npm install
-npm run start
-```
+**Response:** Returns `EscalationInsightDto` with:
+- `totalEscalationsAnalysed`: Count of analyzed escalated runs
+- `topErrorPatterns`: Map of error pattern types to occurrence counts
+- `problematicFiles`: List of files frequently appearing in escalations
+- `clusters`: Categorized error clusters with root cause suggestions
+- `filePathPatterns`: File patterns with frequency analysis
+- `agentBottlenecks`: Agents with highest escalation rates
+- `topKeywords`: Most frequent keywords from escalation messages
+- `generatedAt`: Timestamp of analysis
 
-## AI Analytics & Learning
-Advanced analytics endpoints are available:
-- **Run Summary**: `GET /api/analytics/runs/summary`
-- **Agent Performance**: `GET /api/analytics/agents/performance`
-- **Escalation Insights**: `GET /api/analytics/escalations/insights`
-- **Persona Effectiveness**: `GET /api/analytics/personas/effectiveness`
+## Generated Reports
 
-## E2E Testing
-```powershell
-cd frontend
-npm run e2e:fast
-```
+Reports are saved to `./insights/` directory:
+- `escalation_insights_<timestamp>.json`: Timestamped report
+- `escalation_insights.json`: Latest report (symlink/copy)
+
+Configure output directory via `escalation.insights.output.dir` in application.properties.
+
+## Analysis Features
+
+### Error Pattern Classification
+Identifies common patterns:
+- TIMEOUT: Slow operations, infinite loops
+- COMPILATION_ERROR: Syntax errors, missing dependencies
+- E2E_SELECTOR_MISSING: UI/test selector mismatches
+- NULL_REFERENCE: Null pointer exceptions
+- DEPENDENCY_ERROR: Import/module issues
+- TEST_FAILURE: Test assertion failures
+- PERMISSION_ERROR: Access control issues
+- NETWORK_ERROR: Connectivity problems
+- MEMORY_ERROR: Memory leaks, heap issues
+
+### File Path Analysis
+Extracts and ranks frequently problematic files from escalation contexts.
+
+### Agent Bottleneck Detection
+Identifies which agents have the highest escalation rates, helping spot training or capability gaps.
+
+### Keyword Frequency Analysis
+Surfaces common terms in escalation messages to identify recurring themes.
+
+---

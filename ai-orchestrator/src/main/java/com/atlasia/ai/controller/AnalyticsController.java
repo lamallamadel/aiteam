@@ -2,12 +2,10 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.*;
 import com.atlasia.ai.service.AnalyticsService;
+import com.atlasia.ai.service.EscalationAnalyzerService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 
@@ -16,9 +14,11 @@ import java.time.Instant;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final EscalationAnalyzerService escalationAnalyzerService;
 
-    public AnalyticsController(AnalyticsService analyticsService) {
+    public AnalyticsController(AnalyticsService analyticsService, EscalationAnalyzerService escalationAnalyzerService) {
         this.analyticsService = analyticsService;
+        this.escalationAnalyzerService = escalationAnalyzerService;
     }
 
     @GetMapping("/runs/summary")
@@ -47,5 +47,11 @@ public class AnalyticsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
         return ResponseEntity.ok(analyticsService.getFixLoops(startDate, endDate));
+    }
+
+    @PostMapping("/escalations/insights")
+    public ResponseEntity<EscalationInsightDto> generateEscalationInsights() {
+        EscalationInsightDto insights = escalationAnalyzerService.analyzeEscalations();
+        return ResponseEntity.ok(insights);
     }
 }
