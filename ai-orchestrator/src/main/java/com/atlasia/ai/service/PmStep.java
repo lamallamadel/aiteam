@@ -55,11 +55,14 @@ public class PmStep implements AgentStep {
                         context.getRunEntity().getIssueNumber(),
                         ticketPlan.getLabelsToApply());
             } catch (Exception e) {
-                if (e.getMessage() != null && e.getMessage().contains("403")) {
-                    log.warn("Permission denied while adding labels to issue: 403 Forbidden. " +
-                            "Please check GitHub token scopes (needs 'write' for issues). Continuing workflow...");
+                String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+                if (errorMsg.contains("403")) {
+                    log.warn(
+                            "Skipping label attachment: GitHub token lacks 'write' permission for issues (403 Forbidden). "
+                                    +
+                                    "The workflow will continue without labels.");
                 } else {
-                    log.warn("Failed to add labels to issue: {}. Continuing workflow...", e.getMessage());
+                    log.warn("Failed to add labels to issue ({}). Continuing workflow...", errorMsg);
                 }
             }
         }
