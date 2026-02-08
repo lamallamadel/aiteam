@@ -58,5 +58,5 @@ atlasia:
       installation-id: ${GITHUB_INSTALLATION_ID:}
     llm:
       endpoint: ${LLM_ENDPOINT:https://api.openai.com/v1}
-      model: ${LLM_MODEL:gpt-4}
+      model: ${LLM_MODEL:gpt-4o-mini}
       api-key: ${LLM_API_KEY:}
