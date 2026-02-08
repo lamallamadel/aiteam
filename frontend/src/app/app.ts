@@ -1,6 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { OrchestratorService } from './services/orchestrator.service';
+import { Persona } from './models/orchestrator.model';
 
 @Component({
   selector: 'app-root',
@@ -9,6 +11,15 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
-export class App {
+export class App implements OnInit {
   protected readonly title = signal('Atlasia Orchestrator');
+  personas: Persona[] = [];
+
+  constructor(private orchestratorService: OrchestratorService) { }
+
+  ngOnInit() {
+    this.orchestratorService.getPersonas().subscribe(
+      p => this.personas = p
+    );
+  }
 }

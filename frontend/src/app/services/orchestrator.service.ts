@@ -26,4 +26,12 @@ export class OrchestratorService {
     createRun(request: RunRequest): Observable<RunResponse> {
         return this.http.post<RunResponse>(this.apiUrl, request);
     }
+
+    getPersonas(): Observable<Persona[]> {
+        return this.http.get<Persona[]>('/api/personas');
+    }
+
+    chat(personaName: string, message: string): Observable<ChatResponse> {
+        return this.http.post<ChatResponse>(`/api/chat/${personaName}`, { message });
+    }
 }

@@ -9,6 +9,7 @@ export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
   { path: 'chat', component: ChatDashboardComponent },
   { path: 'chat/:id', component: ChatDashboardComponent },
+  { path: 'chat/gem/:persona', component: ChatDashboardComponent },
   { path: 'dashboard', component: DashboardHomeComponent },
   { path: 'runs', component: RunListComponent },
   { path: 'runs/:id', component: RunDetailComponent },

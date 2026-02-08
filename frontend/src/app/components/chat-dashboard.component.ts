@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { ConversationListComponent } from './conversation-list.component';
 import { ChatInterfaceComponent } from './chat-interface';
 import { RunResponse } from '../models/orchestrator.model';
@@ -13,6 +14,7 @@ import { AuthService } from '../services/auth.service';
   template: `
     <div class="dashboard-wrapper">
       <app-conversation-list 
+        *ngIf="!selectedPersona"
         (runSelected)="onRunSelected($event)"
         (newChatRequested)="onNewChat()">
       </app-conversation-list>
@@ -37,13 +39,16 @@ import { AuthService } from '../services/auth.service';
           </div>
         </div>
 
-        <app-chat-interface [selectedRun]="selectedRun"></app-chat-interface>
+        <app-chat-interface 
+            [selectedRun]="selectedRun" 
+            [selectedPersona]="selectedPersona">
+        </app-chat-interface>
       </main>
     </div>
   `,
   styles: [`
     .dashboard-wrapper { display: flex; height: calc(100vh - 80px); overflow: hidden; }
-    .chat-area { flex: 1; position: relative; }
+    .chat-area { flex: 1; position: relative; display: flex; flex-direction: column; }
     .settings-bar { position: absolute; top: 20px; right: 20px; z-index: 10; }
     .settings-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: background 0.2s; }
     .settings-btn:hover { background: rgba(255,255,255,0.1); }
@@ -61,12 +66,19 @@ import { AuthService } from '../services/auth.service';
 })
 export class ChatDashboardComponent implements OnInit {
   selectedRun?: RunResponse;
+  selectedPersona?: string;
   showSettings = false;
   tokenInput = '';
 
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService, private route: ActivatedRoute) { }
 
   ngOnInit() {
+    this.route.params.subscribe(params => {
+      this.selectedPersona = params['persona'];
+      if (this.selectedPersona) {
+        this.selectedRun = undefined;
+      }
+    });
     this.tokenInput = this.authService.getToken() || '';
     if (!this.authService.hasToken()) {
       this.showSettings = true;

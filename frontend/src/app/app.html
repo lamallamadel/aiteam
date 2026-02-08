@@ -2,10 +2,27 @@
   <aside class="sidebar glass-panel">
     <h1 class="accent-gradient">Atlasia AI</h1>
     <nav>
-      <a routerLink="/chat" routerLinkActive="active" class="nav-item">Chat</a>
-      <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Dashboard</a>
-      <a routerLink="/runs" routerLinkActive="active" class="nav-item">Runs</a>
-      <a routerLink="/analytics" routerLinkActive="active" class="nav-item">Analytics</a>
+      <div class="nav-section">
+        <span class="section-title">Orchestration</span>
+        <a routerLink="/chat" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">Active Run</a>
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Dashboard</a>
+        <a routerLink="/runs" routerLinkActive="active" class="nav-item">History</a>
+      </div>
+
+      <div class="nav-section">
+        <span class="section-title">Gems</span>
+        <a *ngFor="let gem of personas" 
+           [routerLink]="['/chat', 'gem', gem.name.toLowerCase()]" 
+           routerLinkActive="active" 
+           class="nav-item gem-item">
+           <span class="gem-icon">💎</span> {{ gem.name }}
+        </a>
+      </div>
+      
+      <div class="nav-section">
+        <span class="section-title">Insights</span>
+        <a routerLink="/analytics" routerLinkActive="active" class="nav-item">Analytics</a>
+      </div>
     </nav>
   </aside>
 

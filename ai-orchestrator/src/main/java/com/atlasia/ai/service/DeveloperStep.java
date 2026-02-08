@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Instant;
 import java.util.*;
@@ -51,18 +52,35 @@ public class DeveloperStep implements AgentStep {
                 throw new IllegalArgumentException("Branch name is required");
             }
 
-            Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
-            Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
-            String baseSha = (String) mainObject.get("sha");
-
-            if (baseSha == null || baseSha.isEmpty()) {
-                throw new IllegalStateException("Could not determine base SHA from main branch");
+            String baseSha = null;
+            try {
+                Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
+                Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
+                baseSha = (String) mainObject.get("sha");
+            } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                if (e.getStatusCode().value() == 404 || e.getStatusCode().value() == 409) {
+                    log.warn("Repository appears to be empty or main branch not found: {}/{}", owner, repo);
+                } else {
+                    throw e;
+                }
             }
 
-            detectAndResolveConflicts(context, owner, repo, branchName, baseSha);
-
-            gitHubApiClient.createBranch(owner, repo, branchName, baseSha);
-            log.info("Created branch {} from {}", branchName, baseSha);
+            // If baseSha is null, it means the repository is empty. We will create the
+            // branch without a base.
+            // The first commit will then establish the branch.
+            if (baseSha != null) {
+                detectAndResolveConflicts(context, owner, repo, branchName, baseSha);
+                gitHubApiClient.createBranch(owner, repo, branchName, baseSha);
+                log.info("Created branch {} from {}", branchName, baseSha);
+            } else {
+                log.info("Repository is empty, creating branch {} without a base SHA.", branchName);
+                // No explicit createBranch call needed here, the first commit will create it.
+                // Or, if GitHub API requires an explicit branch creation for an empty repo,
+                // this would be the place to call a variant of createBranch that doesn't
+                // require baseSha.
+                // For now, assuming applyMultiFileChanges will handle the initial commit on a
+                // new branch.
+            }
 
             String repoContext = gatherRepoContext(context, owner, repo, baseSha);
 
@@ -91,9 +109,22 @@ public class DeveloperStep implements AgentStep {
             String owner = context.getOwner();
             String repo = context.getRepo();
 
-            Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
-            Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
-            String baseSha = (String) mainObject.get("sha");
+            String baseSha = null;
+            try {
+                Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
+                Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
+                baseSha = (String) mainObject.get("sha");
+            } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+                if (e.getStatusCode().value() == 404 || e.getStatusCode().value() == 409) {
+                    log.warn("Empty repository detected during PR creation: {}/{}", owner, repo);
+                } else {
+                    throw e;
+                }
+            }
+
+            if (baseSha != null) {
+                detectAndResolveConflicts(context, owner, repo, branchName, baseSha);
+            }
 
             String commitSha = applyMultiFileChanges(context, owner, repo, branchName, baseSha, codeChanges);
             log.info("Created commit {} on branch {}", commitSha, branchName);
@@ -707,7 +738,7 @@ public class DeveloperStep implements AgentStep {
                     repo,
                     commitMessage,
                     treeSha,
-                    List.of(baseSha),
+                    baseSha != null ? List.of(baseSha) : Collections.emptyList(),
                     author,
                     committer);
             String commitSha = (String) newCommit.get("sha");

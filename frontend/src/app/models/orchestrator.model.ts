@@ -31,3 +31,18 @@ export interface ArtifactResponse {
     payload: string;
     createdAt: string;
 }
+
+export interface Persona {
+    name: string;
+    role: string;
+    mission: string;
+    focusAreas: string[];
+}
+
+export interface ChatRequest {
+    message: string;
+}
+
+export interface ChatResponse {
+    response: string;
+}

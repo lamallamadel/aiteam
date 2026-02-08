@@ -1,7 +1,6 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.config.OrchestratorProperties;
-import com.atlasia.ai.service.exception.GitHubApiException;
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -14,6 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -162,9 +162,10 @@ public class GitHubApiClient {
         String endpoint = "/repos/" + owner + "/" + repo + "/contents/" + path;
         Timer.Sample sample = metrics.startGitHubApiTimer();
 
+        String encodedContent = Base64.getEncoder().encodeToString(content.getBytes());
         Map<String, Object> requestBody = Map.of(
                 "message", message,
-                "content", content,
+                "content", encodedContent,
                 "branch", branch);
 
         try {
