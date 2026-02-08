@@ -18,7 +18,7 @@ public class ChatController {
 
     @PostMapping("/{personaName}")
     public ResponseEntity<Map<String, String>> chat(
-            @PathVariable String personaName,
+            @PathVariable("personaName") String personaName,
             @RequestBody Map<String, String> request) {
 
         String message = request.get("message");

@@ -4,8 +4,6 @@ import com.atlasia.ai.config.PersonaConfig;
 import com.atlasia.ai.config.PersonaConfigLoader;
 import org.springframework.stereotype.Service;
 
-import java.util.stream.Collectors;
-
 @Service
 public class ChatService {
 
