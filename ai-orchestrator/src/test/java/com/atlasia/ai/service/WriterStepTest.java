@@ -41,13 +41,12 @@ class WriterStepTest {
                 123,
                 "full",
                 RunStatus.WRITER,
-                Instant.now()
-        );
+                Instant.now());
 
         context = new RunContext(runEntity, "owner", "repo");
         context.setBranchName("ai/issue-123");
         context.setPrUrl("https://github.com/owner/repo/pull/1");
-        
+
         Map<String, Object> issueData = new HashMap<>();
         issueData.put("title", "Add new feature");
         issueData.put("body", "Implement user authentication");
@@ -82,8 +81,7 @@ class WriterStepTest {
                 anyString(),
                 anyList(),
                 anyMap(),
-                anyMap()
-        );
+                anyMap());
     }
 
     @Test
@@ -100,8 +98,7 @@ class WriterStepTest {
         verify(llmService).generateStructuredOutput(
                 anyString(),
                 contains("breaking"),
-                anyMap()
-        );
+                anyMap());
     }
 
     @Test
@@ -110,7 +107,7 @@ class WriterStepTest {
 
         WriterStep.ReadmeUpdate readmeUpdate = new WriterStep.ReadmeUpdate();
         readmeUpdate.setShouldUpdate(true);
-        
+
         WriterStep.SectionUpdate sectionUpdate = new WriterStep.SectionUpdate();
         sectionUpdate.setSectionName("Installation");
         sectionUpdate.setUpdateType("modify");
@@ -169,7 +166,7 @@ class WriterStepTest {
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         assertDoesNotThrow(() -> writerStep.execute(context));
-        
+
         verify(gitHubApiClient).createBlob(eq("owner"), eq("repo"), anyString(), eq("base64"));
     }
 
@@ -183,8 +180,7 @@ class WriterStepTest {
                 eq("owner"),
                 eq("repo"),
                 contains("https://github.com/owner/repo/pull/1"),
-                eq("base64")
-        );
+                eq("base64"));
     }
 
     @Test
@@ -210,15 +206,12 @@ class WriterStepTest {
         verify(gitHubApiClient).createBlob(
                 eq("owner"),
                 eq("repo"),
-                allOf(
-                        contains("Added"),
-                        contains("Changed"),
-                        contains("Fixed"),
-                        contains("Security"),
-                        contains("BREAKING CHANGES")
-                ),
-                eq("base64")
-        );
+                argThat(content -> content.contains("Added") &&
+                        content.contains("Changed") &&
+                        content.contains("Fixed") &&
+                        content.contains("Security") &&
+                        content.contains("BREAKING CHANGES")),
+                eq("base64"));
     }
 
     @Test
@@ -245,8 +238,7 @@ class WriterStepTest {
                 eq("owner"),
                 eq("repo"),
                 contains("Migration Guide"),
-                eq("base64")
-        );
+                eq("base64"));
     }
 
     @Test
@@ -307,8 +299,7 @@ class WriterStepTest {
         when(gitHubApiClient.getRepoContent(eq("owner"), eq("repo"), eq("README.md")))
                 .thenReturn(Map.of(
                         "content", Base64.getEncoder().encodeToString("# README\n\nExisting content".getBytes()),
-                        "sha", "readme-sha"
-                ));
+                        "sha", "readme-sha"));
 
         when(gitHubApiClient.createBlob(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Map.of("sha", "blob-sha"));
@@ -316,7 +307,8 @@ class WriterStepTest {
         when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), anyString()))
                 .thenReturn(Map.of("sha", "tree-sha"));
 
-        when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(), anyMap()))
+        when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(),
+                anyMap()))
                 .thenReturn(Map.of("sha", "commit-sha-new"));
 
         when(gitHubApiClient.updateReference(anyString(), anyString(), anyString(), anyString(), anyBoolean()))

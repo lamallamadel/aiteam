@@ -43,8 +43,7 @@ class PersonaReviewServiceTest {
                 123,
                 "full",
                 RunStatus.DEVELOPER,
-                Instant.now()
-        );
+                Instant.now());
 
         context = new RunContext(runEntity, "owner", "repo");
         Map<String, Object> issueData = new HashMap<>();
@@ -95,7 +94,7 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), any())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -111,7 +110,7 @@ class PersonaReviewServiceTest {
         assertEquals("critical", issue.getSeverity());
         assertTrue(issue.isMandatory());
 
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), any());
+        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
     }
 
     @Test
@@ -146,7 +145,7 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), any())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -164,7 +163,7 @@ class PersonaReviewServiceTest {
         assertFalse(issue.isMandatory());
 
         assertTrue(report.getMergedRecommendations().size() > 0);
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), any());
+        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
     }
 
     @Test
@@ -204,7 +203,7 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), any())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -223,7 +222,7 @@ class PersonaReviewServiceTest {
         assertTrue(report.getMergedRecommendations().stream()
                 .anyMatch(r -> r.contains("accessibility")));
 
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), any());
+        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
     }
 
     @Test
@@ -263,7 +262,7 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), any()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(aaboResponse, aksilResponse);
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
@@ -272,7 +271,7 @@ class PersonaReviewServiceTest {
         assertEquals(2, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        verify(llmService, times(2)).generateStructuredOutput(anyString(), anyString(), any());
+        verify(llmService, times(2)).generateStructuredOutput(anyString(), anyString(), anyMap());
     }
 
     @Test
@@ -285,14 +284,14 @@ class PersonaReviewServiceTest {
         assertEquals(0, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        verify(llmService, never()).generateStructuredOutput(anyString(), anyString(), any());
+        verify(llmService, never()).generateStructuredOutput(anyString(), anyString(), anyMap());
     }
 
     @Test
     void testReviewCodeChanges_withLlmFailure() throws Exception {
         PersonaConfig aaboConfig = createAaboPersonaConfig();
         when(personaConfigLoader.getPersonas()).thenReturn(List.of(aaboConfig));
-        when(llmService.generateStructuredOutput(anyString(), anyString(), any()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
@@ -314,13 +313,10 @@ class PersonaReviewServiceTest {
                 List.of("Are secrets protected?", "Is input validated?"),
                 Map.of(
                         "critical", List.of("Hardcoded secrets"),
-                        "high", List.of("Missing input validation")
-                ),
+                        "high", List.of("Missing input validation")),
                 List.of(
                         new PersonaConfig.Enhancement("validation", "All inputs must be validated"),
-                        new PersonaConfig.Enhancement("sanitization", "File uploads must be validated")
-                )
-        );
+                        new PersonaConfig.Enhancement("sanitization", "File uploads must be validated")));
     }
 
     private PersonaConfig createImadPersonaConfig() {
@@ -332,13 +328,10 @@ class PersonaReviewServiceTest {
                 List.of("Is caching implemented?", "Can it scale horizontally?"),
                 Map.of(
                         "critical", List.of("No resource limits"),
-                        "medium", List.of("Suboptimal caching")
-                ),
+                        "medium", List.of("Suboptimal caching")),
                 List.of(
                         new PersonaConfig.Enhancement("caching", "Implement caching where appropriate"),
-                        new PersonaConfig.Enhancement("scalability", "Architecture must support horizontal scaling")
-                )
-        );
+                        new PersonaConfig.Enhancement("scalability", "Architecture must support horizontal scaling")));
     }
 
     private PersonaConfig createTiziriPersonaConfig() {
@@ -350,13 +343,10 @@ class PersonaReviewServiceTest {
                 List.of("Is progress feedback provided?", "Are accessibility standards met?"),
                 Map.of(
                         "critical", List.of("No progress feedback"),
-                        "high", List.of("Missing loading states")
-                ),
+                        "high", List.of("Missing loading states")),
                 List.of(
                         new PersonaConfig.Enhancement("progress_feedback", "Show clear progress indicators"),
-                        new PersonaConfig.Enhancement("accessibility", "Meet WCAG 2.1 AA standards")
-                )
-        );
+                        new PersonaConfig.Enhancement("accessibility", "Meet WCAG 2.1 AA standards")));
     }
 
     private PersonaConfig createAksilPersonaConfig() {
@@ -368,12 +358,9 @@ class PersonaReviewServiceTest {
                 List.of("Are exceptions handled?", "Is test coverage adequate?"),
                 Map.of(
                         "critical", List.of("No error handling"),
-                        "medium", List.of("Code duplication")
-                ),
+                        "medium", List.of("Code duplication")),
                 List.of(
                         new PersonaConfig.Enhancement("error_handling", "Handle all error conditions"),
-                        new PersonaConfig.Enhancement("testing", "Achieve minimum coverage thresholds")
-                )
-        );
+                        new PersonaConfig.Enhancement("testing", "Achieve minimum coverage thresholds")));
     }
 }

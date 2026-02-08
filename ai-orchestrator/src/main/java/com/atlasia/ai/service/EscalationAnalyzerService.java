@@ -1,7 +1,6 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.api.dto.EscalationInsightDto;
-import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.persistence.RunRepository;
 import org.slf4j.Logger;

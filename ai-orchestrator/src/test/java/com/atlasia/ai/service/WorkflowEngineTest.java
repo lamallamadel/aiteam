@@ -22,323 +22,319 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class WorkflowEngineTest {
 
-    @Mock
-    private RunRepository runRepository;
+        @Mock
+        private RunRepository runRepository;
 
-    @Mock
-    private JsonSchemaValidator schemaValidator;
+        @Mock
+        private JsonSchemaValidator schemaValidator;
 
-    @Mock
-    private PmStep pmStep;
+        @Mock
+        private PmStep pmStep;
 
-    @Mock
-    private QualifierStep qualifierStep;
+        @Mock
+        private QualifierStep qualifierStep;
 
-    @Mock
-    private ArchitectStep architectStep;
+        @Mock
+        private ArchitectStep architectStep;
 
-    @Mock
-    private DeveloperStep developerStep;
+        @Mock
+        private DeveloperStep developerStep;
 
-    @Mock
-    private TesterStep testerStep;
+        @Mock
+        private PersonaReviewService personaReviewService;
 
-    @Mock
-    private WriterStep writerStep;
+        @Mock
+        private TesterStep testerStep;
 
-    @Mock
-    private OrchestratorMetrics metrics;
+        @Mock
+        private WriterStep writerStep;
 
-    private WorkflowEngine workflowEngine;
-    private RunEntity runEntity;
+        @Mock
+        private OrchestratorMetrics metrics;
 
-    @BeforeEach
-    void setUp() {
-        workflowEngine = new WorkflowEngine(
-                runRepository,
-                schemaValidator,
-                pmStep,
-                qualifierStep,
-                architectStep,
-                developerStep,
-                testerStep,
-                writerStep,
-                metrics
-        );
+        private WorkflowEngine workflowEngine;
+        private RunEntity runEntity;
 
-        runEntity = new RunEntity(
-                UUID.randomUUID(),
-                "owner/repo",
-                123,
-                "full",
-                RunStatus.RECEIVED,
-                Instant.now()
-        );
-    }
+        @BeforeEach
+        void setUp() {
+                workflowEngine = new WorkflowEngine(
+                                runRepository,
+                                schemaValidator,
+                                pmStep,
+                                qualifierStep,
+                                architectStep,
+                                developerStep,
+                                personaReviewService,
+                                testerStep,
+                                writerStep,
+                                metrics);
 
-    @Test
-    void executeWorkflow_successfulFullWorkflow_completesAllSteps() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                runEntity = new RunEntity(
+                                UUID.randomUUID(),
+                                "owner/repo",
+                                123,
+                                "full",
+                                RunStatus.RECEIVED,
+                                Instant.now());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_successfulFullWorkflow_completesAllSteps() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        verify(pmStep).execute(any(RunContext.class));
-        verify(qualifierStep).execute(any(RunContext.class));
-        verify(architectStep).execute(any(RunContext.class));
-        verify(developerStep).execute(any(RunContext.class));
-        verify(testerStep).execute(any(RunContext.class));
-        verify(writerStep).execute(any(RunContext.class));
+                workflowEngine.executeWorkflow(runEntity);
 
-        verify(schemaValidator).validate(anyString(), eq("ticket_plan.schema.json"));
-        verify(schemaValidator).validate(anyString(), eq("work_plan.schema.json"));
-        verify(schemaValidator).validate(anyString(), eq("test_report.schema.json"));
+                verify(pmStep).execute(any(RunContext.class));
+                verify(qualifierStep).execute(any(RunContext.class));
+                verify(architectStep).execute(any(RunContext.class));
+                verify(developerStep).execute(any(RunContext.class));
+                verify(testerStep).execute(any(RunContext.class));
+                verify(writerStep).execute(any(RunContext.class));
 
-        verify(runRepository, atLeastOnce()).save(argThat(run ->
-                run.getStatus() == RunStatus.DONE && run.getCurrentAgent() == null
-        ));
+                verify(schemaValidator).validate(anyString(), eq("ticket_plan.schema.json"));
+                verify(schemaValidator).validate(anyString(), eq("work_plan.schema.json"));
+                verify(schemaValidator).validate(anyString(), eq("test_report.schema.json"));
 
-        verify(metrics).recordWorkflowExecution();
-        verify(metrics).recordWorkflowSuccess(anyLong());
-    }
+                verify(runRepository, atLeastOnce()).save(
+                                argThat(run -> run.getStatus() == RunStatus.DONE && run.getCurrentAgent() == null));
 
-    @Test
-    void executeWorkflow_pmStepFailure_setsFailedStatus() throws Exception {
-        when(pmStep.execute(any(RunContext.class)))
-                .thenThrow(new RuntimeException("PM step failed"));
+                verify(metrics).recordWorkflowExecution();
+                verify(metrics).recordWorkflowSuccess(anyLong());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_pmStepFailure_setsFailedStatus() throws Exception {
+                when(pmStep.execute(any(RunContext.class)))
+                                .thenThrow(new RuntimeException("PM step failed"));
 
-        verify(pmStep).execute(any(RunContext.class));
-        verify(qualifierStep, never()).execute(any(RunContext.class));
+                workflowEngine.executeWorkflow(runEntity);
 
-        verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
-        verify(metrics).recordWorkflowFailure(anyLong());
-    }
+                verify(pmStep).execute(any(RunContext.class));
+                verify(qualifierStep, never()).execute(any(RunContext.class));
 
-    @Test
-    void executeWorkflow_escalationException_setsEscalatedStatus() throws Exception {
-        String escalationJson = "{\"context\":\"test\",\"blocker\":\"test\"}";
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class)))
-                .thenThrow(new EscalationException(escalationJson));
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(metrics).recordWorkflowFailure(anyLong());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_escalationException_setsEscalatedStatus() throws Exception {
+                String escalationJson = "{\"context\":\"test\",\"blocker\":\"test\"}";
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class)))
+                                .thenThrow(new EscalationException(escalationJson));
 
-        verify(testerStep).execute(any(RunContext.class));
-        verify(writerStep, never()).execute(any(RunContext.class));
+                workflowEngine.executeWorkflow(runEntity);
 
-        verify(schemaValidator).validate(eq(escalationJson), eq("escalation.schema.json"));
-        verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
-        verify(metrics).recordWorkflowEscalation(anyLong());
-    }
+                verify(testerStep).execute(any(RunContext.class));
+                verify(writerStep, never()).execute(any(RunContext.class));
 
-    @Test
-    void executeWorkflow_orchestratorException_handlesGracefully() throws Exception {
-        when(pmStep.execute(any(RunContext.class)))
-                .thenThrow(new OrchestratorException(
-                        "Service unavailable",
-                        "PM",
-                        "execute",
-                        "SERVICE_UNAVAILABLE",
-                        OrchestratorException.RecoveryStrategy.RETRY_WITH_BACKOFF
-                ));
+                verify(schemaValidator).validate(eq(escalationJson), eq("escalation.schema.json"));
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
+                verify(metrics).recordWorkflowEscalation(anyLong());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_orchestratorException_handlesGracefully() throws Exception {
+                when(pmStep.execute(any(RunContext.class)))
+                                .thenThrow(new com.atlasia.ai.service.exception.WorkflowException(
+                                                "Service unavailable",
+                                                UUID.randomUUID(),
+                                                "PM",
+                                                com.atlasia.ai.service.exception.OrchestratorException.RecoveryStrategy.RETRY_WITH_BACKOFF));
 
-        verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
-        verify(metrics).recordWorkflowFailure(anyLong());
-    }
+                workflowEngine.executeWorkflow(runEntity);
 
-    @Test
-    void executeWorkflow_storesArtifactsFromEachStep() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(metrics).recordWorkflowFailure(anyLong());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_storesArtifactsFromEachStep() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        assertEquals(6, runEntity.getArtifacts().size());
+                workflowEngine.executeWorkflow(runEntity);
 
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "PM".equals(a.getAgentName()) && "ticket_plan.json".equals(a.getArtifactType())));
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "QUALIFIER".equals(a.getAgentName()) && "work_plan.json".equals(a.getArtifactType())));
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "ARCHITECT".equals(a.getAgentName()) && "architecture_notes.md".equals(a.getArtifactType())));
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "DEVELOPER".equals(a.getAgentName()) && "pr_url".equals(a.getArtifactType())));
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "TESTER".equals(a.getAgentName()) && "test_report.json".equals(a.getArtifactType())));
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "WRITER".equals(a.getAgentName()) && "docs_update".equals(a.getArtifactType())));
-    }
+                assertEquals(6, runEntity.getArtifacts().size());
 
-    @Test
-    void executeWorkflow_updatesCurrentAgentThroughoutExecution() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "PM".equals(a.getAgentName())
+                                                && "ticket_plan.json".equals(a.getArtifactType())));
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "QUALIFIER".equals(a.getAgentName())
+                                                && "work_plan.json".equals(a.getArtifactType())));
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "ARCHITECT".equals(a.getAgentName())
+                                                && "architecture_notes.md".equals(a.getArtifactType())));
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "DEVELOPER".equals(a.getAgentName())
+                                                && "pr_url".equals(a.getArtifactType())));
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "TESTER".equals(a.getAgentName())
+                                                && "test_report.json".equals(a.getArtifactType())));
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "WRITER".equals(a.getAgentName())
+                                                && "docs_update".equals(a.getArtifactType())));
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_updatesCurrentAgentThroughoutExecution() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.PM && "PM".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.QUALIFIER && "QUALIFIER".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.ARCHITECT && "ARCHITECT".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.DEVELOPER && "DEVELOPER".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.TESTER && "TESTER".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.WRITER && "WRITER".equals(run.getCurrentAgent())
-        ));
-        verify(runRepository).save(argThat(run ->
-                run.getStatus() == RunStatus.DONE && run.getCurrentAgent() == null
-        ));
-    }
+                workflowEngine.executeWorkflow(runEntity);
 
-    @Test
-    void executeWorkflow_schemaValidationFailure_failsWorkflow() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"invalid\":\"json\"}");
-        doThrow(new IllegalArgumentException("Schema validation failed"))
-                .when(schemaValidator).validate(anyString(), eq("ticket_plan.schema.json"));
+                verify(runRepository).save(
+                                argThat(run -> run.getStatus() == RunStatus.PM && "PM".equals(run.getCurrentAgent())));
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.QUALIFIER
+                                && "QUALIFIER".equals(run.getCurrentAgent())));
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.ARCHITECT
+                                && "ARCHITECT".equals(run.getCurrentAgent())));
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.DEVELOPER
+                                && "DEVELOPER".equals(run.getCurrentAgent())));
+                verify(runRepository).save(argThat(
+                                run -> run.getStatus() == RunStatus.TESTER && "TESTER".equals(run.getCurrentAgent())));
+                verify(runRepository).save(argThat(
+                                run -> run.getStatus() == RunStatus.WRITER && "WRITER".equals(run.getCurrentAgent())));
+                verify(runRepository).save(
+                                argThat(run -> run.getStatus() == RunStatus.DONE && run.getCurrentAgent() == null));
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_schemaValidationFailure_failsWorkflow() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"invalid\":\"json\"}");
+                doThrow(new IllegalArgumentException("Schema validation failed"))
+                                .when(schemaValidator).validate(anyString(), eq("ticket_plan.schema.json"));
 
-        verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
-        verify(qualifierStep, never()).execute(any(RunContext.class));
-        verify(metrics).recordWorkflowFailure(anyLong());
-    }
+                workflowEngine.executeWorkflow(runEntity);
 
-    @Test
-    void executeWorkflowAsync_loadsRunAndExecutes() throws Exception {
-        UUID runId = runEntity.getId();
-        when(runRepository.findById(runId)).thenReturn(Optional.of(runEntity));
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(qualifierStep, never()).execute(any(RunContext.class));
+                verify(metrics).recordWorkflowFailure(anyLong());
+        }
 
-        workflowEngine.executeWorkflowAsync(runId);
+        @Test
+        void executeWorkflowAsync_loadsRunAndExecutes() throws Exception {
+                UUID runId = runEntity.getId();
+                when(runRepository.findById(runId)).thenReturn(Optional.of(runEntity));
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        Thread.sleep(100);
+                workflowEngine.executeWorkflowAsync(runId);
 
-        verify(runRepository).findById(runId);
-        verify(pmStep).execute(any(RunContext.class));
-        verify(metrics).recordWorkflowExecution();
-    }
+                Thread.sleep(100);
 
-    @Test
-    void executeWorkflowAsync_runNotFound_throwsWorkflowException() {
-        UUID runId = UUID.randomUUID();
-        when(runRepository.findById(runId)).thenReturn(Optional.empty());
+                verify(runRepository).findById(runId);
+                verify(pmStep).execute(any(RunContext.class));
+                verify(metrics).recordWorkflowExecution();
+        }
 
-        assertDoesNotThrow(() -> workflowEngine.executeWorkflowAsync(runId));
-    }
+        @Test
+        void executeWorkflowAsync_runNotFound_throwsWorkflowException() {
+                UUID runId = UUID.randomUUID();
+                when(runRepository.findById(runId)).thenReturn(Optional.empty());
 
-    @Test
-    void executeWorkflow_parsesRepoFromRunEntity() throws Exception {
-        runEntity = new RunEntity(
-                UUID.randomUUID(),
-                "testowner/testrepo",
-                456,
-                "full",
-                RunStatus.RECEIVED,
-                Instant.now()
-        );
+                assertDoesNotThrow(() -> workflowEngine.executeWorkflowAsync(runId));
+        }
 
-        when(pmStep.execute(any(RunContext.class))).thenAnswer(invocation -> {
-            RunContext context = invocation.getArgument(0);
-            assertEquals("testowner", context.getOwner());
-            assertEquals("testrepo", context.getRepo());
-            return "{\"issueId\":456}";
-        });
+        @Test
+        void executeWorkflow_parsesRepoFromRunEntity() throws Exception {
+                runEntity = new RunEntity(
+                                UUID.randomUUID(),
+                                "testowner/testrepo",
+                                456,
+                                "full",
+                                RunStatus.RECEIVED,
+                                Instant.now());
 
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                when(pmStep.execute(any(RunContext.class))).thenAnswer(invocation -> {
+                        RunContext context = invocation.getArgument(0);
+                        assertEquals("testowner", context.getOwner());
+                        assertEquals("testrepo", context.getRepo());
+                        return "{\"issueId\":456}";
+                });
 
-        workflowEngine.executeWorkflow(runEntity);
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        verify(pmStep).execute(argThat(ctx ->
-                "testowner".equals(ctx.getOwner()) && "testrepo".equals(ctx.getRepo())
-        ));
-    }
+                workflowEngine.executeWorkflow(runEntity);
 
-    @Test
-    void executeWorkflow_storesErrorArtifactOnFailure() throws Exception {
-        when(pmStep.execute(any(RunContext.class)))
-                .thenThrow(new RuntimeException("Test error message"));
+                verify(pmStep).execute(
+                                argThat(ctx -> "testowner".equals(ctx.getOwner()) && "testrepo".equals(ctx.getRepo())));
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_storesErrorArtifactOnFailure() throws Exception {
+                when(pmStep.execute(any(RunContext.class)))
+                                .thenThrow(new RuntimeException("Test error message"));
 
-        assertTrue(runEntity.getArtifacts().stream()
-                .anyMatch(a -> "error_details".equals(a.getArtifactType())));
+                workflowEngine.executeWorkflow(runEntity);
 
-        String errorArtifact = runEntity.getArtifacts().stream()
-                .filter(a -> "error_details".equals(a.getArtifactType()))
-                .findFirst()
-                .map(com.atlasia.ai.model.RunArtifactEntity::getPayload)
-                .orElse("");
+                assertTrue(runEntity.getArtifacts().stream()
+                                .anyMatch(a -> "error_details".equals(a.getArtifactType())));
 
-        assertTrue(errorArtifact.contains("RuntimeException"));
-        assertTrue(errorArtifact.contains("Test error message"));
-    }
+                String errorArtifact = runEntity.getArtifacts().stream()
+                                .filter(a -> "error_details".equals(a.getArtifactType()))
+                                .findFirst()
+                                .map(com.atlasia.ai.model.RunArtifactEntity::getPayload)
+                                .orElse("");
 
-    @Test
-    void executeWorkflow_metricsRecordedForEachStep() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-        when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-        when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-        when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-        when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                assertTrue(errorArtifact.contains("RuntimeException"));
+                assertTrue(errorArtifact.contains("Test error message"));
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_metricsRecordedForEachStep() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
+                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
-        verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepExecution(eq("QUALIFIER"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepExecution(eq("ARCHITECT"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepExecution(eq("DEVELOPER"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepExecution(eq("TESTER"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepExecution(eq("WRITER"), eq("execute"), anyLong());
-    }
+                workflowEngine.executeWorkflow(runEntity);
 
-    @Test
-    void executeWorkflow_metricsRecordedOnStepError() throws Exception {
-        when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-        when(qualifierStep.execute(any(RunContext.class)))
-                .thenThrow(new RuntimeException("Qualifier failed"));
+                verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepExecution(eq("QUALIFIER"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepExecution(eq("ARCHITECT"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepExecution(eq("DEVELOPER"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepExecution(eq("TESTER"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepExecution(eq("WRITER"), eq("execute"), anyLong());
+        }
 
-        workflowEngine.executeWorkflow(runEntity);
+        @Test
+        void executeWorkflow_metricsRecordedOnStepError() throws Exception {
+                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                when(qualifierStep.execute(any(RunContext.class)))
+                                .thenThrow(new RuntimeException("Qualifier failed"));
 
-        verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
-        verify(metrics).recordAgentStepError(eq("QUALIFIER"), eq("execute"));
-        verify(metrics, never()).recordAgentStepExecution(eq("ARCHITECT"), eq("execute"), anyLong());
-    }
+                workflowEngine.executeWorkflow(runEntity);
+
+                verify(metrics).recordAgentStepExecution(eq("PM"), eq("execute"), anyLong());
+                verify(metrics).recordAgentStepError(eq("QUALIFIER"), eq("execute"));
+                verify(metrics, never()).recordAgentStepExecution(eq("ARCHITECT"), eq("execute"), anyLong());
+        }
 }
