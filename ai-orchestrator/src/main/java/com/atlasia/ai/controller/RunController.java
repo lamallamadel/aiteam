@@ -22,7 +22,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/runs")
+@RequestMapping("/api/runs")
 public class RunController {
 
     private final RunRepository runRepository;

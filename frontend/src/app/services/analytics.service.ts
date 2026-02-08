@@ -68,7 +68,7 @@ export interface ArtifactSummary {
 export class AnalyticsService {
   private http = inject(HttpClient);
   private apiUrl = '/api/analytics';
-  private runsApiUrl = '/runs';
+  private runsApiUrl = '/api/runs';
 
   getSummary(): Observable<AnalyticsSummary> {
     return this.http.get<AnalyticsSummary>(`${this.apiUrl}/runs/summary`);

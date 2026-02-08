@@ -24,6 +24,12 @@ services:
       - ai-db
     ports:
       - "8088:8080"
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     networks:
       - ai_network
 
@@ -32,7 +38,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - ai-orchestrator
+      ai-orchestrator:
+        condition: service_healthy
     networks:
       - ai_network
 

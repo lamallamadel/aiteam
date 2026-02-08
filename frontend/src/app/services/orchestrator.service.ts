@@ -7,7 +7,7 @@ import { RunRequest, RunResponse, ArtifactResponse } from '../models/orchestrato
     providedIn: 'root'
 })
 export class OrchestratorService {
-    private apiUrl = '/runs'; // Using relative path, assuming proxy configuration
+    private apiUrl = '/api/runs'; // Using relative path, assuming proxy configuration
 
     constructor(private http: HttpClient) { }
 
