@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Escalation",
+  "type": "object",
+  "required": [
+    "context",
+    "blocker",
+    "options",
+    "recommendation",
+    "decisionNeeded",
+    "evidence"
+  ],
+  "properties": {
+    "context": {
+      "type": "string"
+    },
+    "blocker": {
+      "type": "string"
+    },
+    "options": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "pros",
+          "cons",
+          "risk"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pros": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risk": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "recommendation": {
+      "type": "string"
+    },
+    "decisionNeeded": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

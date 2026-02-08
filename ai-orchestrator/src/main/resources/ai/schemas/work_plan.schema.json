@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkPlan",
+  "type": "object",
+  "required": [
+    "branchName",
+    "tasks",
+    "commands",
+    "definitionOfDone"
+  ],
+  "properties": {
+    "branchName": {
+      "type": "string"
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "area",
+          "description",
+          "filesLikely",
+          "tests"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "backend",
+              "frontend",
+              "infra",
+              "docs"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "filesLikely": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "required": [
+        "backendVerify",
+        "frontendLint",
+        "frontendTest",
+        "e2e"
+      ],
+      "properties": {
+        "backendVerify": {
+          "type": "string"
+        },
+        "frontendLint": {
+          "type": "string"
+        },
+        "frontendTest": {
+          "type": "string"
+        },
+        "e2e": {
+          "type": "string"
+        }
+      }
+    },
+    "definitionOfDone": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

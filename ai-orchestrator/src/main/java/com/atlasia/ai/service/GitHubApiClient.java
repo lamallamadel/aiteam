@@ -68,7 +68,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> readIssue(String owner, String repo, int issueNumber) {
         String endpoint = "/repos/" + owner + "/" + repo + "/issues/" + issueNumber;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -95,7 +95,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createBranch(String owner, String repo, String branchName, String sha) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/refs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -127,7 +127,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getReference(String owner, String repo, String ref) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/ref/" + ref;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -154,7 +154,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createFile(String owner, String repo, String path, String content, String message,
             String branch) {
         validateFilePath(path);
@@ -210,7 +210,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createPullRequest(String owner, String repo, String title, String head, String base,
             String body) {
         String endpoint = "/repos/" + owner + "/" + repo + "/pulls";
@@ -245,7 +245,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getWorkflowRun(String owner, String repo, long runId) {
         String endpoint = "/repos/" + owner + "/" + repo + "/actions/runs/" + runId;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -272,7 +272,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> listWorkflowRunJobs(String owner, String repo, long runId) {
         String endpoint = "/repos/" + owner + "/" + repo + "/actions/runs/" + runId + "/jobs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -299,7 +299,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public String getWorkflowRunLogs(String owner, String repo, long runId) {
         String endpoint = "/repos/" + owner + "/" + repo + "/actions/runs/" + runId + "/logs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -326,7 +326,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public String getJobLogs(String owner, String repo, long jobId) {
         String endpoint = "/repos/" + owner + "/" + repo + "/actions/jobs/" + jobId + "/logs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -353,7 +353,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getPullRequest(String owner, String repo, int pullNumber) {
         String endpoint = "/repos/" + owner + "/" + repo + "/pulls/" + pullNumber;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -380,7 +380,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> listPullRequestCommits(String owner, String repo, int pullNumber) {
         String endpoint = "/repos/" + owner + "/" + repo + "/pulls/" + pullNumber + "/commits";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -407,7 +407,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getCommitStatus(String owner, String repo, String ref) {
         String endpoint = "/repos/" + owner + "/" + repo + "/commits/" + ref + "/status";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -434,7 +434,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> listCheckRunsForRef(String owner, String repo, String ref) {
         String endpoint = "/repos/" + owner + "/" + repo + "/commits/" + ref + "/check-runs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -461,7 +461,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public List<Map<String, Object>> listIssueComments(String owner, String repo, int issueNumber) {
         String endpoint = "/repos/" + owner + "/" + repo + "/issues/" + issueNumber + "/comments";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -489,7 +489,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public void addLabelsToIssue(String owner, String repo, int issueNumber, List<String> labels) {
         String endpoint = "/repos/" + owner + "/" + repo + "/issues/" + issueNumber + "/labels";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -517,7 +517,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getRepoContent(String owner, String repo, String path) {
         String endpoint = "/repos/" + owner + "/" + repo + "/contents/" + path;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -544,7 +544,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public List<Map<String, Object>> listRepoContents(String owner, String repo, String path) {
         String endpoint = "/repos/" + owner + "/" + repo + "/contents/" + path;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -572,7 +572,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getRepoTree(String owner, String repo, String sha, boolean recursive) {
         String recursiveParam = recursive ? "1" : "0";
         String endpoint = "/repos/" + owner + "/" + repo + "/git/trees/" + sha;
@@ -603,7 +603,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createBlob(String owner, String repo, String content, String encoding) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/blobs";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -635,7 +635,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createTree(String owner, String repo, List<Map<String, Object>> tree, String baseTree) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/trees";
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -669,7 +669,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> createCommit(String owner, String repo, String message, String tree,
             List<String> parents, Map<String, Object> author, Map<String, Object> committer) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/commits";
@@ -709,7 +709,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> updateReference(String owner, String repo, String ref, String sha, boolean force) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/refs/" + ref;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -741,7 +741,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> getCommit(String owner, String repo, String sha) {
         String endpoint = "/repos/" + owner + "/" + repo + "/git/commits/" + sha;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -768,7 +768,7 @@ public class GitHubApiClient {
         }
     }
 
-    @CircuitBreaker(name = "githubApi", fallbackMethod = "fallbackMethod")
+    @CircuitBreaker(name = "githubApi")
     public Map<String, Object> compareCommits(String owner, String repo, String base, String head) {
         String endpoint = "/repos/" + owner + "/" + repo + "/compare/" + base + "..." + head;
         Timer.Sample sample = metrics.startGitHubApiTimer();
@@ -832,27 +832,4 @@ public class GitHubApiClient {
         }
     }
 
-    private Map<String, Object> fallbackMethod(Exception e) {
-        log.error("GitHub API circuit breaker fallback triggered, correlationId={}",
-                CorrelationIdHolder.getCorrelationId(), e);
-        throw new GitHubApiException("GitHub API circuit breaker open or fallback triggered", e.getMessage(), 503);
-    }
-
-    private String fallbackMethodString(Exception e) {
-        log.error("GitHub API circuit breaker fallback triggered, correlationId={}",
-                CorrelationIdHolder.getCorrelationId(), e);
-        throw new GitHubApiException("GitHub API circuit breaker open or fallback triggered", e.getMessage(), 503);
-    }
-
-    private List<Map<String, Object>> fallbackMethodList(Exception e) {
-        log.error("GitHub API circuit breaker fallback triggered, correlationId={}",
-                CorrelationIdHolder.getCorrelationId(), e);
-        throw new GitHubApiException("GitHub API circuit breaker open or fallback triggered", e.getMessage(), 503);
-    }
-
-    private void fallbackMethodVoid(Exception e) {
-        log.error("GitHub API circuit breaker fallback triggered, correlationId={}",
-                CorrelationIdHolder.getCorrelationId(), e);
-        throw new GitHubApiException("GitHub API circuit breaker open or fallback triggered", e.getMessage(), 503);
-    }
 }

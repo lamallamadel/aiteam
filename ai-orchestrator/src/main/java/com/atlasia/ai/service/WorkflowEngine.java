@@ -11,6 +11,8 @@ import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,10 @@ public class WorkflowEngine {
     private final TesterStep testerStep;
     private final WriterStep writerStep;
     private final OrchestratorMetrics metrics;
+
+    @Autowired
+    @Lazy
+    private WorkflowEngine self;
 
     public WorkflowEngine(
             RunRepository runRepository,
@@ -65,7 +71,7 @@ public class WorkflowEngine {
 
         try {
             log.info("Starting async workflow execution: runId={}, correlationId={}", runId, correlationId);
-            executeWorkflow(runId);
+            self.executeWorkflow(runId);
         } finally {
             CorrelationIdHolder.clear();
         }

@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PersonaReview",
+  "type": "object",
+  "required": [
+    "personaName",
+    "riskFindings",
+    "requiredEnhancements",
+    "overallAssessment"
+  ],
+  "properties": {
+    "personaName": {
+      "type": "string",
+      "description": "Name of the persona performing the review (aabo, aksil, imad, tiziri)"
+    },
+    "riskFindings": {
+      "type": "array",
+      "description": "List of identified risks and issues",
+      "items": {
+        "type": "object",
+        "required": [
+          "severity",
+          "category",
+          "description",
+          "location"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "Severity level of the risk"
+          },
+          "category": {
+            "type": "string",
+            "description": "Category of the risk (e.g., security, performance, accessibility)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description of the risk or issue"
+          },
+          "location": {
+            "type": "string",
+            "description": "File path and line number or component where the issue was found"
+          },
+          "impact": {
+            "type": "string",
+            "description": "Potential impact if the issue is not addressed"
+          }
+        }
+      }
+    },
+    "requiredEnhancements": {
+      "type": "array",
+      "description": "List of required improvements or enhancements",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "description",
+          "priority"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Type of enhancement (e.g., validation, testing, refactoring)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description of the required enhancement"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ],
+            "description": "Priority level for implementing the enhancement"
+          },
+          "suggestedApproach": {
+            "type": "string",
+            "description": "Recommended approach or solution for the enhancement"
+          },
+          "affectedFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of files that need to be modified"
+          }
+        }
+      }
+    },
+    "overallAssessment": {
+      "type": "object",
+      "required": [
+        "status",
+        "summary"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_with_minor_issues",
+            "changes_required",
+            "rejected"
+          ],
+          "description": "Overall status of the review"
+        },
+        "summary": {
+          "type": "string",
+          "description": "High-level summary of the review findings"
+        },
+        "criticalIssueCount": {
+          "type": "integer",
+          "description": "Number of critical issues found"
+        },
+        "highIssueCount": {
+          "type": "integer",
+          "description": "Number of high severity issues found"
+        },
+        "mediumIssueCount": {
+          "type": "integer",
+          "description": "Number of medium severity issues found"
+        },
+        "lowIssueCount": {
+          "type": "integer",
+          "description": "Number of low severity issues found"
+        }
+      }
+    },
+    "positiveFindings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of positive aspects or best practices observed"
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional recommendations for future improvements"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TicketPlan",
+  "type": "object",
+  "required": [
+    "issueId",
+    "title",
+    "summary",
+    "acceptanceCriteria",
+    "outOfScope",
+    "risks"
+  ],
+  "properties": {
+    "issueId": {
+      "type": "integer"
+    },
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 3
+    },
+    "outOfScope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "labelsToApply": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
