@@ -10,8 +10,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -32,7 +37,19 @@ public class GitHubApiClient {
         this.gitHubAppService = gitHubAppService;
         this.properties = properties;
         this.metrics = metrics;
-        this.webClient = webClientBuilder.baseUrl("https://api.github.com").build();
+
+        ConnectionProvider provider = ConnectionProvider.builder("github-pool")
+                .maxIdleTime(Duration.ofSeconds(60))
+                .evictInBackground(Duration.ofSeconds(120))
+                .build();
+
+        HttpClient httpClient = HttpClient.create(provider)
+                .responseTimeout(Duration.ofSeconds(30));
+
+        this.webClient = webClientBuilder
+                .baseUrl("https://api.github.com")
+                .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
+                .build();
     }
 
     private String getToken() {
@@ -60,6 +77,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .toBodilessEntity()
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
             return true;
         } catch (Exception e) {
@@ -76,6 +95,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/issues/{issue_number}", owner, repo, issueNumber)
                     .header("Authorization", "Bearer " + getToken())
@@ -83,6 +103,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -107,6 +129,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
                     .uri("/repos/{owner}/{repo}/git/refs", owner, repo)
                     .header("Authorization", "Bearer " + getToken())
@@ -115,6 +138,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -135,6 +160,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/git/ref/{ref}", owner, repo, ref)
                     .header("Authorization", "Bearer " + getToken())
@@ -142,6 +168,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -171,6 +199,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: PUT {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.put()
                     .uri("/repos/{owner}/{repo}/contents/{path}", owner, repo, path)
                     .header("Authorization", "Bearer " + getToken())
@@ -179,6 +208,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -226,6 +257,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
                     .uri("/repos/{owner}/{repo}/pulls", owner, repo)
                     .header("Authorization", "Bearer " + getToken())
@@ -234,6 +266,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -254,6 +288,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/actions/runs/{run_id}", owner, repo, runId)
                     .header("Authorization", "Bearer " + getToken())
@@ -261,6 +296,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -281,6 +318,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/actions/runs/{run_id}/jobs", owner, repo, runId)
                     .header("Authorization", "Bearer " + getToken())
@@ -288,6 +326,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -315,6 +355,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(String.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -342,6 +384,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(String.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -362,6 +406,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/pulls/{pull_number}", owner, repo, pullNumber)
                     .header("Authorization", "Bearer " + getToken())
@@ -369,6 +414,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -389,6 +436,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/pulls/{pull_number}/commits", owner, repo, pullNumber)
                     .header("Authorization", "Bearer " + getToken())
@@ -396,6 +444,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -416,6 +466,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/commits/{ref}/status", owner, repo, ref)
                     .header("Authorization", "Bearer " + getToken())
@@ -423,6 +474,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -443,6 +496,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/commits/{ref}/check-runs", owner, repo, ref)
                     .header("Authorization", "Bearer " + getToken())
@@ -450,6 +504,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -470,6 +526,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("rawtypes")
             List<Map> rawList = webClient.get()
                     .uri("/repos/{owner}/{repo}/issues/{issue_number}/comments", owner, repo, issueNumber)
                     .header("Authorization", "Bearer " + getToken())
@@ -478,6 +535,8 @@ public class GitHubApiClient {
                     .retrieve()
                     .bodyToFlux(Map.class)
                     .collectList()
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -508,6 +567,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Void.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -526,6 +587,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/contents/{path}", owner, repo, path)
                     .header("Authorization", "Bearer " + getToken())
@@ -533,6 +595,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -553,6 +617,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("rawtypes")
             List<Map> rawList = webClient.get()
                     .uri("/repos/{owner}/{repo}/contents/{path}", owner, repo, path)
                     .header("Authorization", "Bearer " + getToken())
@@ -561,6 +626,8 @@ public class GitHubApiClient {
                     .retrieve()
                     .bodyToFlux(Map.class)
                     .collectList()
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -582,6 +649,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/repos/{owner}/{repo}/git/trees/{sha}")
@@ -592,6 +660,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -616,6 +686,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
                     .uri("/repos/{owner}/{repo}/git/blobs", owner, repo)
                     .header("Authorization", "Bearer " + getToken())
@@ -624,6 +695,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -650,6 +723,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
                     .uri("/repos/{owner}/{repo}/git/trees", owner, repo)
                     .header("Authorization", "Bearer " + getToken())
@@ -658,6 +732,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -690,6 +766,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
                     .uri("/repos/{owner}/{repo}/git/commits", owner, repo)
                     .header("Authorization", "Bearer " + getToken())
@@ -698,6 +775,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -722,6 +801,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: PATCH {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.patch()
                     .uri("/repos/{owner}/{repo}/git/refs/{ref}", owner, repo, ref)
                     .header("Authorization", "Bearer " + getToken())
@@ -730,6 +810,8 @@ public class GitHubApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -750,6 +832,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/git/commits/{sha}", owner, repo, sha)
                     .header("Authorization", "Bearer " + getToken())
@@ -757,6 +840,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -777,6 +862,7 @@ public class GitHubApiClient {
         try {
             log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
+            @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.get()
                     .uri("/repos/{owner}/{repo}/compare/{base}...{head}", owner, repo, base, head)
                     .header("Authorization", "Bearer " + getToken())
@@ -784,6 +870,8 @@ public class GitHubApiClient {
                     .header("X-GitHub-Api-Version", "2022-11-28")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
                     .block();
 
             long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
@@ -833,4 +921,9 @@ public class GitHubApiClient {
         }
     }
 
+    private boolean isTransientError(Throwable throwable) {
+        return throwable instanceof WebClientRequestException ||
+                (throwable instanceof WebClientResponseException &&
+                        ((WebClientResponseException) throwable).getStatusCode().is5xxServerError());
+    }
 }
