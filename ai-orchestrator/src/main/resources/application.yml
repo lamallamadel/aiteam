@@ -60,3 +60,7 @@ atlasia:
       endpoint: ${LLM_ENDPOINT:https://api.openai.com/v1}
       model: ${LLM_MODEL:gpt-4o-mini}
       api-key: ${LLM_API_KEY:}
+      proxy-host: ${LLM_PROXY_HOST:}
+      proxy-port: ${LLM_PROXY_PORT:8080}
+      fallback-endpoint: ${LLM_FALLBACK_ENDPOINT:https://api.deepseek.com/v1}
+      fallback-api-key: ${LLM_FALLBACK_API_KEY:}

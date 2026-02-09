@@ -15,6 +15,7 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
+import reactor.netty.transport.ProxyProvider;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
@@ -45,10 +46,15 @@ public class LlmService {
         HttpClient httpClient = HttpClient.create(provider)
                 .responseTimeout(Duration.ofMinutes(2));
 
+        if (llmConfig.proxyHost() != null && !llmConfig.proxyHost().isEmpty()) {
+            httpClient = httpClient.proxy(proxy -> proxy.type(ProxyProvider.Proxy.HTTP)
+                    .host(llmConfig.proxyHost())
+                    .port(llmConfig.proxyPort() != null ? llmConfig.proxyPort() : 8080));
+            log.info("LLM Service initialized with proxy: {}:{}", llmConfig.proxyHost(), llmConfig.proxyPort());
+        }
+
         this.webClient = webClientBuilder
-                .baseUrl(llmConfig.endpoint())
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
-                .defaultHeader("Authorization", "Bearer " + llmConfig.apiKey())
                 .defaultHeader("Content-Type", "application/json")
                 .build();
     }
@@ -307,5 +313,12 @@ public class LlmService {
         return throwable instanceof WebClientRequestException ||
                 (throwable instanceof WebClientResponseException &&
                         ((WebClientResponseException) throwable).getStatusCode().is5xxServerError());
+    }
+
+    private Map<String, Object> createMockResponse(String content) {
+        return Map.of(
+                "choices", List.of(
+                        Map.of("message", Map.of("role", "assistant", "content", content))),
+                "usage", Map.of("total_tokens", 0));
     }
 }
