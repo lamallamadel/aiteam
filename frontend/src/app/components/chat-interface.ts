@@ -94,7 +94,12 @@ interface Message {
         <div *ngIf="isTyping" class="message assistant typing">
           <div class="avatar">...</div>
           <div class="bubble typing-bubble">
-            <div class="typing-label">{{ typingPersona || 'Thinking' }}...</div>
+            <div class="typing-label">
+              <span *ngFor="let p of Array.from(typingPersonas); let last = last">
+                {{ p | uppercase }}{{ !last ? ', ' : '' }}
+              </span>
+              Thinking...
+            </div>
             <div class="typing-indicator"><span></span><span></span><span></span></div>
           </div>
         </div>
@@ -256,6 +261,7 @@ interface Message {
   `]
 })
 export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
+  Array = Array; // Allow using Array.from in template
   @Input() selectedRun?: RunResponse;
   @Input() selectedPersona?: string;
 
@@ -270,7 +276,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   isTyping = false;
   private shouldScroll = false;
   isDuelMode = false;
-  typingPersona = '';
+  typingPersonas = new Set<string>();
   private activePersonaCount = 0;
   errorMessage = '';
   isSandboxOpen = false;
@@ -290,14 +296,23 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     if (changes['selectedRun'] && this.selectedRun) {
       this.selectedPersona = undefined;
       this.isDuelMode = false;
+      this.isTyping = false;
+      this.typingPersonas.clear();
+      this.activePersonaCount = 0;
       this.loadMessages();
     } else if (changes['selectedPersona'] && this.selectedPersona) {
       this.selectedRun = undefined;
       this.isDuelMode = false;
+      this.isTyping = false;
+      this.typingPersonas.clear();
+      this.activePersonaCount = 0;
       this.initPersonaChat();
     } else if (!this.selectedRun && !this.selectedPersona) {
       this.messages = [];
       this.isDuelMode = false;
+      this.isTyping = false;
+      this.typingPersonas.clear();
+      this.activePersonaCount = 0;
     }
     this.shouldScroll = true;
   }
@@ -387,7 +402,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
       this.errorMessage = '';
 
       mentionedPersonas.forEach(personaName => {
-        this.typingPersona = personaName.toUpperCase();
+        this.typingPersonas.add(personaName);
         this.orchestratorService.chat(personaName, textToChat).subscribe({
           next: (res) => {
             this.messages.push({
@@ -397,15 +412,16 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
               timestamp: new Date().toISOString()
             });
 
+            this.typingPersonas.delete(personaName);
             this.activePersonaCount--;
             if (this.activePersonaCount <= 0) {
               this.isTyping = false;
-              this.typingPersona = '';
             }
             this.shouldScroll = true;
             this.cdr.detectChanges();
           },
           error: (err) => {
+            this.typingPersonas.delete(personaName);
             this.activePersonaCount--;
             this.handleError(err);
           }
@@ -413,13 +429,13 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
       });
     } else if (this.selectedPersona) {
       this.isTyping = true;
-      this.typingPersona = this.selectedPersona;
+      this.typingPersonas.add(this.selectedPersona);
       this.errorMessage = '';
 
       this.orchestratorService.chat(this.selectedPersona, textToChat).subscribe({
         next: (res) => {
           this.isTyping = false;
-          this.typingPersona = '';
+          this.typingPersonas.clear();
           this.messages.push({
             role: 'assistant',
             text: res.response,
@@ -437,7 +453,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
 
   private handleError(err: any) {
     this.isTyping = false;
-    this.typingPersona = '';
+    this.typingPersonas.clear();
     if (err.status === 401) {
       this.errorMessage = 'Session expired. Please log in again.';
     } else {

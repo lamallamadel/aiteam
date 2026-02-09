@@ -111,6 +111,8 @@ interface QuickStats {
       display: flex;
       flex-direction: column;
       gap: 24px;
+      height: 100%;
+      overflow-y: auto;
     }
 
     .welcome-section {
@@ -289,7 +291,7 @@ export class DashboardHomeComponent implements OnInit {
   constructor(
     private analyticsService: AnalyticsService,
     private router: Router
-  ) {}
+  ) { }
 
   ngOnInit() {
     this.loadQuickStats();

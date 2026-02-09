@@ -11,7 +11,9 @@ services:
       - ai_network
 
   ai-orchestrator:
-    build: ./ai-orchestrator
+    build:
+      context: ./ai-orchestrator
+      network: host
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:postgresql://ai-db:5432/${DB_NAME:-ai}
@@ -35,7 +37,9 @@ services:
       - ai_network
 
   ai-dashboard:
-    build: ./frontend
+    build:
+      context: ./frontend
+      network: host
     ports:
       - "80:80"
     depends_on:

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 import reactor.netty.transport.ProxyProvider;
@@ -77,18 +78,52 @@ public class LlmService {
                     "model", llmConfig.model(),
                     "messages", messages);
 
-            Map<String, Object> response = webClient.post()
-                    .uri("/chat/completions")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(Duration.ofMinutes(5))
-                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
-                            .filter(this::isTransientError)
-                            .doBeforeRetry(retrySignal -> log.warn(
-                                    "Retrying LLM API call due to transient error: {}, attempt={}",
-                                    retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
-                    .block();
+            Map<String, Object> response;
+            try {
+                response = webClient.post()
+                        .uri(llmConfig.endpoint() + "/chat/completions")
+                        .header("Authorization", "Bearer " + llmConfig.apiKey())
+                        .bodyValue(requestBody)
+                        .retrieve()
+                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                        })
+                        .timeout(Duration.ofMinutes(5))
+                        .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                                .filter(this::isTransientError)
+                                .doBeforeRetry(retrySignal -> log.warn(
+                                        "Retrying LLM API call due to transient error: {}, attempt={}",
+                                        retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
+                        .onErrorResume(e -> {
+                            log.warn("Primary LLM failed, attempting fallback. Error: {}", e.getMessage());
+                            if (llmConfig.fallbackEndpoint() != null && !llmConfig.fallbackEndpoint().isEmpty()) {
+                                return webClient.post()
+                                        .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
+                                        .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
+                                        .bodyValue(requestBody)
+                                        .retrieve()
+                                        .bodyToMono(
+                                                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                                                })
+                                        .timeout(Duration.ofMinutes(5));
+                            }
+                            return Mono.error(e);
+                        })
+                        .onErrorResume(e -> {
+                            log.error("All LLM endpoints failed. Triggering safe mock response. Error: {}",
+                                    e.getMessage());
+                            return Mono.just(createMockResponse(
+                                    "I'm sorry, I'm currently having trouble connecting to my neural core. Please check your network connection, or I can operate in basic mode."));
+                        })
+                        .block();
+            } catch (Exception e) {
+                log.error("Emergency catch: LLM chain failed to produce a response. Triggering mock. Error: {}",
+                        e.getMessage());
+                response = createMockResponse("The neural link is unstable. Operating in offline mode.");
+            }
+
+            if (response == null) {
+                response = createMockResponse("Empty response from neural link.");
+            }
 
             String content = extractMessageContent(response);
             int tokensUsed = extractTokenUsage(response);
@@ -139,18 +174,51 @@ public class LlmService {
                     "messages", messages,
                     "response_format", responseFormat);
 
-            Map<String, Object> response = webClient.post()
-                    .uri("/chat/completions")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(Duration.ofMinutes(5))
-                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
-                            .filter(this::isTransientError)
-                            .doBeforeRetry(retrySignal -> log.warn(
-                                    "Retrying LLM API call due to transient error: {}, attempt={}",
-                                    retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
-                    .block();
+            Map<String, Object> response;
+            try {
+                response = webClient.post()
+                        .uri(llmConfig.endpoint() + "/chat/completions")
+                        .header("Authorization", "Bearer " + llmConfig.apiKey())
+                        .bodyValue(requestBody)
+                        .retrieve()
+                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                        })
+                        .timeout(Duration.ofMinutes(5))
+                        .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                                .filter(this::isTransientError)
+                                .doBeforeRetry(retrySignal -> log.warn(
+                                        "Retrying LLM API call due to transient error: {}, attempt={}",
+                                        retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
+                        .onErrorResume(e -> {
+                            log.warn("Primary LLM (Structured) failed, attempting fallback. Error: {}", e.getMessage());
+                            if (llmConfig.fallbackEndpoint() != null && !llmConfig.fallbackEndpoint().isEmpty()) {
+                                return webClient.post()
+                                        .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
+                                        .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
+                                        .bodyValue(requestBody)
+                                        .retrieve()
+                                        .bodyToMono(
+                                                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                                                })
+                                        .timeout(Duration.ofMinutes(5));
+                            }
+                            return Mono.error(e);
+                        })
+                        .onErrorResume(e -> {
+                            log.error("All Structured LLM endpoints failed. Triggering safe mock response. Error: {}",
+                                    e.getMessage());
+                            return Mono.just(
+                                    createMockResponse("{\"response\": \"Error: Network connection unavailable.\"}"));
+                        })
+                        .block();
+            } catch (Exception e) {
+                log.error("Emergency catch (Structured): LLM chain failed. Triggering mock. Error: {}", e.getMessage());
+                response = createMockResponse("{\"response\": \"System recovery active. Neural link restricted.\"}");
+            }
+
+            if (response == null) {
+                response = createMockResponse("{\"response\": \"Offline\"}");
+            }
 
             String content = extractMessageContent(response);
             int tokensUsed = extractTokenUsage(response);
@@ -178,7 +246,9 @@ public class LlmService {
     public String generateStructuredOutput(String systemPrompt, String userPrompt, String jsonSchemaString) {
         try {
             JsonNode schemaNode = objectMapper.readTree(jsonSchemaString);
-            Map<String, Object> jsonSchema = objectMapper.convertValue(schemaNode, Map.class);
+            Map<String, Object> jsonSchema = objectMapper.convertValue(schemaNode,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
             return generateStructuredOutput(systemPrompt, userPrompt, jsonSchema);
         } catch (Exception e) {
             log.error("Failed to parse JSON schema, correlationId={}", CorrelationIdHolder.getCorrelationId(), e);
