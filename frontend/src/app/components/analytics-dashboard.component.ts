@@ -132,6 +132,8 @@ interface PersonaMetrics {
       display: flex;
       flex-direction: column;
       gap: 24px;
+      height: 100%;
+      overflow-y: auto;
     }
 
     .metrics-grid {
@@ -405,7 +407,7 @@ export class AnalyticsDashboardComponent implements OnInit {
     }
   };
 
-  constructor(private analyticsService: AnalyticsService) {}
+  constructor(private analyticsService: AnalyticsService) { }
 
   ngOnInit() {
     this.loadAnalytics();
@@ -456,10 +458,10 @@ export class AnalyticsDashboardComponent implements OnInit {
 
   updateStatusChart(breakdown: Record<string, number>) {
     if (!breakdown) return;
-    
+
     const labels: string[] = [];
     const data: number[] = [];
-    
+
     Object.entries(breakdown).forEach(([status, count]) => {
       labels.push(status);
       data.push(count);
