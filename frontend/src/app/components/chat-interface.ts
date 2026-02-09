@@ -98,10 +98,24 @@ interface Message {
             <div class="typing-indicator"><span></span><span></span><span></span></div>
           </div>
         </div>
+
+        <div *ngIf="errorMessage" class="error-banner glass-panel">
+          <span class="icon">⚠️</span>
+          <div class="error-text">
+            <strong>Execution Error</strong>
+            <p>{{ errorMessage }}</p>
+          </div>
+          <button (click)="errorMessage = ''">✕</button>
+        </div>
       </div>
       
       <!-- Input Area -->
-      <div *ngIf="selectedRun || selectedPersona" class="input-area">
+      <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="input-area">
+        <button class="voice-btn" [class.recording]="isRecording" (click)="toggleRecord()" 
+                [title]="isRecording ? 'Stop Recording' : 'Voice Command'">
+          <span class="mic-icon">🎤</span>
+          <div *ngIf="isRecording" class="pulse-ring"></div>
+        </button>
         <input type="text" placeholder="Ask anything or provide feedback..." class="glass-panel" 
                [(ngModel)]="feedbackText" (keyup.enter)="sendFeedback()">
         <button class="accent-gradient" [disabled]="isTyping" (click)="sendFeedback()">
@@ -133,6 +147,8 @@ interface Message {
     .form-group input, .form-group select { padding: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white; border-radius: 8px; outline: none; transition: border-color 0.2s; }
     .form-group input:focus { border-color: #38bdf8; }
     .start-btn { padding: 16px; margin-top: 20px; font-size: 1.1rem; }
+    
+    app-neural-trace { flex-shrink: 0; min-height: 120px; }
     
     .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; min-height: 0; }
     .message { display: flex; gap: 12px; max-width: 85%; }
@@ -177,11 +193,49 @@ interface Message {
     .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
     .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
     @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+
+    .error-banner { 
+      margin: 10px; padding: 12px 16px; background: rgba(239, 68, 68, 0.1); 
+      border-left: 4px solid #ef4444; border-radius: 8px; display: flex; align-items: center; gap: 12px;
+    }
+    .error-banner .icon { font-size: 1.2rem; }
+    .error-banner .error-text p { margin: 2px 0 0; font-size: 0.8rem; opacity: 0.8; }
+    .error-banner button { margin-left: auto; background: transparent; border: none; color: white; cursor: pointer; }
     
     .input-area { margin-top: 20px; display: flex; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; flex-shrink: 0; }
     .input-area input { flex: 1; padding: 12px; background: transparent; border: none; color: white; outline: none; font-size: 0.95rem; }
-    .input-area button { padding: 0 24px; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 600; transition: all 0.2s; }
     .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .voice-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .voice-btn:hover { background: rgba(56, 189, 248, 0.1); border-color: #38bdf8; }
+    .voice-btn.recording { background: #ef4444; border-color: #ef4444; color: white; }
+    .mic-icon { font-size: 1.2rem; z-index: 2; }
+    
+    .pulse-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: #ef4444;
+      animation: mic-pulse 1.5s infinite;
+      z-index: 1;
+    }
+    @keyframes mic-pulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
 
     .visionary-btn {
       margin-top: 10px;
@@ -217,13 +271,20 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   private shouldScroll = false;
   isDuelMode = false;
   typingPersona = '';
+  private activePersonaCount = 0;
+  errorMessage = '';
   isSandboxOpen = false;
   sandboxCode = '';
+
+  isRecording = false;
+  private recognition: any;
 
   constructor(
     private orchestratorService: OrchestratorService,
     private cdr: ChangeDetectorRef
-  ) { }
+  ) {
+    this.initSpeechRecognition();
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['selectedRun'] && this.selectedRun) {
@@ -264,35 +325,42 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
       text: `Hello! I am ${this.selectedPersona?.toUpperCase()}, your specialized AI Gem. How can I help you today?`,
       timestamp: new Date().toISOString()
     }];
+    this.speak(this.messages[0].text);
   }
 
   loadMessages() {
     if (!this.selectedRun) return;
 
-    this.orchestratorService.getArtifacts(this.selectedRun.id).subscribe((artifacts: any[]) => {
-      this.messages = artifacts
-        .filter((a: any) => a.artifactType === 'log' || a.artifactType === 'step')
-        .map((a: any) => ({
-          role: 'assistant',
-          text: a.payload,
-          orchestrationStep: a.agentName,
-          timestamp: a.createdAt
-        }));
+    this.orchestratorService.getArtifacts(this.selectedRun.id).subscribe({
+      next: (artifacts: any[]) => {
+        this.messages = artifacts
+          .filter((a: any) => a.artifactType === 'log' || a.artifactType === 'step')
+          .map((a: any) => ({
+            role: 'assistant',
+            text: a.payload,
+            orchestrationStep: a.agentName,
+            timestamp: a.createdAt
+          }));
 
-      this.messages.unshift({
-        role: 'user',
-        text: `Starting orchestration for ${this.selectedRun?.repo} #${this.selectedRun?.issueNumber}`,
-        timestamp: this.selectedRun!.createdAt
-      });
-      this.shouldScroll = true;
-      this.cdr.detectChanges();
+        this.messages.unshift({
+          role: 'user',
+          text: `Starting orchestration for ${this.selectedRun?.repo} #${this.selectedRun?.issueNumber}`,
+          timestamp: this.selectedRun!.createdAt
+        });
+        this.shouldScroll = true;
+        this.cdr.detectChanges();
+      },
+      error: (err) => this.handleError(err)
     });
   }
 
   startRun() {
-    this.orchestratorService.createRun(this.newRequest).subscribe((run: RunResponse) => {
-      this.selectedRun = run;
-      this.loadMessages();
+    this.orchestratorService.createRun(this.newRequest).subscribe({
+      next: (run: RunResponse) => {
+        this.selectedRun = run;
+        this.loadMessages();
+      },
+      error: (err) => this.handleError(err)
     });
   }
 
@@ -314,46 +382,129 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
 
     if (mentionedPersonas.length > 0) {
       this.isDuelMode = true;
+      this.activePersonaCount = mentionedPersonas.length;
+      this.isTyping = true;
+      this.errorMessage = '';
 
       mentionedPersonas.forEach(personaName => {
-        this.isTyping = true;
         this.typingPersona = personaName.toUpperCase();
+        this.orchestratorService.chat(personaName, textToChat).subscribe({
+          next: (res) => {
+            this.messages.push({
+              role: 'assistant',
+              text: res.response,
+              senderName: personaName.charAt(0).toUpperCase() + personaName.slice(1),
+              timestamp: new Date().toISOString()
+            });
 
-        this.orchestratorService.chat(personaName, textToChat).subscribe(res => {
-          this.messages.push({
-            role: 'assistant',
-            text: res.response,
-            senderName: personaName.charAt(0).toUpperCase() + personaName.slice(1),
-            timestamp: new Date().toISOString()
-          });
-
-          if (this.messages.filter(m => m.senderName?.toLowerCase() === personaName).length > 0) {
-            // Basic check to stop typing if this persona replied
-            this.isTyping = false;
-            this.typingPersona = '';
+            this.activePersonaCount--;
+            if (this.activePersonaCount <= 0) {
+              this.isTyping = false;
+              this.typingPersona = '';
+            }
+            this.shouldScroll = true;
+            this.cdr.detectChanges();
+          },
+          error: (err) => {
+            this.activePersonaCount--;
+            this.handleError(err);
           }
-
-          this.shouldScroll = true;
-          this.cdr.detectChanges();
         });
       });
     } else if (this.selectedPersona) {
       this.isTyping = true;
       this.typingPersona = this.selectedPersona;
+      this.errorMessage = '';
 
-      this.orchestratorService.chat(this.selectedPersona, textToChat).subscribe(res => {
-        this.isTyping = false;
-        this.typingPersona = '';
-        this.messages.push({
-          role: 'assistant',
-          text: res.response,
-          senderName: this.selectedPersona,
-          timestamp: new Date().toISOString()
-        });
-        this.shouldScroll = true;
-        this.cdr.detectChanges();
+      this.orchestratorService.chat(this.selectedPersona, textToChat).subscribe({
+        next: (res) => {
+          this.isTyping = false;
+          this.typingPersona = '';
+          this.messages.push({
+            role: 'assistant',
+            text: res.response,
+            senderName: this.selectedPersona,
+            timestamp: new Date().toISOString()
+          });
+          this.speak(res.response);
+          this.shouldScroll = true;
+          this.cdr.detectChanges();
+        },
+        error: (err) => this.handleError(err)
       });
     }
+  }
+
+  private handleError(err: any) {
+    this.isTyping = false;
+    this.typingPersona = '';
+    if (err.status === 401) {
+      this.errorMessage = 'Session expired. Please log in again.';
+    } else {
+      this.errorMessage = 'Communication failed with Atlasia Neural Link.';
+    }
+    this.cdr.detectChanges();
+  }
+
+  private initSpeechRecognition() {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      this.recognition = new SpeechRecognition();
+      this.recognition.continuous = false;
+      this.recognition.lang = 'en-US';
+
+      this.recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        this.feedbackText = transcript;
+        this.cdr.detectChanges();
+        setTimeout(() => this.sendFeedback(), 500);
+      };
+
+      this.recognition.onend = () => {
+        this.isRecording = false;
+        this.cdr.detectChanges();
+      };
+
+      this.recognition.onerror = () => {
+        this.isRecording = false;
+        this.cdr.detectChanges();
+      };
+    }
+  }
+
+  toggleRecord() {
+    if (!this.recognition) {
+      alert('Speech recognition is not supported in your browser.');
+      return;
+    }
+
+    if (this.isRecording) {
+      this.recognition.stop();
+    } else {
+      this.isRecording = true;
+      this.recognition.start();
+    }
+  }
+
+  speak(text: string) {
+    if (!window.speechSynthesis) return;
+
+    // Clean text for speech (remove markdown code blocks)
+    const cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    // Try to find a nice voice
+    const voices = window.speechSynthesis.getVoices();
+    if (this.selectedPersona?.toLowerCase() === 'morgan') {
+      utterance.pitch = 0.8; // Deeper voice
+    } else if (this.selectedPersona?.toLowerCase() === 'aksil') {
+      utterance.rate = 1.2; // Faster voice
+    }
+
+    window.speechSynthesis.speak(utterance);
   }
 
   async copyToClipboard(text: string) {
@@ -369,9 +520,9 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   }
 
   openVisionary(text: string) {
-    const match = text.match(/```(?:[\s\S]+?)?([\s\S]+?)```/);
+    const match = text.match(/```(\w+)?\n?([\s\S]+?)```/);
     if (match) {
-      this.sandboxCode = match[1].trim();
+      this.sandboxCode = match[2].trim();
       this.isSandboxOpen = true;
     }
   }

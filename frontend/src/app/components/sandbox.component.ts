@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -200,13 +200,29 @@ import { CommonModule } from '@angular/common';
     iframe { width: 100%; height: 100%; }
   `]
 })
-export class SandboxComponent {
+export class SandboxComponent implements AfterViewChecked {
   @Input() code: string = '';
   @Input() isOpen: boolean = false;
   @Output() onClose = new EventEmitter<void>();
 
+  @ViewChild('terminalBody') private terminalBody!: ElementRef;
+  private shouldScrollTerminal = false;
+
   isRunning = false;
   outputLines: { text: string, type: 'command' | 'stdout' | 'system' | 'error' }[] = [];
+
+  ngAfterViewChecked() {
+    if (this.shouldScrollTerminal) {
+      this.scrollToBottom();
+      this.shouldScrollTerminal = false;
+    }
+  }
+
+  private scrollToBottom() {
+    try {
+      this.terminalBody.nativeElement.scrollTop = this.terminalBody.nativeElement.scrollHeight;
+    } catch (err) { }
+  }
 
   close() {
     this.onClose.emit();
@@ -238,7 +254,7 @@ export class SandboxComponent {
 
   private addOutput(text: string, type: 'command' | 'stdout' | 'system' | 'error' = 'stdout') {
     this.outputLines.push({ text, type });
-    // Auto-scroll logic could be added here if needed via ViewChild
+    this.shouldScrollTerminal = true;
   }
 
   private detectLanguage() {
