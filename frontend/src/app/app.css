@@ -28,12 +28,34 @@
     background: rgba(56, 189, 248, 0.05);
 }
 
-.nav-item.active { background: rgba(56, 189, 248, 0.1); color: #38bdf8; border-right: 3px solid #38bdf8; }
+.nav-item.active {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border-right: 3px solid #38bdf8;
+}
 
-.nav-section { margin-bottom: 24px; }
-.section-title { font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; padding: 0 16px; margin-bottom: 8px; display: block; }
-.gem-item { font-size: 0.95rem; }
-.gem-icon { margin-right: 8px; filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5)); }
+.nav-section {
+    margin-bottom: 24px;
+}
+
+.section-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.05em;
+    padding: 0 16px;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.gem-item {
+    font-size: 0.95rem;
+}
+
+.gem-icon {
+    margin-right: 8px;
+    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5));
+}
 
 .content {
     flex: 1;
@@ -41,6 +63,7 @@
     flex-direction: column;
     gap: 20px;
     overflow: hidden;
+    min-height: 0;
 }
 
 .top-bar {
@@ -57,7 +80,10 @@
 
 .main-content {
     flex: 1;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
     background: rgba(255, 255, 255, 0.02);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.05);

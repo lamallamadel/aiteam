@@ -93,9 +93,10 @@ interface Message {
     </div>
   `,
   styles: [`
-    .chat-wrapper { height: 100%; display: flex; flex-direction: column; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; }
+    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+    .chat-wrapper { display: flex; flex-direction: column; flex: 1; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; min-height: 0; width: 100%; }
     
-    .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
     .header-info { display: flex; align-items: center; gap: 16px; }
     .header-icon { width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
     .header-icon.gem { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
@@ -112,20 +113,22 @@ interface Message {
     .form-group input:focus { border-color: #38bdf8; }
     .start-btn { padding: 16px; margin-top: 20px; font-size: 1.1rem; }
     
-    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; max-height: 100%; }
+    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; min-height: 0; }
     .message { display: flex; gap: 12px; max-width: 85%; }
     .message.user { align-self: flex-end; flex-direction: row-reverse; }
     .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; color: #38bdf8; flex-shrink: 0; }
     .message.user .avatar { background: #38bdf8; color: white; }
     
-    .bubble { padding: 12px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05); position: relative; }
+    .bubble { padding: 12px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05); position: relative; min-width: 0; }
     .message.user .bubble { background: #0ea5e9; color: white; border: none; border-bottom-right-radius: 2px; }
     .message.assistant .bubble { border-bottom-left-radius: 2px; }
-    .message-text { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; }
+    .message-text { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; word-break: break-word; }
+    .message-text pre { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
+    .message-text code { font-family: 'Fira Code', monospace; font-size: 0.85rem; }
     .message-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 12px; }
     .timestamp { font-size: 0.7rem; color: #64748b; }
     .message.user .timestamp { color: rgba(255,255,255,0.7); }
-    .copy-btn { background: transparent; border: none; cursor: pointer; font-size: 1rem; opacity: 0.4; transition: opacity 0.2s; padding: 0; display: flex; align-items: center; }
+    .copy-btn { background: transparent; border: none; cursor: pointer; font-size: 1rem; opacity: 0.4; transition: opacity 0.2s; padding: 0; display: flex; align-items: center; color: inherit; }
     .copy-btn:hover { opacity: 1; }
     
     .step-indicator { margin-top: 10px; padding: 8px; background: rgba(56, 189, 248, 0.1); border-radius: 6px; font-size: 0.8rem; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
@@ -139,7 +142,7 @@ interface Message {
     .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
     @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
     
-    .input-area { margin-top: 20px; display: flex; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; }
+    .input-area { margin-top: 20px; display: flex; gap: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; flex-shrink: 0; }
     .input-area input { flex: 1; padding: 12px; background: transparent; border: none; color: white; outline: none; font-size: 0.95rem; }
     .input-area button { padding: 0 24px; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 600; transition: all 0.2s; }
     .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -184,7 +187,9 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
 
   scrollToBottom(): void {
     try {
-      this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
+      setTimeout(() => {
+        this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
+      }, 50);
     } catch (err) { }
   }
 

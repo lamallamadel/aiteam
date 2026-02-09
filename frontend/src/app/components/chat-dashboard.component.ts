@@ -47,7 +47,8 @@ import { AuthService } from '../services/auth.service';
     </div>
   `,
   styles: [`
-    .dashboard-wrapper { display: flex; height: calc(100vh - 80px); overflow: hidden; }
+    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+    .dashboard-wrapper { display: flex; flex: 1; min-height: 0; overflow: hidden; }
     .chat-area { flex: 1; position: relative; display: flex; flex-direction: column; }
     .settings-bar { position: absolute; top: 20px; right: 20px; z-index: 10; }
     .settings-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 40px; height: 40px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; transition: background 0.2s; }
