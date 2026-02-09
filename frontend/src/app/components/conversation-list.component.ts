@@ -44,6 +44,7 @@ import { RunResponse, Persona } from '../models/orchestrator.model';
     </div>
   `,
   styles: [`
+    :host { display: block; height: 100%; flex-shrink: 0; }
     .conv-list-container { width: 300px; height: 100%; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
     .header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
     .header h3 { margin: 0; color: white; font-size: 1rem; }

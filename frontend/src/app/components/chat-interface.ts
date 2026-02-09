@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { RunResponse, RunRequest } from '../models/orchestrator.model';
+import { NeuralTraceComponent } from './neural-trace.component';
+import { SandboxComponent } from './sandbox.component';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -14,7 +16,7 @@ interface Message {
 @Component({
   selector: 'app-chat-interface',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, NeuralTraceComponent, SandboxComponent],
   template: `
     <div class="chat-wrapper">
       <!-- Chat Header -->
@@ -35,6 +37,9 @@ interface Message {
             </span>
         </div>
       </header>
+
+      <!-- Neural Trace Visualizer -->
+      <app-neural-trace *ngIf="selectedRun" [steps]="assistantMessages"></app-neural-trace>
 
       <!-- New Run Form -->
       <div *ngIf="!selectedRun && !selectedPersona" class="new-run-form glass-panel">
@@ -63,9 +68,17 @@ interface Message {
           <div class="avatar">{{ msg.role === 'user' ? 'U' : (selectedPersona ? 'G' : 'AI') }}</div>
           <div class="bubble">
             <div class="message-text">{{ msg.text }}</div>
+            
+            <!-- Visionary Run Button -->
+            <button *ngIf="msg.role === 'assistant' && hasCode(msg.text)" 
+                    class="visionary-btn" (click)="openVisionary(msg.text)">
+              ⚡ RUN CODE
+            </button>
+
             <div *ngIf="msg.orchestrationStep" class="step-indicator">
               <span class="pulse"></span> Executing: {{ msg.orchestrationStep }}
             </div>
+            
             <div class="message-footer">
                 <span class="timestamp">{{ msg.timestamp | date:'shortTime' }}</span>
                 <button *ngIf="msg.role === 'assistant'" class="copy-btn" (click)="copyToClipboard(msg.text)" title="Copy message">
@@ -74,6 +87,7 @@ interface Message {
             </div>
           </div>
         </div>
+        
         <div *ngIf="isTyping" class="message assistant typing">
           <div class="avatar">G</div>
           <div class="bubble typing-bubble">
@@ -81,19 +95,22 @@ interface Message {
           </div>
         </div>
       </div>
-
+      
       <!-- Input Area -->
       <div *ngIf="selectedRun || selectedPersona" class="input-area">
         <input type="text" placeholder="Ask anything or provide feedback..." class="glass-panel" 
                [(ngModel)]="feedbackText" (keyup.enter)="sendFeedback()">
         <button class="accent-gradient" [disabled]="isTyping" (click)="sendFeedback()">
-            {{ isTyping ? 'Thinking...' : 'Send' }}
+          {{ isTyping ? 'Thinking...' : 'Send' }}
         </button>
       </div>
+
+      <!-- Visionary Sandbox -->
+      <app-sandbox [code]="sandboxCode" [isOpen]="isSandboxOpen" (onClose)="isSandboxOpen = false"></app-sandbox>
     </div>
   `,
   styles: [`
-    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
     .chat-wrapper { display: flex; flex-direction: column; flex: 1; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; min-height: 0; width: 100%; }
     
     .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; }
@@ -146,6 +163,23 @@ interface Message {
     .input-area input { flex: 1; padding: 12px; background: transparent; border: none; color: white; outline: none; font-size: 0.95rem; }
     .input-area button { padding: 0 24px; border: none; border-radius: 8px; color: white; cursor: pointer; font-weight: 600; transition: all 0.2s; }
     .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .visionary-btn {
+      margin-top: 10px;
+      padding: 8px 16px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      background: rgba(56, 189, 248, 0.1);
+      color: #38bdf8;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .visionary-btn:hover { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
   `]
 })
 export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
@@ -155,10 +189,16 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   @ViewChild('scrollMe') private myScrollContainer!: ElementRef;
 
   messages: Message[] = [];
+  get assistantMessages() {
+    return this.messages.filter(m => m.role === 'assistant');
+  }
   newRequest: RunRequest = { repo: 'lamallamadel/orchistrateur', issueNumber: 1, mode: 'PLANNING' };
   feedbackText: string = '';
   isTyping = false;
   private shouldScroll = false;
+
+  isSandboxOpen = false;
+  sandboxCode = '';
 
   constructor(
     private orchestratorService: OrchestratorService,
@@ -187,9 +227,11 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
 
   scrollToBottom(): void {
     try {
-      setTimeout(() => {
-        this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
-      }, 50);
+      if (this.myScrollContainer) {
+        setTimeout(() => {
+          this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
+        }, 50);
+      }
     } catch (err) { }
   }
 
@@ -262,9 +304,20 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   async copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      // Optional: Add a brief snackbar or tooltip feedback here
     } catch (err) {
       console.error('Failed to copy: ', err);
+    }
+  }
+
+  hasCode(text: string): boolean {
+    return text.includes('```');
+  }
+
+  openVisionary(text: string) {
+    const match = text.match(/```(?:[\s\S]+?)?([\s\S]+?)```/);
+    if (match) {
+      this.sandboxCode = match[1].trim();
+      this.isSandboxOpen = true;
     }
   }
 }
