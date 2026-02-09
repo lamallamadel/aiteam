@@ -9,6 +9,7 @@ import { SandboxComponent } from './sandbox.component';
 interface Message {
   role: 'user' | 'assistant';
   text: string;
+  senderName?: string;
   orchestrationStep?: string;
   timestamp: string;
 }
@@ -26,9 +27,10 @@ interface Message {
             {{ selectedPersona ? '💎' : '🚀' }}
           </span>
           <div class="header-text">
-            <h3>{{ selectedPersona ? (selectedPersona | uppercase) : 'Orchestration Run' }}</h3>
+            <h3>{{ selectedPersona ? (selectedPersona | uppercase) : (isDuelMode ? 'Gem Duel' : 'Orchestration Run') }}</h3>
             <p *ngIf="selectedRun">{{ selectedRun.repo }} #{{ selectedRun.issueNumber }}</p>
             <p *ngIf="selectedPersona">Interactive AI Gem Expertise</p>
+            <p *ngIf="isDuelMode">Multi-AI Collaborative Session</p>
           </div>
         </div>
         <div class="header-actions">
@@ -63,10 +65,11 @@ interface Message {
       </div>
 
       <!-- Messages List -->
-      <div *ngIf="selectedRun || selectedPersona" class="message-list" #scrollMe>
-        <div *ngFor="let msg of messages" class="message" [ngClass]="msg.role">
-          <div class="avatar">{{ msg.role === 'user' ? 'U' : (selectedPersona ? 'G' : 'AI') }}</div>
+      <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="message-list" #scrollMe>
+        <div *ngFor="let msg of messages" class="message" [ngClass]="[msg.role, msg.senderName ? 'persona-' + msg.senderName.toLowerCase() : '']">
+          <div class="avatar">{{ msg.role === 'user' ? 'U' : (msg.senderName ? msg.senderName.charAt(0).toUpperCase() : 'AI') }}</div>
           <div class="bubble">
+            <div class="sender-label" *ngIf="msg.senderName">{{ msg.senderName }}</div>
             <div class="message-text">{{ msg.text }}</div>
             
             <!-- Visionary Run Button -->
@@ -89,8 +92,9 @@ interface Message {
         </div>
         
         <div *ngIf="isTyping" class="message assistant typing">
-          <div class="avatar">G</div>
+          <div class="avatar">...</div>
           <div class="bubble typing-bubble">
+            <div class="typing-label">{{ typingPersona || 'Thinking' }}...</div>
             <div class="typing-indicator"><span></span><span></span><span></span></div>
           </div>
         </div>
@@ -139,6 +143,20 @@ interface Message {
     .bubble { padding: 12px 16px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.05); position: relative; min-width: 0; }
     .message.user .bubble { background: #0ea5e9; color: white; border: none; border-bottom-right-radius: 2px; }
     .message.assistant .bubble { border-bottom-left-radius: 2px; }
+    .sender-label { font-size: 0.7rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
+    
+    /* Persona specific colors */
+    .persona-aksil .bubble { border-left: 3px solid #f43f5e; }
+    .persona-aksil .sender-label { color: #f43f5e; }
+    .persona-morgan .bubble { border-left: 3px solid #8b5cf6; }
+    .persona-morgan .sender-label { color: #8b5cf6; }
+    .persona-atlasia .bubble { border-left: 3px solid #38bdf8; }
+    .persona-atlasia .sender-label { color: #38bdf8; }
+    .persona-sage .bubble { border-left: 3px solid #10b981; }
+    .persona-sage .sender-label { color: #10b981; }
+    .persona-pulse .bubble { border-left: 3px solid #f59e0b; }
+    .persona-pulse .sender-label { color: #f59e0b; }
+    
     .message-text { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; word-break: break-word; }
     .message-text pre { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
     .message-text code { font-family: 'Fira Code', monospace; font-size: 0.85rem; }
@@ -153,6 +171,7 @@ interface Message {
     @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); } }
     
     .typing-bubble { padding: 12px 20px; }
+    .typing-label { font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; font-weight: 600; }
     .typing-indicator { display: flex; gap: 4px; }
     .typing-indicator span { width: 6px; height: 6px; background: #64748b; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
     .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
@@ -196,7 +215,8 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   feedbackText: string = '';
   isTyping = false;
   private shouldScroll = false;
-
+  isDuelMode = false;
+  typingPersona = '';
   isSandboxOpen = false;
   sandboxCode = '';
 
@@ -208,12 +228,15 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   ngOnChanges(changes: SimpleChanges) {
     if (changes['selectedRun'] && this.selectedRun) {
       this.selectedPersona = undefined;
+      this.isDuelMode = false;
       this.loadMessages();
     } else if (changes['selectedPersona'] && this.selectedPersona) {
       this.selectedRun = undefined;
+      this.isDuelMode = false;
       this.initPersonaChat();
     } else if (!this.selectedRun && !this.selectedPersona) {
       this.messages = [];
+      this.isDuelMode = false;
     }
     this.shouldScroll = true;
   }
@@ -283,16 +306,48 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     };
     this.messages.push(userMsg);
     const textToChat = this.feedbackText;
+    const mentions = this.feedbackText.match(/@(\w+)/g);
+    const mentionedPersonas = mentions ? mentions.map(m => m.substring(1).toLowerCase()) : [];
+
     this.feedbackText = '';
     this.shouldScroll = true;
 
-    if (this.selectedPersona) {
+    if (mentionedPersonas.length > 0) {
+      this.isDuelMode = true;
+
+      mentionedPersonas.forEach(personaName => {
+        this.isTyping = true;
+        this.typingPersona = personaName.toUpperCase();
+
+        this.orchestratorService.chat(personaName, textToChat).subscribe(res => {
+          this.messages.push({
+            role: 'assistant',
+            text: res.response,
+            senderName: personaName.charAt(0).toUpperCase() + personaName.slice(1),
+            timestamp: new Date().toISOString()
+          });
+
+          if (this.messages.filter(m => m.senderName?.toLowerCase() === personaName).length > 0) {
+            // Basic check to stop typing if this persona replied
+            this.isTyping = false;
+            this.typingPersona = '';
+          }
+
+          this.shouldScroll = true;
+          this.cdr.detectChanges();
+        });
+      });
+    } else if (this.selectedPersona) {
       this.isTyping = true;
+      this.typingPersona = this.selectedPersona;
+
       this.orchestratorService.chat(this.selectedPersona, textToChat).subscribe(res => {
         this.isTyping = false;
+        this.typingPersona = '';
         this.messages.push({
           role: 'assistant',
           text: res.response,
+          senderName: this.selectedPersona,
           timestamp: new Date().toISOString()
         });
         this.shouldScroll = true;
