@@ -11,7 +11,10 @@ Il sert à déclencher un "run" depuis GitHub Actions (label `ai:run`), et à tr
 ## Fonctionnalités Clés
 - **Workflow Engine**: Enchaînement automatique (PM -> Architect -> Developer -> Tester -> Writer).
 - **GitHub Integration**: Gestion des issues, création de branches, commits, et Pull Requests.
-- **Resilience**: Support des dépôts vides (initial commit) et gestion des erreurs d'API GitHub.
+- **Resilience Layer**: 
+  - **Auto-Retries**: Stratégie de retry exponentiel (Reactor) sur les services LLM et GitHub pour l'auto-guérison des erreurs réseau.
+  - **Connection Pooling**: Tuning de Netty `HttpClient` pour évincer les connexions inactives et éviter les "Connection reset".
+  - **Empty Repo Support**: Détection et initialisation automatique des dépôts vides (main branch initialization).
 - **Chat Mode (Gems)**: API pour le dialogue direct avec les personas AI (`/api/chat/{personaName}`).
 
 ## API

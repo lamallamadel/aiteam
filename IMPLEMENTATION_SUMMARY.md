@@ -21,10 +21,15 @@ Following a global review, the orchestrator has been upgraded with cross-run int
 - **Dynamic Sidebar**: Navigation hub for discovering and interacting with "Gems" without needing a repository context.
 
 ### 4. Repository Resilience & Empty Repo Support
-- **Zero-State Support**: The orchestrator now detect empty repositories (missing `main` branch) and performs initial commits to jumpstart the development workflow.
+- **Zero-State Support**: The orchestrator now detects empty repositories (missing `main` branch) and performs initial commits to jumpstart the development workflow.
 - **Improved GitHub Client**: Robust handling of 404/409 conflicts and automatic base64 encoding for new file creations.
 
-### 5. Full Stack Dockerization (Dev/Prod)
+### 5. LLM & Network Resilience (Round 6)
+- **Exponential Backoff Retries**: Both `LlmService` and `GitHubApiClient` now feature robust, Reactive (Reactor) based retries with exponential backoff for transient errors (e.g., Connection reset by peer, 5xx).
+- **Network Stack Tuning**: Netty `HttpClient` is configured with proactive connection eviction (`maxIdleTime: 20s/60s`) and background eviction, preventing stale socket reuse and reducing network flake.
+- **Improved Param Resolution**: Compliance with Spring Boot 3.2+ parameter name resolution via explicit annotation naming.
+
+### 6. Full Stack Dockerization (Dev/Prod)
 - **Production Mode**: Multi-stage builds with Nginx for a lightweight, secure deployment (`docker compose up`).
 - **Development Mode**: Bind mounts and hot-reload (`ng serve`) for seamless local coding (`docker compose -f docker-compose.dev.yml up`).
 - **Environment Management**: Unified `.env` file for centralized configuration of secrets and DB settings.

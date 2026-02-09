@@ -8,7 +8,8 @@ The `DeveloperStep` is a production-ready agent step that generates and applies 
 
 ### 1. LLM Integration
 - **Code Generation**: Uses LLM with structured output (JSON schema) to generate complete code implementations
-- **Retry Logic**: Implements exponential backoff retry mechanism (3 attempts) for LLM failures
+- **Retry Logic**: Implements Reactor-based exponential backoff retry mechanism (`Retry.backoff(3, 1s)`) for transient network errors (e.g. "Connection reset") and 5xx server responses.
+- **Network Stability**: Leverages tuned Netty `HttpClient` with proactive connection eviction to prevent use of stale sockets.
 - **Fallback Mode**: If LLM fails completely, generates a fallback documentation file with implementation plan
 - **Context-Aware**: Provides comprehensive repository context and architecture notes to LLM
 
@@ -197,7 +198,7 @@ System.out.println("Created PR: " + prUrl);
 3. LLM token limits may restrict context size
 4. Fallback mode creates documentation only, not code
 5. Only supports UTF-8 encoding
-6. Requires main branch to exist
+6. Supports initial commits for empty repositories (no `main` branch required)
 
 ## Future Enhancements
 

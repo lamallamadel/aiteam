@@ -72,13 +72,13 @@ OrchestratorException (abstract)
 ```
 
 #### Recovery Strategies
-Each exception includes a recovery strategy:
-- `RETRY_WITH_BACKOFF` - Retry with exponential backoff
-- `RETRY_IMMEDIATE` - Retry immediately
-- `ESCALATE_TO_HUMAN` - Requires human intervention
-- `FALLBACK_TO_DEFAULT` - Use fallback behavior
-- `SKIP_AND_CONTINUE` - Skip and continue workflow
-- `FAIL_FAST` - Fail immediately without retry
+The system implements specialized recovery strategies based on error types:
+- **RETRY_WITH_BACKOFF** (Implemented): Uses Reactor `Retry.backoff(3, Duration.ofSeconds(1))` for transient network errors (e.g. "Connection reset") and 5xx server responses.
+- **RETRY_IMMEDIATE** (Implemented): Immediate retry for potentially flappy validation or invalid response scenarios.
+- **ESCALATE_TO_HUMAN**: Requires human intervention (e.g., when credit limits are hit).
+- **FALLBACK_TO_DEFAULT**: Use default behavior or static response.
+- **SKIP_AND_CONTINUE**: Skip the current operation and move to the next step.
+- **FAIL_FAST**: Stop immediately to prevent inconsistent state.
 
 #### LLM Error Types
 - `RATE_LIMIT` (retryable) → `RETRY_WITH_BACKOFF`

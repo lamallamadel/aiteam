@@ -77,6 +77,8 @@ This document summarizes all code changes made to implement comprehensive error 
    - Integrated `OrchestratorMetrics` for timing and token tracking
    - Added correlation ID to all log statements
    - Comprehensive error handling with `LlmServiceException`
+   - **Reactive Retries**: Implemented `Retry.backoff(3, 1s)` for transient network and 5xx errors.
+   - **HttpClient Tuning**: Configured `ConnectionProvider` and `HttpClient` for proactive connection eviction.
    - Token usage extraction from responses
    - Timeout configuration (5 minutes)
 
@@ -113,11 +115,11 @@ This document summarizes all code changes made to implement comprehensive error 
 
 ## Key Features Implemented
 
-### 1. Circuit Breaker
-- **Library**: Resilience4j 2.1.0
-- **Scope**: All GitHub API calls (30+ methods)
-- **Configuration**: 10-call sliding window, 50% failure threshold, 30s wait
-- **Monitoring**: Health indicator registered, events logged
+### 4. Managed Resilience (Enhanced)
+- **Retry Mechanism**: Reactor-based exponential backoff (3 attempts, 1s base) for LLM and GitHub API.
+- **Connection Management**: Netty `HttpClient` tuning with `maxIdleTime` (20s for LLM, 60s for GitHub) and background eviction to prevent "Connection reset by peer" errors.
+- **Circuit Breaker**: Resilience4j 2.1.0 monitors GitHub API with a 10-call sliding window.
+- **Param Resolution Fix**: Explicit `@PathVariable` and `@RequestParam` naming for Spring Boot 3.2 compatibility.
 
 ### 2. Structured Logging
 - **MDC Fields**: correlationId, runId, agentName
@@ -132,12 +134,12 @@ This document summarizes all code changes made to implement comprehensive error 
 - **Workflow**: executions, success, failure, escalation, duration
 - **Fix Loops**: CI attempts, E2E attempts
 
-### 4. Exception Hierarchy
+### 5. Exception Hierarchy
 - **Base**: `OrchestratorException` with recovery strategies
 - **Specialized**: GitHub, LLM, AgentStep, Workflow exceptions
 - **Features**: Error codes, retryable flags, context data
 
-### 5. Correlation ID Propagation
+### 6. Correlation ID Propagation
 - **HTTP Filter**: Automatic ID generation/extraction
 - **MDC**: Thread-local storage
 - **Response Header**: ID returned to client
@@ -276,10 +278,9 @@ groups:
 ## Future Enhancements
 
 ### Short Term
-1. Add retry logic with exponential backoff for LLM calls
-2. Implement rate limiting for LLM API
-3. Add structured JSON logging option
-4. Create Grafana dashboard templates
+1. Implement rate limiting for LLM API
+2. Add structured JSON logging option
+3. Create Grafana dashboard templates
 
 ### Medium Term
 1. Distributed tracing with OpenTelemetry
