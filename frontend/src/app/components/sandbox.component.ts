@@ -2,15 +2,15 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
-    selector: 'app-sandbox',
-    standalone: true,
-    imports: [CommonModule],
-    template: `
+  selector: 'app-sandbox',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
     <div class="sandbox-overlay" *ngIf="isOpen" (click)="close()">
-      <div class="sandbox-panel glass-panel" (click)="$event.stopPropagation()">
+      <div class="sandbox-slide-panel glass-panel" (click)="$event.stopPropagation()">
         <header class="sandbox-header">
           <div class="header-main">
-            <span class="icon">🚀</span>
+            <span class="icon">⚡</span>
             <div>
               <h3>Visionary Sandbox</h3>
               <p>Isolated Environment Execution</p>
@@ -20,24 +20,31 @@ import { CommonModule } from '@angular/common';
         </header>
 
         <div class="sandbox-content">
-          <div class="code-column">
+          <div class="section-container">
             <div class="label">SOURCE CODE</div>
-            <pre><code>{{ code }}</code></pre>
+            <div class="code-editor">
+              <pre><code>{{ code }}</code></pre>
+            </div>
           </div>
           
-          <div class="output-column">
-            <div class="label">EXECUTION OUTPUT</div>
+          <div class="section-container">
+            <div class="label">ATLASIA TERMINAL</div>
             <div class="terminal">
               <div class="terminal-header">
-                <span class="terminal-dot red"></span>
-                <span class="terminal-dot yellow"></span>
-                <span class="terminal-dot green"></span>
-                <span class="terminal-title">atlasia-shell</span>
+                <div class="controls">
+                  <span class="dot red"></span>
+                  <span class="dot yellow"></span>
+                  <span class="dot green"></span>
+                </div>
+                <span class="title">atlasia-shell v1.0.4</span>
               </div>
-              <div class="terminal-body">
-                <div *ngIf="!output" class="waiting">Ready to execute...</div>
-                <div *ngIf="output" class="output-text">{{ output }}</div>
-                <div *ngIf="isRunning" class="cursor">_</div>
+              <div class="terminal-body" #terminalBody>
+                <div *ngIf="!outputLines.length" class="waiting">Ready to execute session...</div>
+                <div *ngFor="let line of outputLines" class="output-line" [ngClass]="line.type">
+                  <span class="prompt" *ngIf="line.type === 'command'">$</span>
+                  {{ line.text }}
+                </div>
+                <div *ngIf="isRunning" class="cursor-line"><span class="cursor">_</span></div>
               </div>
             </div>
             
@@ -45,152 +52,230 @@ import { CommonModule } from '@angular/common';
               {{ isRunning ? 'EXECUTING...' : 'RUN CODE' }}
             </button>
           </div>
+
+          <div class="section-container preview-section" *ngIf="hasHTML()">
+            <div class="label">LIVE PREVIEW</div>
+            <div class="preview-frame glass-panel">
+              <iframe #preview [srcdoc]="code" frameborder="0"></iframe>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   `,
-    styles: [`
+  styles: [`
     .sandbox-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      backdrop-filter: blur(10px);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
       z-index: 1000;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      justify-content: flex-end;
+      opacity: 0;
+      animation: fadeIn 0.3s forwards;
     }
-    .sandbox-panel {
-      width: 90%;
-      max-width: 1200px;
-      height: 80vh;
+    @keyframes fadeIn { to { opacity: 1; } }
+
+    .sandbox-slide-panel {
+      width: 500px;
+      height: 100%;
       display: flex;
       flex-direction: column;
-      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: translateX(100%);
+      animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      border-left: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 0;
     }
-    @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideIn { to { transform: translateX(0); } }
     
     .sandbox-header {
-      padding: 20px 30px;
+      padding: 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: rgba(15, 23, 42, 0.4);
     }
     .header-main { display: flex; gap: 16px; align-items: center; }
-    .header-main .icon { font-size: 2rem; }
-    .header-main h3 { margin: 0; color: #38bdf8; letter-spacing: 0.05em; font-weight: 800; }
-    .header-main p { margin: 2px 0 0; font-size: 0.8rem; color: #64748b; }
+    .header-main .icon { font-size: 1.8rem; text-shadow: 0 0 10px #38bdf8; }
+    .header-main h3 { margin: 0; color: #38bdf8; letter-spacing: 0.05em; font-weight: 800; font-size: 1.1rem; }
+    .header-main p { margin: 2px 0 0; font-size: 0.75rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
     
-    .close-btn { background: transparent; border: none; color: #64748b; font-size: 1.5rem; cursor: pointer; transition: color 0.2s; }
-    .close-btn:hover { color: white; }
+    .close-btn { background: transparent; border: none; color: #64748b; font-size: 1.2rem; cursor: pointer; transition: all 0.2s; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+    .close-btn:hover { color: white; background: rgba(255,255,255,0.05); }
     
     .sandbox-content {
       flex: 1;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 30px;
-      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      padding: 24px;
+      overflow-y: auto;
       min-height: 0;
     }
     
-    .label { font-size: 0.7rem; font-weight: 800; color: #38bdf8; letter-spacing: 0.1em; margin-bottom: 12px; }
+    .section-container { display: flex; flex-direction: column; min-height: 0; flex-shrink: 0; }
+    .preview-section { flex: 1; min-height: 250px; }
+    .label { font-size: 0.65rem; font-weight: 900; color: #38bdf8; letter-spacing: 0.15em; margin-bottom: 12px; opacity: 0.8; }
     
-    .code-column { display: flex; flex-direction: column; min-height: 0; }
-    pre {
-      flex: 1;
-      background: rgba(0,0,0,0.3);
-      padding: 20px;
+    .code-editor {
+      background: rgba(0,0,0,0.4);
+      padding: 16px;
       border-radius: 12px;
-      overflow: auto;
       border: 1px solid rgba(255,255,255,0.05);
-      font-family: 'Fira Code', monospace;
-      font-size: 0.9rem;
-      line-height: 1.6;
+      max-height: 200px;
+      overflow: auto;
     }
+    pre { margin: 0; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.5; color: #e2e8f0; }
     
-    .output-column { display: flex; flex-direction: column; gap: 20px; min-height: 0; }
     .terminal {
-      flex: 1;
-      background: #0f172a;
+      background: #020617;
       border-radius: 12px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      height: 250px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
     }
     .terminal-header {
-      padding: 10px 15px;
+      padding: 10px 16px;
       background: rgba(255,255,255,0.03);
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
     }
-    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .controls { display: flex; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
     .red { background: #ef4444; }
     .yellow { background: #f59e0b; }
     .green { background: #10b981; }
-    .terminal-title { margin-left: 10px; font-size: 0.7rem; color: #64748b; font-family: monospace; }
+    .title { font-size: 0.6rem; color: #475569; font-family: 'Fira Code', monospace; font-weight: 600; }
     
     .terminal-body {
-      padding: 20px;
+      padding: 16px;
       color: #10b981;
       font-family: 'Fira Code', monospace;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       flex: 1;
       overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(56, 189, 248, 0.2) transparent;
     }
-    .waiting { color: #64748b; font-style: italic; }
-    .output-text { white-space: pre-wrap; word-break: break-all; }
-    .cursor { display: inline-block; animation: blink 1s infinite; }
+    .waiting { color: #475569; font-style: italic; }
+    .output-line { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
+    .command { color: #f8fafc; font-weight: 600; }
+    .system { color: #38bdf8; font-style: italic; }
+    .error { color: #ef4444; }
+    .prompt { color: #38bdf8; margin-right: 8px; }
+    .cursor-line { display: flex; align-items: center; height: 1.2rem; }
+    .cursor { display: inline-block; width: 8px; height: 16px; background: #38bdf8; animation: blink 1s infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     
     .run-btn {
-      padding: 18px;
+      margin-top: 16px;
+      padding: 14px;
       border: none;
       border-radius: 12px;
       color: white;
       font-weight: 800;
       letter-spacing: 0.1em;
       cursor: pointer;
+      font-size: 0.85rem;
       transition: all 0.3s;
+      box-shadow: 0 4px 15px -3px rgba(56, 189, 248, 0.4);
     }
-    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .run-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px -3px rgba(56, 189, 248, 0.5); }
+    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+    .preview-frame {
+      flex: 1;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    iframe { width: 100%; height: 100%; }
   `]
 })
 export class SandboxComponent {
-    @Input() code: string = '';
-    @Input() isOpen: boolean = false;
-    @Output() onClose = new EventEmitter<void>();
+  @Input() code: string = '';
+  @Input() isOpen: boolean = false;
+  @Output() onClose = new EventEmitter<void>();
 
-    isRunning = false;
-    output = '';
+  isRunning = false;
+  outputLines: { text: string, type: 'command' | 'stdout' | 'system' | 'error' }[] = [];
 
-    close() {
-        this.onClose.emit();
-    }
+  close() {
+    this.onClose.emit();
+  }
 
-    execute() {
-        this.isRunning = true;
-        this.output = 'Initializing execution environment...\nConnecting to container...\n';
+  hasHTML() {
+    const lowerCode = this.code.toLowerCase();
+    return lowerCode.includes('<!doctype') || lowerCode.includes('<html') || lowerCode.includes('<div');
+  }
+
+  execute() {
+    this.isRunning = true;
+    this.outputLines = [];
+
+    this.addOutput('Initializing Visionary virtualization layer...', 'system');
+
+    setTimeout(() => {
+      this.addOutput(`Loading execution context for: ${this.detectLanguage()}`, 'system');
+
+      setTimeout(() => {
+        this.addOutput(`${this.code.split('\n')[0].substring(0, 40)}...`, 'command');
 
         setTimeout(() => {
-            this.output += '> Executing source code...\n';
-            setTimeout(() => {
-                // Simple simulation of output
-                if (this.code.toLowerCase().includes('print')) {
-                    const lines = this.code.split('\n');
-                    const printLines = lines.filter(l => l.includes('print')).map(l => {
-                        const match = l.match(/print\(['"](.+)['"]\)/);
-                        return match ? match[1] : 'Output from print command';
-                    });
-                    this.output += '\n--- STDOUT ---\n' + printLines.join('\n');
-                } else {
-                    this.output += '\n--- STDOUT ---\nCode executed successfully. No output returned.\n';
-                }
-                this.output += '\nProcess finished with exit code 0';
-                this.isRunning = false;
-            }, 1500);
-        }, 1000);
+          this.runSimulation();
+        }, 800);
+      }, 600);
+    }, 800);
+  }
+
+  private addOutput(text: string, type: 'command' | 'stdout' | 'system' | 'error' = 'stdout') {
+    this.outputLines.push({ text, type });
+    // Auto-scroll logic could be added here if needed via ViewChild
+  }
+
+  private detectLanguage() {
+    if (this.hasHTML()) return 'Web/HTML';
+    if (this.code.includes('import ') || this.code.includes('print(')) return 'Python Script';
+    if (this.code.includes('const ') || this.code.includes('function ')) return 'Node.js/JavaScript';
+    return 'System Shell';
+  }
+
+  private runSimulation() {
+    if (this.code.toLowerCase().includes('print')) {
+      const lines = this.code.split('\n');
+      const printLines = lines.filter(l => l.includes('print')).map(l => {
+        const match = l.match(/print\(['"](.+)['"]\)/);
+        return match ? match[1] : 'Executing print...';
+      });
+
+      printLines.forEach((line, i) => {
+        setTimeout(() => {
+          this.addOutput(line, 'stdout');
+          if (i === printLines.length - 1) this.finish();
+        }, (i + 1) * 300);
+      });
+    } else if (this.hasHTML()) {
+      this.addOutput('Web interface rendered in Live Preview.', 'system');
+      this.finish();
+    } else {
+      this.addOutput('Process executing...', 'system');
+      setTimeout(() => {
+        this.addOutput('Command completed successfully.', 'stdout');
+        this.finish();
+      }, 1000);
     }
+  }
+
+  private finish() {
+    this.addOutput('Session terminated (exit code 0)', 'system');
+    this.isRunning = false;
+  }
 }
