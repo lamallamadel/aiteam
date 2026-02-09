@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorService } from '../services/orchestrator.service';
@@ -58,7 +58,7 @@ interface Message {
       </div>
 
       <!-- Messages List -->
-      <div *ngIf="selectedRun || selectedPersona" class="message-list">
+      <div *ngIf="selectedRun || selectedPersona" class="message-list" #scrollMe>
         <div *ngFor="let msg of messages" class="message" [ngClass]="msg.role">
           <div class="avatar">{{ msg.role === 'user' ? 'U' : (selectedPersona ? 'G' : 'AI') }}</div>
           <div class="bubble">
@@ -66,7 +66,12 @@ interface Message {
             <div *ngIf="msg.orchestrationStep" class="step-indicator">
               <span class="pulse"></span> Executing: {{ msg.orchestrationStep }}
             </div>
-            <div class="timestamp">{{ msg.timestamp | date:'shortTime' }}</div>
+            <div class="message-footer">
+                <span class="timestamp">{{ msg.timestamp | date:'shortTime' }}</span>
+                <button *ngIf="msg.role === 'assistant'" class="copy-btn" (click)="copyToClipboard(msg.text)" title="Copy message">
+                    📋
+                </button>
+            </div>
           </div>
         </div>
         <div *ngIf="isTyping" class="message assistant typing">
@@ -88,7 +93,7 @@ interface Message {
     </div>
   `,
   styles: [`
-    .chat-wrapper { height: 100%; display: flex; flex-direction: column; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; }
+    .chat-wrapper { height: 100%; display: flex; flex-direction: column; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; }
     
     .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
     .header-info { display: flex; align-items: center; gap: 16px; }
@@ -107,7 +112,7 @@ interface Message {
     .form-group input:focus { border-color: #38bdf8; }
     .start-btn { padding: 16px; margin-top: 20px; font-size: 1.1rem; }
     
-    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; }
+    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; max-height: 100%; }
     .message { display: flex; gap: 12px; max-width: 85%; }
     .message.user { align-self: flex-end; flex-direction: row-reverse; }
     .avatar { width: 36px; height: 36px; border-radius: 50%; background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; color: #38bdf8; flex-shrink: 0; }
@@ -117,8 +122,11 @@ interface Message {
     .message.user .bubble { background: #0ea5e9; color: white; border: none; border-bottom-right-radius: 2px; }
     .message.assistant .bubble { border-bottom-left-radius: 2px; }
     .message-text { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; }
-    .timestamp { font-size: 0.7rem; color: #64748b; margin-top: 6px; text-align: right; }
+    .message-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 12px; }
+    .timestamp { font-size: 0.7rem; color: #64748b; }
     .message.user .timestamp { color: rgba(255,255,255,0.7); }
+    .copy-btn { background: transparent; border: none; cursor: pointer; font-size: 1rem; opacity: 0.4; transition: opacity 0.2s; padding: 0; display: flex; align-items: center; }
+    .copy-btn:hover { opacity: 1; }
     
     .step-indicator { margin-top: 10px; padding: 8px; background: rgba(56, 189, 248, 0.1); border-radius: 6px; font-size: 0.8rem; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
     .pulse { width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: pulse 1.5s infinite; }
@@ -137,16 +145,22 @@ interface Message {
     .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
   `]
 })
-export class ChatInterfaceComponent implements OnChanges {
+export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   @Input() selectedRun?: RunResponse;
   @Input() selectedPersona?: string;
+
+  @ViewChild('scrollMe') private myScrollContainer!: ElementRef;
 
   messages: Message[] = [];
   newRequest: RunRequest = { repo: 'lamallamadel/orchistrateur', issueNumber: 1, mode: 'PLANNING' };
   feedbackText: string = '';
   isTyping = false;
+  private shouldScroll = false;
 
-  constructor(private orchestratorService: OrchestratorService) { }
+  constructor(
+    private orchestratorService: OrchestratorService,
+    private cdr: ChangeDetectorRef
+  ) { }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['selectedRun'] && this.selectedRun) {
@@ -158,6 +172,20 @@ export class ChatInterfaceComponent implements OnChanges {
     } else if (!this.selectedRun && !this.selectedPersona) {
       this.messages = [];
     }
+    this.shouldScroll = true;
+  }
+
+  ngAfterViewChecked() {
+    if (this.shouldScroll) {
+      this.scrollToBottom();
+      this.shouldScroll = false;
+    }
+  }
+
+  scrollToBottom(): void {
+    try {
+      this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
+    } catch (err) { }
   }
 
   initPersonaChat() {
@@ -186,6 +214,8 @@ export class ChatInterfaceComponent implements OnChanges {
         text: `Starting orchestration for ${this.selectedRun?.repo} #${this.selectedRun?.issueNumber}`,
         timestamp: this.selectedRun!.createdAt
       });
+      this.shouldScroll = true;
+      this.cdr.detectChanges();
     });
   }
 
@@ -207,6 +237,7 @@ export class ChatInterfaceComponent implements OnChanges {
     this.messages.push(userMsg);
     const textToChat = this.feedbackText;
     this.feedbackText = '';
+    this.shouldScroll = true;
 
     if (this.selectedPersona) {
       this.isTyping = true;
@@ -217,7 +248,18 @@ export class ChatInterfaceComponent implements OnChanges {
           text: res.response,
           timestamp: new Date().toISOString()
         });
+        this.shouldScroll = true;
+        this.cdr.detectChanges();
       });
+    }
+  }
+
+  async copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Optional: Add a brief snackbar or tooltip feedback here
+    } catch (err) {
+      console.error('Failed to copy: ', err);
     }
   }
 }
