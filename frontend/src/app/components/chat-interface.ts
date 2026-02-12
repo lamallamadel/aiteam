@@ -34,6 +34,11 @@ interface Message {
           </div>
         </div>
         <div class="header-actions">
+            <button class="voice-toggle-btn" [class.enabled]="isVoiceEnabled" 
+                    (click)="isVoiceEnabled = !isVoiceEnabled" 
+                    [title]="isVoiceEnabled ? 'Disable Voice' : 'Enable Voice'">
+              {{ isVoiceEnabled ? '🔊' : '🔇' }}
+            </button>
             <span class="status-badge" [ngClass]="selectedPersona ? 'gem' : 'run'">
                 {{ selectedPersona ? 'Direct Chat' : selectedRun?.status }}
             </span>
@@ -258,6 +263,23 @@ interface Message {
       transition: all 0.2s;
     }
     .visionary-btn:hover { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
+
+    .voice-toggle-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 12px;
+      transition: all 0.2s;
+      font-size: 1rem;
+    }
+    .voice-toggle-btn:hover { background: rgba(255,255,255,0.1); }
+    .voice-toggle-btn.enabled { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
   `]
 })
 export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
@@ -281,6 +303,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   errorMessage = '';
   isSandboxOpen = false;
   sandboxCode = '';
+  isVoiceEnabled = false;
 
   isRecording = false;
   private recognition: any;
@@ -503,10 +526,20 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   }
 
   speak(text: string) {
-    if (!window.speechSynthesis) return;
+    if (!window.speechSynthesis || !this.isVoiceEnabled) return;
 
-    // Clean text for speech (remove markdown code blocks)
-    const cleanText = text.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '');
+    // Stop existing speech if any
+    window.speechSynthesis.cancel();
+
+    // Clean text for speech:
+    // 1. Remove code blocks
+    // 2. Remove inline code
+    // 3. Remove markdown headers, bold, italics, asterisks
+    const cleanText = text
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/[#*_\-~\[\]\(\)]/g, '') // Remove markdown special chars
+      .trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 1;
