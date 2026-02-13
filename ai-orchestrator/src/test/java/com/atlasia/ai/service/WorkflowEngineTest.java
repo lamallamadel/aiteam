@@ -4,7 +4,9 @@ import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.exception.OrchestratorException;
+import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import com.atlasia.ai.service.trace.TraceEventService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,6 +54,12 @@ class WorkflowEngineTest {
         @Mock
         private OrchestratorMetrics metrics;
 
+        @Mock
+        private WorkflowEventBus eventBus;
+
+        @Mock
+        private TraceEventService traceEventService;
+
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
 
@@ -67,7 +75,9 @@ class WorkflowEngineTest {
                                 personaReviewService,
                                 testerStep,
                                 writerStep,
-                                metrics);
+                                metrics,
+                                eventBus,
+                                traceEventService);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
