@@ -7,7 +7,7 @@
 .classpath
 .project
 .settings/
-
+.claude/
 # Node/Frontend
 node_modules/
 dist/
