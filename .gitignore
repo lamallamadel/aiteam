@@ -34,3 +34,6 @@ logs/
 
 # Escalation insights
 insights/
+
+# envirenements secrets
+.env
