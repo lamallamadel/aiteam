@@ -3,7 +3,9 @@ package com.atlasia.ai.service;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import com.atlasia.ai.service.trace.TraceEventService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +60,12 @@ class WorkflowEngineIntegrationTest {
         @MockBean
         private OrchestratorMetrics metrics;
 
+        @MockBean
+        private WorkflowEventBus eventBus;
+
+        @MockBean
+        private TraceEventService traceEventService;
+
         private WorkflowEngine workflowEngine;
 
         @org.springframework.context.annotation.Configuration
@@ -73,7 +81,9 @@ class WorkflowEngineIntegrationTest {
                                 PersonaReviewService personaReviewService,
                                 TesterStep testerStep,
                                 WriterStep writerStep,
-                                OrchestratorMetrics metrics) {
+                                OrchestratorMetrics metrics,
+                                WorkflowEventBus eventBus,
+                                TraceEventService traceEventService) {
                         return new WorkflowEngine(
                                         runRepository,
                                         schemaValidator,
@@ -84,7 +94,9 @@ class WorkflowEngineIntegrationTest {
                                         personaReviewService,
                                         testerStep,
                                         writerStep,
-                                        metrics);
+                                        metrics,
+                                        eventBus,
+                                        traceEventService);
                 }
         }
 
@@ -100,7 +112,9 @@ class WorkflowEngineIntegrationTest {
                                 personaReviewService,
                                 testerStep,
                                 writerStep,
-                                metrics);
+                                metrics,
+                                eventBus,
+                                traceEventService);
 
                 when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
                 when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
