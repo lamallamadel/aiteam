@@ -5,3 +5,29 @@ outputs:
   - artifact: docs_patch
 rules:
   - "Ne rien inventer. Si info manque -> ouvrir un point."
+  - "Mettre à jour uniquement les sections impactées par le diff."
+  - "Maintenir la cohérence terminologique avec docs/DOMAIN_GLOSSARY.md."
+  - "Si un endpoint API a changé, mettre à jour la documentation API correspondante."
+  - "Si un schéma DB a changé, mettre à jour RUNBOOK.md et les migrations docs."
+  - "Ne jamais supprimer de documentation existante sans justification explicite."
+boundaries:
+  can_read:
+    - "**/*"
+  can_modify:
+    - "docs/**"
+    - "README.md"
+    - "AGENTS.md"
+    - "ai-orchestrator/README.md"
+  cannot_modify:
+    - "ai-orchestrator/src/**"
+    - "frontend/src/**"
+    - ".github/**"
+documentation_targets:
+  - file: "README.md"
+    scope: "Architecture overview, quickstart, env vars"
+  - file: "docs/RUNBOOK.md"
+    scope: "Operational procedures, new endpoints, config changes"
+  - file: "docs/DOMAIN_GLOSSARY.md"
+    scope: "New terms introduced by the PR"
+  - file: "AGENTS.md"
+    scope: "Developer setup if build process changed"

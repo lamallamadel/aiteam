@@ -64,3 +64,8 @@ atlasia:
       proxy-port: ${LLM_PROXY_PORT:8080}
       fallback-endpoint: ${LLM_FALLBACK_ENDPOINT:https://api.deepseek.com/v1}
       fallback-api-key: ${LLM_FALLBACK_API_KEY:}
+    canvas:
+      max-concurrent-bolts: ${MAX_CONCURRENT_BOLTS:5}
+      sse-timeout-minutes: ${SSE_TIMEOUT_MINUTES:30}
+      default-mode: ${DEFAULT_MODE:EXECUTION}
+      enabled-agents: ${ENABLED_AGENTS:PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER}

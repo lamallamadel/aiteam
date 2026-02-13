@@ -1,13 +1,15 @@
 name: orchestrator
 mission: "Router les tâches vers les agents spécialisés et appliquer les Quality Gates."
 workflow:
+  - pm
   - qualifier
   - architect
   - developer
+  - review
   - tester
   - writer
-  - pm
 gates_source: "docs/QUALITY_GATES.md"
+glossary_source: "docs/DOMAIN_GLOSSARY.md"
 escalation_schema: "ai/schemas/escalation.schema.json"
 max_iterations:
   ci_fix_loops: 3
@@ -15,4 +17,23 @@ max_iterations:
 policies:
   - "PR obligatoire, pas de commit direct sur main."
   - "Aucune modification dans .github/workflows sans escalade humaine."
-  - "Allowlist chemins modifiables: backend/**, frontend/**, docs/**, infra/**, ai/** (sauf workflows)."
+  - "Allowlist chemins modifiables: ai-orchestrator/src/**, frontend/src/**, docs/**, infra/**, ai/** (sauf workflows)."
+  - "Chaque artifact doit être validé contre son JSON schema avant passage à l'étape suivante."
+  - "Si un agent dépasse 3 tentatives LLM sans résultat valide, escalader."
+  - "Les bolts (runs) sont tracés via SSE et persistés en base."
+boundaries:
+  protected_paths:
+    - ".github/workflows/"
+  allowed_paths:
+    - "ai-orchestrator/src/"
+    - "frontend/src/"
+    - "docs/"
+    - "infra/"
+    - "ai/"
+  max_files_per_commit: 100
+  max_file_size_bytes: 1048576
+personas:
+  - aabo
+  - aksil
+  - imad
+  - tiziri

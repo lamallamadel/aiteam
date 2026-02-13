@@ -11,11 +11,14 @@ import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.GitHubApiClient;
 import com.atlasia.ai.service.WorkflowEngine;
+import com.atlasia.ai.service.event.WorkflowEventBus;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,13 +33,16 @@ public class RunController {
     private final OrchestratorProperties props;
     private final WorkflowEngine workflowEngine;
     private final GitHubApiClient gitHubApiClient;
+    private final WorkflowEventBus eventBus;
 
     public RunController(RunRepository runRepository, OrchestratorProperties props,
-            WorkflowEngine workflowEngine, GitHubApiClient gitHubApiClient) {
+            WorkflowEngine workflowEngine, GitHubApiClient gitHubApiClient,
+            WorkflowEventBus eventBus) {
         this.runRepository = runRepository;
         this.props = props;
         this.workflowEngine = workflowEngine;
         this.gitHubApiClient = gitHubApiClient;
+        this.eventBus = eventBus;
     }
 
     @GetMapping
@@ -109,6 +115,28 @@ public class RunController {
                         .collect(Collectors.toList()))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping(value = "/{id}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamRun(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(value = "token", required = false) String queryToken,
+            @PathVariable("id") UUID id) {
+        String effectiveAuth = authorization != null ? authorization :
+                (queryToken != null ? "Bearer " + queryToken : null);
+        if (getValidatedToken(effectiveAuth) == null) {
+            SseEmitter emitter = new SseEmitter(0L);
+            emitter.completeWithError(new SecurityException("Unauthorized"));
+            return emitter;
+        }
+
+        return runRepository.findById(id)
+                .map(run -> eventBus.registerEmitter(id))
+                .orElseGet(() -> {
+                    SseEmitter emitter = new SseEmitter(0L);
+                    emitter.completeWithError(new IllegalArgumentException("Run not found: " + id));
+                    return emitter;
+                });
     }
 
     @PostMapping("/{id}/escalation-decision")

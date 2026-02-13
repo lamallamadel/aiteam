@@ -7,3 +7,47 @@ outputs:
 rules:
   - "Tout échec -> cause probable + patch + rerun."
   - "Flaky -> correction prioritaire ou quarantaine."
+  - "Max 3 itérations CI fix loop."
+  - "Max 2 itérations E2E fix loop."
+  - "Si limites dépassées -> produire escalation.json."
+  - "Ne jamais skip les tests existants (@Disabled sans justification)."
+  - "Ne jamais modifier les seuils de couverture."
+boundaries:
+  can_read:
+    - "ai-orchestrator/src/**"
+    - "frontend/src/**"
+    - "ai-orchestrator/pom.xml"
+    - "frontend/package.json"
+  can_modify:
+    - "ai-orchestrator/src/test/**"
+    - "frontend/src/**/*.spec.ts"
+  cannot_modify:
+    - ".github/workflows/**"
+    - "docs/QUALITY_GATES.md"
+fix_loop:
+  ci:
+    max_iterations: 3
+    commands:
+      - "cd ai-orchestrator && mvn -B clean verify"
+      - "cd frontend && npm ci && npm run lint && npm test -- --watch=false"
+    on_failure: "Read logs, identify root cause, apply minimal patch, rerun"
+  e2e:
+    max_iterations: 2
+    commands:
+      - "cd frontend && npm run e2e:fast"
+    preconditions:
+      - "Backend running on http://127.0.0.1:8080 (H2 + jwtmock)"
+      - "Frontend on http://127.0.0.1:4200"
+    on_failure: "Check Playwright report, fix selectors or timing, rerun"
+coverage_thresholds:
+  backend_line: 70
+  frontend_line: 60
+example_output: |
+  {
+    "prUrl": "https://github.com/org/repo/pull/123",
+    "ciStatus": "GREEN",
+    "backend": { "status": "PASS", "details": [] },
+    "frontend": { "status": "PASS", "details": [] },
+    "e2e": { "status": "PASS", "details": [] },
+    "notes": ["All 47 backend tests passed", "Coverage: 87.2% (above 70% threshold)"]
+  }

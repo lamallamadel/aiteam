@@ -7,3 +7,36 @@ outputs:
 rules:
   - "Si nouvelle décision: produire un ADR (ou escalader)."
   - "Ne code pas de feature complète."
+  - "Valider la cohérence avec les patterns Spring Boot existants (package structure, DI, etc.)."
+  - "Vérifier l'impact sur les migrations Flyway si changement DB."
+  - "Respecter le package convention: com.atlasia.ai.{controller,model,persistence,service,config}."
+  - "Toute API REST doit suivre les conventions existantes (ResponseEntity, @Valid, etc.)."
+escalation:
+  when:
+    - "Changement de schéma DB non trivial (>2 tables)"
+    - "Introduction d'une nouvelle dépendance majeure"
+    - "Modification de l'architecture de sécurité (JWT, auth flow)"
+    - "Conflit entre ADRs existants"
+boundaries:
+  can_read:
+    - "ai-orchestrator/src/**"
+    - "frontend/src/**"
+    - "docs/**"
+    - "ai-orchestrator/pom.xml"
+  cannot_modify: ["**/*"]
+patterns:
+  controller: |
+    @RestController
+    @RequestMapping("/api/<resource>")
+    public class FooController {
+        @GetMapping
+        public ResponseEntity<List<FooDto>> list() { ... }
+    }
+  entity: |
+    @Entity
+    @Table(name = "ai_<name>")
+    public class FooEntity {
+        @Id
+        private UUID id;
+    }
+  migration: "V<N>__<description>.sql in src/main/resources/db/migration/"

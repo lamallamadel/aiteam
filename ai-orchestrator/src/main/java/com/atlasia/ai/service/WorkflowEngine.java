@@ -4,10 +4,13 @@ import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.event.WorkflowEvent;
+import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.exception.OrchestratorException;
 import com.atlasia.ai.service.exception.WorkflowException;
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import com.atlasia.ai.service.trace.TraceEventService;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +27,8 @@ import java.util.UUID;
 public class WorkflowEngine {
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
+    private static final int TOTAL_STEPS = 7;
+
     private final RunRepository runRepository;
     private final JsonSchemaValidator schemaValidator;
     private final PmStep pmStep;
@@ -34,6 +39,8 @@ public class WorkflowEngine {
     private final TesterStep testerStep;
     private final WriterStep writerStep;
     private final OrchestratorMetrics metrics;
+    private final WorkflowEventBus eventBus;
+    private final TraceEventService traceEventService;
 
     @Autowired
     @Lazy
@@ -49,7 +56,9 @@ public class WorkflowEngine {
             PersonaReviewService personaReviewService,
             TesterStep testerStep,
             WriterStep writerStep,
-            OrchestratorMetrics metrics) {
+            OrchestratorMetrics metrics,
+            WorkflowEventBus eventBus,
+            TraceEventService traceEventService) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
         this.pmStep = pmStep;
@@ -60,6 +69,8 @@ public class WorkflowEngine {
         this.testerStep = testerStep;
         this.writerStep = writerStep;
         this.metrics = metrics;
+        this.eventBus = eventBus;
+        this.traceEventService = traceEventService;
     }
 
     @Async("workflowExecutor")
@@ -99,12 +110,19 @@ public class WorkflowEngine {
 
             RunContext context = new RunContext(runEntity, owner, repo);
 
+            emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
             executePmStep(context);
+            emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
             executeQualifierStep(context);
+            emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
             executeArchitectStep(context);
+            emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
             executeDeveloperStep(context);
+            emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
             executePersonaReview(context);
+            emitStatus(runId, "IN_PROGRESS", "TESTER", progressPercent(5));
             executeTesterStep(context);
+            emitStatus(runId, "IN_PROGRESS", "WRITER", progressPercent(6));
             executeWriterStep(context);
 
             runEntity.setStatus(RunStatus.DONE);
@@ -115,6 +133,10 @@ public class WorkflowEngine {
             workflowTimer.stop(metrics.getWorkflowDuration());
             metrics.recordWorkflowSuccess(duration);
 
+            emitStatus(runId, "DONE", null, 100.0);
+            traceEventService.cleanup(runId);
+            eventBus.completeEmitters(runId);
+
             log.info("Workflow completed successfully: runId={}, duration={}ms, correlationId={}",
                     runEntity.getId(), duration, CorrelationIdHolder.getCorrelationId());
 
@@ -123,24 +145,40 @@ public class WorkflowEngine {
             workflowTimer.stop(metrics.getWorkflowDuration());
             metrics.recordWorkflowEscalation(duration);
             handleEscalation(runEntity, e);
+            emitAndTrace(runId, new WorkflowEvent.EscalationRaised(
+                    runId, Instant.now(), runEntity.getCurrentAgent(), e.getMessage()));
+            traceEventService.cleanup(runId);
+            eventBus.completeEmitters(runId);
         } catch (OrchestratorException e) {
             long duration = System.currentTimeMillis() - startTime;
             workflowTimer.stop(metrics.getWorkflowDuration());
             metrics.recordWorkflowFailure(duration);
             handleOrchestratorException(runEntity, e);
+            emitAndTrace(runId, new WorkflowEvent.WorkflowError(
+                    runId, Instant.now(), runEntity.getCurrentAgent(), e.getErrorCode(), e.getMessage()));
+            traceEventService.cleanup(runId);
+            eventBus.completeEmitters(runId);
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             workflowTimer.stop(metrics.getWorkflowDuration());
             metrics.recordWorkflowFailure(duration);
             handleFailure(runEntity, e);
+            emitAndTrace(runId, new WorkflowEvent.WorkflowError(
+                    runId, Instant.now(), runEntity.getCurrentAgent(),
+                    e.getClass().getSimpleName(), e.getMessage()));
+            traceEventService.cleanup(runId);
+            eventBus.completeEmitters(runId);
         }
     }
 
     private void executePmStep(RunContext context) throws Exception {
         String agentName = "PM";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing PM step: runId={}, correlationId={}",
@@ -153,6 +191,8 @@ public class WorkflowEngine {
 
             String artifact = pmStep.execute(context);
             schemaValidator.validate(artifact, "ticket_plan.schema.json");
+            emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
+                    runId, Instant.now(), agentName, "ticket_plan.schema.json", true));
 
             context.setTicketPlan(artifact);
             persistArtifact(runEntity, agentName, "ticket_plan.json", artifact);
@@ -160,6 +200,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "ticket_plan.json"));
 
             log.info("PM step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
@@ -178,9 +221,12 @@ public class WorkflowEngine {
 
     private void executeQualifierStep(RunContext context) throws Exception {
         String agentName = "QUALIFIER";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing Qualifier step: runId={}, correlationId={}",
@@ -193,6 +239,8 @@ public class WorkflowEngine {
 
             String artifact = qualifierStep.execute(context);
             schemaValidator.validate(artifact, "work_plan.schema.json");
+            emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
+                    runId, Instant.now(), agentName, "work_plan.schema.json", true));
 
             context.setWorkPlan(artifact);
             persistArtifact(runEntity, agentName, "work_plan.json", artifact);
@@ -200,6 +248,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "work_plan.json"));
 
             log.info("Qualifier step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
@@ -218,9 +269,12 @@ public class WorkflowEngine {
 
     private void executeArchitectStep(RunContext context) throws Exception {
         String agentName = "ARCHITECT";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing Architect step: runId={}, correlationId={}",
@@ -237,6 +291,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "architecture_notes.md"));
 
             log.info("Architect step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
@@ -255,9 +312,12 @@ public class WorkflowEngine {
 
     private void executeDeveloperStep(RunContext context) throws Exception {
         String agentName = "DEVELOPER";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "generate"));
 
         try {
             log.info("Executing Developer step (code generation only): runId={}, correlationId={}",
@@ -273,6 +333,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "generate", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "code_changes"));
 
             log.info("Developer step (code generation) completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
@@ -291,9 +354,12 @@ public class WorkflowEngine {
 
     private void executePersonaReview(RunContext context) throws Exception {
         String agentName = "REVIEW";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing Persona Review step: runId={}, correlationId={}",
@@ -316,6 +382,8 @@ public class WorkflowEngine {
             String reportJson = serializeReviewReport(report);
 
             schemaValidator.validate(reportJson, "persona_review.schema.json");
+            emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
+                    runId, Instant.now(), agentName, "persona_review.schema.json", true));
 
             persistArtifact(runEntity, agentName, "persona_review_report", reportJson);
 
@@ -325,6 +393,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "persona_review_report"));
 
             log.info(
                     "Persona Review step completed: runId={}, duration={}ms, findings={}, securityFixesApplied={}, prUrl={}, correlationId={}",
@@ -345,9 +416,12 @@ public class WorkflowEngine {
 
     private void executeTesterStep(RunContext context) throws Exception {
         String agentName = "TESTER";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing Tester step: runId={}, correlationId={}",
@@ -360,12 +434,17 @@ public class WorkflowEngine {
 
             String artifact = testerStep.execute(context);
             schemaValidator.validate(artifact, "test_report.schema.json");
+            emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
+                    runId, Instant.now(), agentName, "test_report.schema.json", true));
 
             persistArtifact(runEntity, agentName, "test_report.json", artifact);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "test_report.json"));
 
             log.info("Tester step completed: runId={}, duration={}ms, ciFixCount={}, e2eFixCount={}, correlationId={}",
                     context.getRunEntity().getId(), duration, runEntity.getCiFixCount(),
@@ -385,9 +464,12 @@ public class WorkflowEngine {
 
     private void executeWriterStep(RunContext context) throws Exception {
         String agentName = "WRITER";
+        UUID runId = context.getRunEntity().getId();
         CorrelationIdHolder.setAgentName(agentName);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
+
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
 
         try {
             log.info("Executing Writer step: runId={}, correlationId={}",
@@ -404,6 +486,9 @@ public class WorkflowEngine {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
             metrics.recordAgentStepExecution(agentName, "execute", duration);
+
+            emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                    runId, Instant.now(), agentName, duration, "docs_update"));
 
             log.info("Writer step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
@@ -577,5 +662,21 @@ public class WorkflowEngine {
             log.error("Failed to persist error artifact: runId={}, correlationId={}",
                     runEntity.getId(), CorrelationIdHolder.getCorrelationId(), persistError);
         }
+    }
+
+    private void emitStatus(UUID runId, String status, String currentAgent, double progress) {
+        WorkflowEvent.WorkflowStatusUpdate event = new WorkflowEvent.WorkflowStatusUpdate(
+                runId, Instant.now(), status, currentAgent, progress);
+        eventBus.emit(runId, event);
+        traceEventService.recordEvent(event);
+    }
+
+    private double progressPercent(int completedSteps) {
+        return (completedSteps * 100.0) / TOTAL_STEPS;
+    }
+
+    private void emitAndTrace(UUID runId, WorkflowEvent event) {
+        eventBus.emit(runId, event);
+        traceEventService.recordEvent(event);
     }
 }

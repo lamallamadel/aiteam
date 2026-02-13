@@ -23,7 +23,7 @@ interface Run {
   template: `
     <div class="run-list-container">
       <div class="header">
-        <h2>Run History</h2>
+        <h2>Bolt History</h2>
         <div class="filters">
           <select [ngModel]="statusFilter()" (ngModelChange)="onStatusFilterChange($event)" class="filter-select glass-panel">
             <option value="">All Statuses</option>

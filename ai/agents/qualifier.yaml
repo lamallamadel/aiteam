@@ -7,3 +7,43 @@ outputs:
 rules:
   - "Convertir le flou en critères testables."
   - "Toute hypothèse doit être explicitée + associée à un test."
+  - "Le branchName doit suivre le pattern: ai/issue-<num>-<slug>"
+  - "Minimum 3 tâches dans le plan de travail."
+  - "Chaque tâche doit lister les fichiers probables et les tests associés."
+  - "Les commandes de vérification doivent être exactes et exécutables."
+boundaries:
+  can_read:
+    - "docs/**"
+    - "ai/schemas/work_plan.schema.json"
+    - "ai-orchestrator/src/**"
+    - "frontend/src/**"
+  cannot_modify: ["**/*"]
+verification_commands:
+  backend: "cd ai-orchestrator && mvn -B clean verify"
+  frontend_lint: "cd frontend && npm run lint"
+  frontend_test: "cd frontend && npm test -- --watch=false"
+  e2e: "cd frontend && npm run e2e:fast"
+example_output: |
+  {
+    "branchName": "ai/issue-42-jwt-refresh-rotation",
+    "tasks": [
+      {
+        "id": "T1",
+        "area": "backend",
+        "description": "Add RefreshTokenRotationService with atomic token swap",
+        "filesLikely": ["ai-orchestrator/src/main/java/com/atlasia/ai/service/AuthService.java"],
+        "tests": ["RefreshTokenRotationTest: should_invalidate_old_token_after_rotation"]
+      }
+    ],
+    "commands": {
+      "backendVerify": "cd ai-orchestrator && mvn -B clean verify",
+      "frontendLint": "cd frontend && npm run lint",
+      "frontendTest": "cd frontend && npm test -- --watch=false",
+      "e2e": "cd frontend && npm run e2e:fast"
+    },
+    "definitionOfDone": [
+      "All unit tests pass",
+      "No regression in existing test suite",
+      "Coverage thresholds maintained (>=70% backend, >=60% frontend)"
+    ]
+  }

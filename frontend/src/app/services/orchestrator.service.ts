@@ -34,4 +34,15 @@ export class OrchestratorService {
     chat(personaName: string, message: string): Observable<ChatResponse> {
         return this.http.post<ChatResponse>(`/api/chat/${personaName}`, { message });
     }
+
+    getRunArtifacts(id: string): Observable<ArtifactResponse[]> {
+        return this.http.get<ArtifactResponse[]>(`${this.apiUrl}/${id}/artifacts`);
+    }
+
+    resolveEscalation(runId: string, decision: string, guidance?: string): Observable<void> {
+        return this.http.post<void>(`${this.apiUrl}/${runId}/escalation-decision`, {
+            decision,
+            guidance: guidance || ''
+        });
+    }
 }

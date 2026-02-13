@@ -3,25 +3,32 @@
     <h1 class="accent-gradient">Atlasia AI</h1>
     <nav>
       <div class="nav-section">
-        <span class="section-title">Orchestration</span>
-        <a routerLink="/chat" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">Active Run</a>
-        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Dashboard</a>
+        <span class="section-title">Code Mode</span>
+        <a routerLink="/chat" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">New Bolt</a>
+        <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Overview</a>
         <a routerLink="/runs" routerLinkActive="active" class="nav-item">History</a>
+        <a routerLink="/oversight" routerLinkActive="active" class="nav-item">Oversight</a>
       </div>
 
       <div class="nav-section">
-        <span class="section-title">Gems</span>
-        <a *ngFor="let gem of personas" 
-           [routerLink]="['/chat', 'gem', gem.name.toLowerCase()]" 
-           routerLinkActive="active" 
+        <span class="section-title">Chat Mode</span>
+        <a *ngFor="let gem of personas"
+           [routerLink]="['/chat', 'gem', gem.name.toLowerCase()]"
+           routerLinkActive="active"
            class="nav-item gem-item">
            <span class="gem-icon">💎</span> {{ gem.name }}
         </a>
       </div>
-      
+
       <div class="nav-section">
         <span class="section-title">Insights</span>
         <a routerLink="/analytics" routerLinkActive="active" class="nav-item">Analytics</a>
+      </div>
+
+      <div class="nav-section">
+        <span class="section-title">Configuration</span>
+        <a routerLink="/config/agents" routerLinkActive="active" class="nav-item">Agent Logic</a>
+        <a routerLink="/config/oversight" routerLinkActive="active" class="nav-item">Oversight Rules</a>
       </div>
     </nav>
   </aside>

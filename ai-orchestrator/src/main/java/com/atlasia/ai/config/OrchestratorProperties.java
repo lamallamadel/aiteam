@@ -8,7 +8,8 @@ public record OrchestratorProperties(
                 String repoAllowlist,
                 String workflowProtectPrefix,
                 GitHub github,
-                Llm llm) {
+                Llm llm,
+                Canvas canvas) {
         public record GitHub(
                         String appId,
                         String privateKeyPath,
@@ -23,5 +24,12 @@ public record OrchestratorProperties(
                         Integer proxyPort,
                         String fallbackEndpoint,
                         String fallbackApiKey) {
+        }
+
+        public record Canvas(
+                        int maxConcurrentBolts,
+                        int sseTimeoutMinutes,
+                        String defaultMode,
+                        java.util.List<String> enabledAgents) {
         }
 }
