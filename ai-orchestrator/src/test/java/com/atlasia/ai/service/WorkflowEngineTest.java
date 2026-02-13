@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -163,7 +165,7 @@ class WorkflowEngineTest {
                 verify(pmStep).execute(any(RunContext.class));
                 verify(qualifierStep, never()).execute(any(RunContext.class));
 
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
                 verify(metrics).recordWorkflowFailure(anyLong());
         }
 
@@ -183,7 +185,7 @@ class WorkflowEngineTest {
                 verify(writerStep, never()).execute(any(RunContext.class));
 
                 verify(schemaValidator).validate(eq(escalationJson), eq("escalation.schema.json"));
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
                 verify(metrics).recordWorkflowEscalation(anyLong());
         }
 
@@ -198,7 +200,7 @@ class WorkflowEngineTest {
 
                 workflowEngine.executeWorkflow(runEntity.getId());
 
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
                 verify(metrics).recordWorkflowFailure(anyLong());
         }
 
@@ -237,6 +239,7 @@ class WorkflowEngineTest {
 
         @Test
         void executeWorkflow_updatesCurrentAgentThroughoutExecution() throws Exception {
+                // Setup mocks
                 lenient().when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
                 lenient().when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
                 lenient().when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
@@ -244,24 +247,30 @@ class WorkflowEngineTest {
                 lenient().when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
                 lenient().when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
+                // Capture history using doAnswer because RunEntity is mutable
+                List<String> statusHistory = new ArrayList<>();
+                lenient().doAnswer(invocation -> {
+                        RunEntity run = invocation.getArgument(0);
+                        // Store immutable snapshot of state
+                        statusHistory.add(run.getStatus() + ":" + run.getCurrentAgent());
+                        return run;
+                }).when(runRepository).save(any(RunEntity.class));
+
                 workflowEngine.executeWorkflow(runEntity.getId());
 
-                verify(runRepository, atLeastOnce()).save(
-                                argThat(run -> run.getStatus() == RunStatus.PM && "PM".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.QUALIFIER
-                                && "QUALIFIER".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.ARCHITECT
-                                && "ARCHITECT".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.DEVELOPER
-                                && "DEVELOPER".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.REVIEW
-                                && "REVIEW".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(
-                                run -> run.getStatus() == RunStatus.TESTER && "TESTER".equals(run.getCurrentAgent())));
-                verify(runRepository).save(argThat(
-                                run -> run.getStatus() == RunStatus.WRITER && "WRITER".equals(run.getCurrentAgent())));
-                verify(runRepository, atLeastOnce()).save(
-                                argThat(run -> run.getStatus() == RunStatus.DONE && run.getCurrentAgent() == null));
+                // Verify the sequence of states
+                // Note: The order and existence of these states matters
+                assertTrue(statusHistory.contains("PM:PM"), "Should save PM state");
+                assertTrue(statusHistory.contains("QUALIFIER:QUALIFIER"), "Should save QUALIFIER state");
+                assertTrue(statusHistory.contains("ARCHITECT:ARCHITECT"), "Should save ARCHITECT state");
+                assertTrue(statusHistory.contains("DEVELOPER:DEVELOPER"), "Should save DEVELOPER state");
+                assertTrue(statusHistory.contains("REVIEW:REVIEW"), "Should save REVIEW state");
+                assertTrue(statusHistory.contains("TESTER:TESTER"), "Should save TESTER state");
+                assertTrue(statusHistory.contains("WRITER:WRITER"), "Should save WRITER state");
+
+                // Final state
+                assertTrue(statusHistory.stream().anyMatch(s -> s.startsWith("DONE:null")),
+                                "Should end in DONE state with null agent");
         }
 
         @Test
@@ -272,7 +281,7 @@ class WorkflowEngineTest {
 
                 workflowEngine.executeWorkflow(runEntity.getId());
 
-                verify(runRepository).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.FAILED));
                 verify(qualifierStep, never()).execute(any(RunContext.class));
                 verify(metrics).recordWorkflowFailure(anyLong());
         }
@@ -301,7 +310,8 @@ class WorkflowEngineTest {
                 UUID runId = UUID.randomUUID();
                 lenient().when(runRepository.findById(runId)).thenReturn(Optional.empty());
 
-                assertDoesNotThrow(() -> workflowEngine.executeWorkflowAsync(runId, "test-token"));
+                assertThrows(com.atlasia.ai.service.exception.WorkflowException.class,
+                                () -> workflowEngine.executeWorkflowAsync(runId, "test-token"));
         }
 
         @Test

@@ -176,6 +176,7 @@ class DeveloperStepTest {
 
         @Test
         void testValidateCodeChanges_rejectsProtectedWorkflowFiles() {
+                lenient().when(properties.repoAllowlist()).thenReturn("src/,docs/,pom.xml,.github/workflows/");
                 DeveloperStep.CodeChanges codeChanges = new DeveloperStep.CodeChanges();
                 codeChanges.setSummary("Test");
                 codeChanges.setTestingNotes("Test");
@@ -526,7 +527,7 @@ class DeveloperStepTest {
                 lenient().when(gitHubApiClient.createBlob(anyString(), anyString(), anyString(), anyString()))
                                 .thenReturn(Map.of("sha", "blob-sha-123"));
 
-                lenient().when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), anyString()))
+                lenient().when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), nullable(String.class)))
                                 .thenReturn(Map.of("sha", "new-tree-sha"));
 
                 lenient().when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(),
