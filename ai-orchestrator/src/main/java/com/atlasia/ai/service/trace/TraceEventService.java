@@ -3,7 +3,6 @@ package com.atlasia.ai.service.trace;
 import com.atlasia.ai.model.TraceEventEntity;
 import com.atlasia.ai.persistence.TraceEventRepository;
 import com.atlasia.ai.service.event.WorkflowEvent;
-import com.atlasia.ai.service.event.WorkflowEventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -36,17 +35,24 @@ public class TraceEventService {
      */
     public void recordEvent(WorkflowEvent event) {
         try {
-            switch (event) {
-                case WorkflowEvent.StepStart e -> handleStepStart(e);
-                case WorkflowEvent.StepComplete e -> handleStepComplete(e);
-                case WorkflowEvent.LlmCallStart e -> handleLlmCallStart(e);
-                case WorkflowEvent.LlmCallEnd e -> handleLlmCallEnd(e);
-                case WorkflowEvent.SchemaValidation e -> handleSchemaValidation(e);
-                case WorkflowEvent.WorkflowError e -> handleError(e);
-                case WorkflowEvent.EscalationRaised e -> handleEscalation(e);
-                case WorkflowEvent.WorkflowStatusUpdate e -> handleStatusUpdate(e);
-                default -> { /* ToolCall events are not persisted as trace spans */ }
+            if (event instanceof WorkflowEvent.StepStart e) {
+                handleStepStart(e);
+            } else if (event instanceof WorkflowEvent.StepComplete e) {
+                handleStepComplete(e);
+            } else if (event instanceof WorkflowEvent.LlmCallStart e) {
+                handleLlmCallStart(e);
+            } else if (event instanceof WorkflowEvent.LlmCallEnd e) {
+                handleLlmCallEnd(e);
+            } else if (event instanceof WorkflowEvent.SchemaValidation e) {
+                handleSchemaValidation(e);
+            } else if (event instanceof WorkflowEvent.WorkflowError e) {
+                handleError(e);
+            } else if (event instanceof WorkflowEvent.EscalationRaised e) {
+                handleEscalation(e);
+            } else if (event instanceof WorkflowEvent.WorkflowStatusUpdate e) {
+                handleStatusUpdate(e);
             }
+            // ToolCall events are not persisted as trace spans
         } catch (Exception ex) {
             log.warn("Failed to record trace event for run {}: {}", event.runId(), ex.getMessage());
         }
