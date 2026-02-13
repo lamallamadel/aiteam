@@ -26,7 +26,7 @@ interface QuickStats {
           <div class="stat-icon">📊</div>
           <div class="stat-content">
             <div class="stat-value">{{ quickStats().totalRuns }}</div>
-            <div class="stat-label">Total Runs</div>
+            <div class="stat-label">Total Bolts</div>
           </div>
         </div>
 
@@ -42,7 +42,7 @@ interface QuickStats {
           <div class="stat-icon">⚡</div>
           <div class="stat-content">
             <div class="stat-value">{{ quickStats().activeRuns }}</div>
-            <div class="stat-label">Active Runs</div>
+            <div class="stat-label">Active Bolts</div>
           </div>
         </div>
 
@@ -57,7 +57,7 @@ interface QuickStats {
 
       <div class="actions-grid">
         <div class="action-card glass-panel" (click)="navigateTo('/runs')">
-          <h3>📋 View All Runs</h3>
+          <h3>📋 View All Bolts</h3>
           <p>Browse and filter through your run history</p>
         </div>
 

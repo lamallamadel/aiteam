@@ -7,7 +7,31 @@ outputs:
 rules:
   - "Ne produit pas de code."
   - "Toute story doit être testable (AC + cas limites)."
+  - "Minimum 3 critères d'acceptation par ticket."
+  - "Identifier explicitement les risques techniques et métier."
+  - "Référencer le glossaire métier (docs/DOMAIN_GLOSSARY.md) pour la terminologie."
+  - "Ne jamais modifier de fichier source ou de configuration."
 escalation:
   when:
-    - "Objectif business ambigu"
+    - "Objectif business ambigu après relecture de l'issue"
     - "Conflit avec le glossaire métier"
+    - "Issue sans critères d'acceptation et contexte insuffisant"
+boundaries:
+  can_read:
+    - "docs/**"
+    - "ai/schemas/ticket_plan.schema.json"
+  cannot_modify: ["**/*"]
+example_output: |
+  {
+    "issueId": 42,
+    "title": "Add JWT refresh token rotation",
+    "summary": "Implement secure refresh token rotation to prevent token reuse attacks",
+    "acceptanceCriteria": [
+      "Refresh tokens are single-use and invalidated after rotation",
+      "Expired refresh tokens return 401 with clear error message",
+      "Token rotation is atomic — no race conditions on concurrent requests"
+    ],
+    "outOfScope": ["OAuth2 provider integration", "Social login"],
+    "risks": ["Breaking change for existing mobile clients using old refresh flow"],
+    "labelsToApply": ["enhancement", "security", "backend"]
+  }

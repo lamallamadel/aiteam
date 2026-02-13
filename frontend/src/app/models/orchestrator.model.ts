@@ -46,3 +46,44 @@ export interface ChatRequest {
 export interface ChatResponse {
     response: string;
 }
+
+// SSE Workflow Event types (matching backend WorkflowEvent sealed interface)
+export type WorkflowEventType =
+    | 'STEP_START'
+    | 'STEP_COMPLETE'
+    | 'TOOL_CALL_START'
+    | 'TOOL_CALL_END'
+    | 'WORKFLOW_STATUS'
+    | 'LLM_CALL_START'
+    | 'LLM_CALL_END'
+    | 'SCHEMA_VALIDATION'
+    | 'WORKFLOW_ERROR'
+    | 'ESCALATION_RAISED';
+
+export interface WorkflowEvent {
+    runId: string;
+    timestamp: string;
+    eventType: WorkflowEventType;
+    agentName?: string;
+    // StepStart / StepComplete
+    stepPhase?: string;
+    durationMs?: number;
+    artifactType?: string;
+    // ToolCall
+    toolName?: string;
+    description?: string;
+    // WorkflowStatus
+    status?: string;
+    currentAgent?: string;
+    progressPercent?: number;
+    // LlmCall
+    model?: string;
+    tokensUsed?: number;
+    // SchemaValidation
+    schemaName?: string;
+    passed?: boolean;
+    // Error / Escalation
+    errorType?: string;
+    message?: string;
+    reason?: string;
+}

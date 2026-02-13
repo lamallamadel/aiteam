@@ -1,6 +1,7 @@
 package com.atlasia.ai.service.observability;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,10 @@ public class OrchestratorMetrics {
 
     private final Counter ciFixAttemptsTotal;
     private final Counter e2eFixAttemptsTotal;
+
+    private final Timer llmSemanticLatency;
+    private final Counter tokenBudgetExceeded;
+    private final DistributionSummary tokenUsagePerBolt;
 
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -108,6 +113,18 @@ public class OrchestratorMetrics {
 
         this.e2eFixAttemptsTotal = Counter.builder("orchestrator.e2e.fix.attempts.total")
                 .description("Total number of E2E fix attempts")
+                .register(meterRegistry);
+
+        this.llmSemanticLatency = Timer.builder("orchestrator.llm.semantic.latency")
+                .description("LLM semantic latency — time from prompt submission to first meaningful response")
+                .register(meterRegistry);
+
+        this.tokenBudgetExceeded = Counter.builder("orchestrator.token.budget.exceeded")
+                .description("Number of times an agent exceeded its token budget")
+                .register(meterRegistry);
+
+        this.tokenUsagePerBolt = DistributionSummary.builder("orchestrator.token.usage.per.bolt")
+                .description("Token usage distribution per bolt execution")
                 .register(meterRegistry);
     }
 
@@ -214,5 +231,19 @@ public class OrchestratorMetrics {
 
     public Timer getWorkflowDuration() {
         return workflowDuration;
+    }
+
+    public void recordLlmSemanticLatency(long durationMs) {
+        if (durationMs > 0) {
+            llmSemanticLatency.record(durationMs, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    public void recordTokenBudgetExceeded(String agentName) {
+        tokenBudgetExceeded.increment();
+    }
+
+    public void recordTokenUsagePerBolt(double totalTokens) {
+        tokenUsagePerBolt.record(totalTokens);
     }
 }

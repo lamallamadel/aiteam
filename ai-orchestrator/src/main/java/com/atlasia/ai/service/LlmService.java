@@ -1,6 +1,8 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.service.event.WorkflowEvent;
+import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.exception.LlmServiceException;
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
@@ -32,12 +34,14 @@ public class LlmService {
     private final OrchestratorProperties.Llm llmConfig;
     private final ObjectMapper objectMapper;
     private final OrchestratorMetrics metrics;
+    private final WorkflowEventBus eventBus;
 
     public LlmService(OrchestratorProperties properties, WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper, OrchestratorMetrics metrics) {
+            ObjectMapper objectMapper, OrchestratorMetrics metrics, WorkflowEventBus eventBus) {
         this.llmConfig = properties.llm();
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.eventBus = eventBus;
 
         ConnectionProvider provider = ConnectionProvider.builder("llm-pool")
                 .maxIdleTime(Duration.ofSeconds(20))
@@ -63,6 +67,7 @@ public class LlmService {
     public String generateCompletion(String systemPrompt, String userPrompt) {
         Timer.Sample sample = metrics.startLlmTimer();
         long startTime = System.currentTimeMillis();
+        emitLlmStart();
 
         try {
             log.debug("LLM API call: generateCompletion, model={}, correlationId={}",
@@ -131,6 +136,7 @@ public class LlmService {
             long duration = System.currentTimeMillis() - startTime;
             sample.stop(metrics.getLlmDuration());
             metrics.recordLlmCall(llmConfig.model(), duration, tokensUsed);
+            emitLlmEnd(duration, tokensUsed);
 
             log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
                     duration, tokensUsed, CorrelationIdHolder.getCorrelationId());
@@ -151,6 +157,7 @@ public class LlmService {
     public String generateStructuredOutput(String systemPrompt, String userPrompt, Map<String, Object> jsonSchema) {
         Timer.Sample sample = metrics.startLlmTimer();
         long startTime = System.currentTimeMillis();
+        emitLlmStart();
 
         try {
             log.debug("LLM API call: generateStructuredOutput, model={}, correlationId={}",
@@ -226,6 +233,7 @@ public class LlmService {
             long duration = System.currentTimeMillis() - startTime;
             sample.stop(metrics.getLlmDuration());
             metrics.recordLlmCall(llmConfig.model(), duration, tokensUsed);
+            emitLlmEnd(duration, tokensUsed);
 
             log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
                     duration, tokensUsed, CorrelationIdHolder.getCorrelationId());
@@ -390,5 +398,31 @@ public class LlmService {
                 "choices", List.of(
                         Map.of("message", Map.of("role", "assistant", "content", content))),
                 "usage", Map.of("total_tokens", 0));
+    }
+
+    private void emitLlmStart() {
+        String runIdStr = CorrelationIdHolder.getRunId();
+        String agentName = CorrelationIdHolder.getAgentName();
+        if (runIdStr != null) {
+            try {
+                java.util.UUID runId = java.util.UUID.fromString(runIdStr);
+                eventBus.emit(runId, new WorkflowEvent.LlmCallStart(
+                        runId, java.time.Instant.now(), agentName, llmConfig.model()));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+    }
+
+    private void emitLlmEnd(long durationMs, int tokensUsed) {
+        String runIdStr = CorrelationIdHolder.getRunId();
+        String agentName = CorrelationIdHolder.getAgentName();
+        if (runIdStr != null) {
+            try {
+                java.util.UUID runId = java.util.UUID.fromString(runIdStr);
+                eventBus.emit(runId, new WorkflowEvent.LlmCallEnd(
+                        runId, java.time.Instant.now(), agentName, llmConfig.model(), durationMs, tokensUsed));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
     }
 }

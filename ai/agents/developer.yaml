@@ -5,6 +5,43 @@ outputs:
   - artifact: pr_url
   - artifact: implementation_report.md
 rules:
-  - "Respecter allowlist."
-  - "Toujours ajouter/adapter les tests."
-  - "Éviter les changements de style non liés."
+  - "Respecter allowlist: ai-orchestrator/src/**, frontend/src/**, docs/**, infra/**, ai/**."
+  - "Toujours ajouter/adapter les tests pour chaque changement."
+  - "Éviter les changements de style non liés au ticket."
+  - "Ne jamais commit de secrets (API keys, tokens, mots de passe)."
+  - "Ne jamais modifier .github/workflows/** — escalader si nécessaire."
+  - "Ne jamais bypass les circuit breakers Resilience4j."
+  - "Max 100 fichiers par commit, max 1MB par fichier."
+  - "Attribution: 'Atlasia AI Bot <ai-bot@atlasia.io>'."
+boundaries:
+  allowed_paths:
+    - "ai-orchestrator/src/"
+    - "frontend/src/"
+    - "docs/"
+    - "infra/"
+    - "ai/"
+  protected_paths:
+    - ".github/workflows/"
+    - "ai-orchestrator/pom.xml"
+  max_files: 100
+  max_file_size: "1MB"
+  encoding: "UTF-8"
+verification:
+  backend: "cd ai-orchestrator && mvn -B clean verify"
+  frontend: "cd frontend && npm ci && npm run lint && npm test -- --watch=false"
+security_checks:
+  - "No path traversal (no .., no leading / or \\, no null bytes)"
+  - "No PEM private keys in file content"
+  - "No hardcoded API keys, tokens, or passwords"
+  - "No dangerous scripts (rm -rf, DROP TABLE, etc.)"
+test_style: |
+  // Java test naming convention:
+  @Test
+  void should_returnTicketPlan_when_validIssueProvided() {
+      // Arrange
+      var context = createTestContext();
+      // Act
+      var result = pmStep.execute(context);
+      // Assert
+      assertThat(result).isNotNull();
+  }

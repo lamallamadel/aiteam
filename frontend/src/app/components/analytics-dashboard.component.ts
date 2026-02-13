@@ -42,7 +42,7 @@ interface PersonaMetrics {
     <div class="analytics-container">
       <div class="metrics-grid">
         <div class="metric-card glass-panel">
-          <div class="metric-label">Total Runs</div>
+          <div class="metric-label">Total Bolts</div>
           <div class="metric-value">{{ summary()?.totalRuns || 0 }}</div>
         </div>
         <div class="metric-card glass-panel success">
