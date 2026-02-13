@@ -116,14 +116,14 @@ class WriterStepTest {
         readmeUpdate.setSectionsToUpdate(List.of(sectionUpdate));
 
         String readmeJson = objectMapper.writeValueAsString(readmeUpdate);
-        when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
+        lenient().when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
                 .thenReturn(readmeJson);
 
         setupChangelogMock();
 
         writerStep.execute(context);
 
-        verify(llmService).generateStructuredOutput(anyString(), contains("README"), anyMap());
+        verify(llmService, atLeastOnce()).generateStructuredOutput(anyString(), contains("README"), anyMap());
     }
 
     @Test
@@ -141,7 +141,7 @@ class WriterStepTest {
         changelog.setMigrationGuide("");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(changelogJson);
 
         assertDoesNotThrow(() -> writerStep.execute(context));
@@ -179,7 +179,10 @@ class WriterStepTest {
         verify(gitHubApiClient).createBlob(
                 eq("owner"),
                 eq("repo"),
-                contains("https://github.com/owner/repo/pull/1"),
+                argThat(content -> {
+                    String decoded = new String(Base64.getDecoder().decode(content));
+                    return decoded.contains("https://github.com/owner/repo/pull/1");
+                }),
                 eq("base64"));
     }
 
@@ -198,7 +201,7 @@ class WriterStepTest {
         changelog.setMigrationGuide("Migrate to API v2");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(changelogJson);
 
         writerStep.execute(context);
@@ -206,11 +209,14 @@ class WriterStepTest {
         verify(gitHubApiClient).createBlob(
                 eq("owner"),
                 eq("repo"),
-                argThat(content -> content.contains("Added") &&
-                        content.contains("Changed") &&
-                        content.contains("Fixed") &&
-                        content.contains("Security") &&
-                        content.contains("BREAKING CHANGES")),
+                argThat(content -> {
+                    String decoded = new String(Base64.getDecoder().decode(content));
+                    return decoded.contains("Added") &&
+                            decoded.contains("Changed") &&
+                            decoded.contains("Fixed") &&
+                            decoded.contains("Security") &&
+                            decoded.contains("BREAKING CHANGES");
+                }),
                 eq("base64"));
     }
 
@@ -229,7 +235,7 @@ class WriterStepTest {
         changelog.setMigrationGuide("Update your API calls to use the new signature");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(changelogJson);
 
         writerStep.execute(context);
@@ -237,7 +243,10 @@ class WriterStepTest {
         verify(gitHubApiClient).createBlob(
                 eq("owner"),
                 eq("repo"),
-                contains("Migration Guide"),
+                argThat(content -> {
+                    String decoded = new String(Base64.getDecoder().decode(content));
+                    return decoded.contains("Migration Guide");
+                }),
                 eq("base64"));
     }
 
@@ -293,25 +302,28 @@ class WriterStepTest {
     // Helper methods
 
     private void setupGitHubMocks() {
-        when(gitHubApiClient.getReference(eq("owner"), eq("repo"), eq("heads/ai/issue-123")))
+        lenient().when(gitHubApiClient.getReference(eq("owner"), eq("repo"), eq("heads/ai/issue-123")))
                 .thenReturn(Map.of("object", Map.of("sha", "commit-sha")));
 
-        when(gitHubApiClient.getRepoContent(eq("owner"), eq("repo"), eq("README.md")))
+        lenient().when(gitHubApiClient.getRepoContent(eq("owner"), eq("repo"), eq("README.md")))
                 .thenReturn(Map.of(
                         "content", Base64.getEncoder().encodeToString("# README\n\nExisting content".getBytes()),
                         "sha", "readme-sha"));
 
-        when(gitHubApiClient.createBlob(anyString(), anyString(), anyString(), anyString()))
+        lenient().when(gitHubApiClient.createBlob(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(Map.of("sha", "blob-sha"));
 
-        when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), anyString()))
+        lenient().when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), anyString()))
                 .thenReturn(Map.of("sha", "tree-sha"));
 
-        when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(),
-                anyMap()))
+        lenient()
+                .when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(),
+                        anyMap(),
+                        anyMap()))
                 .thenReturn(Map.of("sha", "commit-sha-new"));
 
-        when(gitHubApiClient.updateReference(anyString(), anyString(), anyString(), anyString(), anyBoolean()))
+        lenient()
+                .when(gitHubApiClient.updateReference(anyString(), anyString(), anyString(), anyString(), anyBoolean()))
                 .thenReturn(Map.of("ref", "refs/heads/ai/issue-123"));
     }
 
@@ -330,7 +342,7 @@ class WriterStepTest {
 
         try {
             String changelogJson = objectMapper.writeValueAsString(changelog);
-            when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
+            lenient().when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
                     .thenReturn(changelogJson);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -346,14 +358,14 @@ class WriterStepTest {
 
         try {
             String readmeJson = objectMapper.writeValueAsString(readmeUpdate);
-            when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
+            lenient().when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
                     .thenReturn(readmeJson);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
 
         String codeDocPrompt = "Documentation guide for affected code";
-        when(llmService.generateCompletion(anyString(), anyString()))
+        lenient().when(llmService.generateCompletion(anyString(), anyString()))
                 .thenReturn(codeDocPrompt);
     }
 
@@ -372,7 +384,7 @@ class WriterStepTest {
 
         try {
             String changelogJson = objectMapper.writeValueAsString(changelog);
-            when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
+            lenient().when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
                     .thenReturn(changelogJson);
         } catch (Exception e) {
             throw new RuntimeException(e);

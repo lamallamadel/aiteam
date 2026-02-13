@@ -6,13 +6,14 @@ import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.atlasia.ai.service.trace.TraceEventService;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,13 +22,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@DataJpaTest
+@SpringBootTest(classes = com.atlasia.ai.AtlasiaAiOrchestratorApplication.class)
 @TestPropertySource(properties = {
-                "spring.datasource.url=jdbc:h2:mem:testdb",
+                "spring.datasource.url=jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE",
                 "spring.datasource.driverClassName=org.h2.Driver",
-                "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect"
+                "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+                "spring.flyway.enabled=false",
+                "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-@Import(WorkflowEngineIntegrationTest.TestConfiguration.class)
 class WorkflowEngineIntegrationTest {
 
         @Autowired
@@ -66,62 +68,44 @@ class WorkflowEngineIntegrationTest {
         @MockBean
         private TraceEventService traceEventService;
 
+        @Autowired
         private WorkflowEngine workflowEngine;
-
-        @org.springframework.context.annotation.Configuration
-        static class TestConfiguration {
-                @org.springframework.context.annotation.Bean
-                public WorkflowEngine workflowEngine(
-                                RunRepository runRepository,
-                                JsonSchemaValidator schemaValidator,
-                                PmStep pmStep,
-                                QualifierStep qualifierStep,
-                                ArchitectStep architectStep,
-                                DeveloperStep developerStep,
-                                PersonaReviewService personaReviewService,
-                                TesterStep testerStep,
-                                WriterStep writerStep,
-                                OrchestratorMetrics metrics,
-                                WorkflowEventBus eventBus,
-                                TraceEventService traceEventService) {
-                        return new WorkflowEngine(
-                                        runRepository,
-                                        schemaValidator,
-                                        pmStep,
-                                        qualifierStep,
-                                        architectStep,
-                                        developerStep,
-                                        personaReviewService,
-                                        testerStep,
-                                        writerStep,
-                                        metrics,
-                                        eventBus,
-                                        traceEventService);
-                }
-        }
 
         @BeforeEach
         void setUp() throws Exception {
-                workflowEngine = new WorkflowEngine(
-                                runRepository,
-                                schemaValidator,
-                                pmStep,
-                                qualifierStep,
-                                architectStep,
-                                developerStep,
-                                personaReviewService,
-                                testerStep,
-                                writerStep,
-                                metrics,
-                                eventBus,
-                                traceEventService);
 
-                when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
-                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
-                when(developerStep.execute(any(RunContext.class))).thenReturn("https://github.com/owner/repo/pull/1");
-                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
+
+                Timer.Sample mockSample = mock(Timer.Sample.class);
+                Timer mockTimer = mock(Timer.class);
+                lenient().when(metrics.startWorkflowTimer()).thenReturn(mockSample);
+                lenient().when(metrics.startAgentStepTimer()).thenReturn(mockSample);
+                lenient().when(metrics.getWorkflowDuration()).thenReturn(mockTimer);
+                lenient().when(metrics.getAgentStepDuration()).thenReturn(mockTimer);
+
+                lenient().when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                lenient().when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                lenient().when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+
+                lenient().doAnswer(invocation -> {
+                        RunContext ctx = invocation.getArgument(0);
+                        DeveloperStep.CodeChanges codeChanges = new DeveloperStep.CodeChanges();
+                        codeChanges.setSummary("Integration test implementation");
+                        codeChanges.setFiles(java.util.List.of());
+                        ctx.setCodeChanges(codeChanges);
+                        return null;
+                }).when(developerStep).generateCode(any(RunContext.class));
+
+                lenient().when(developerStep.commitAndCreatePullRequest(any(), any()))
+                                .thenReturn("https://github.com/owner/repo/pull/1");
+
+                lenient().when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                lenient().when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+
+                PersonaReviewService.PersonaReviewReport report = mock(PersonaReviewService.PersonaReviewReport.class);
+                lenient().when(report.getFindings()).thenReturn(java.util.List.of());
+                lenient().when(report.getMergedRecommendations()).thenReturn(java.util.List.of());
+                lenient().when(personaReviewService.reviewCodeChanges(any(), any())).thenReturn(report);
         }
 
         @Test

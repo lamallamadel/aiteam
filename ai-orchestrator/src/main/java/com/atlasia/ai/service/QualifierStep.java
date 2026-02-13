@@ -428,6 +428,13 @@ public class QualifierStep implements AgentStep {
         }
 
         tasks.add(Map.of(
+                "id", "task-" + taskCounter++,
+                "area", "backend",
+                "description", "Verify and test implementation for " + ticketPlan.getTitle(),
+                "filesLikely", List.of(),
+                "tests", List.of("Unit tests", "Integration tests")));
+
+        tasks.add(Map.of(
                 "id", "task-" + taskCounter,
                 "area", "docs",
                 "description", "Update documentation for " + ticketPlan.getTitle(),

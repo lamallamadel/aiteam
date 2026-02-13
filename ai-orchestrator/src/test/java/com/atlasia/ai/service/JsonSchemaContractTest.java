@@ -36,7 +36,7 @@ class JsonSchemaContractTest {
                     "issueId": 123,
                     "title": "Test Issue",
                     "summary": "This is a test issue",
-                    "acceptanceCriteria": ["Criterion 1", "Criterion 2"],
+                    "acceptanceCriteria": ["Criterion 1", "Criterion 2", "Criterion 3"],
                     "outOfScope": ["Not included"],
                     "risks": ["Risk 1"],
                     "labelsToApply": ["bug", "high-priority"]
@@ -235,6 +235,12 @@ class JsonSchemaContractTest {
                             "pros": ["Can fix complex issues"],
                             "cons": ["Takes time"],
                             "risk": "LOW"
+                        },
+                        {
+                            "name": "Retry",
+                            "pros": ["Automated"],
+                            "cons": ["May fail again"],
+                            "risk": "MEDIUM"
                         }
                     ],
                     "recommendation": "Manual intervention",
@@ -361,6 +367,12 @@ class JsonSchemaContractTest {
                             "pros": ["Pro 1"],
                             "cons": ["Con 1"],
                             "risk": "LOW"
+                        },
+                        {
+                            "name": "Option 2",
+                            "pros": ["Pro 2"],
+                            "cons": ["Con 2"],
+                            "risk": "MEDIUM"
                         }
                     ],
                     "recommendation": "Recommendation",

@@ -47,22 +47,24 @@ public class PmStep implements AgentStep {
                 labelsData,
                 comments);
 
-        if (ticketPlan.getLabelsToApply() != null && !ticketPlan.getLabelsToApply().isEmpty()) {
-            try {
-                gitHubApiClient.addLabelsToIssue(
-                        context.getOwner(),
-                        context.getRepo(),
-                        context.getRunEntity().getIssueNumber(),
-                        ticketPlan.getLabelsToApply());
-            } catch (Exception e) {
-                String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
-                if (errorMsg.contains("403")) {
-                    log.warn(
-                            "Skipping label attachment: GitHub token lacks 'write' permission for issues (403 Forbidden). "
-                                    +
-                                    "The workflow will continue without labels.");
-                } else {
-                    log.warn("Failed to add labels to issue ({}). Continuing workflow...", errorMsg);
+        if (ticketPlan.getLabelsToApply() != null) {
+            if (!ticketPlan.getLabelsToApply().isEmpty()) {
+                try {
+                    gitHubApiClient.addLabelsToIssue(
+                            context.getOwner(),
+                            context.getRepo(),
+                            context.getRunEntity().getIssueNumber(),
+                            ticketPlan.getLabelsToApply());
+                } catch (Exception e) {
+                    String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
+                    if (errorMsg.contains("403")) {
+                        log.warn(
+                                "Skipping label attachment: GitHub token lacks 'write' permission for issues (403 Forbidden). "
+                                        +
+                                        "The workflow will continue without labels.");
+                    } else {
+                        log.warn("Failed to add labels to issue ({}). Continuing workflow...", errorMsg);
+                    }
                 }
             }
         }
@@ -283,6 +285,10 @@ public class PmStep implements AgentStep {
 
         if (plan.getTitle() == null || plan.getTitle().isEmpty()) {
             plan.setTitle(title);
+        }
+
+        if (plan.getLabelsToApply() == null) {
+            plan.setLabelsToApply(suggestLabels(title, body));
         }
 
         if (plan.getSummary() == null || plan.getSummary().isEmpty()) {

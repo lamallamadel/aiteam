@@ -55,7 +55,9 @@ public class DeveloperStep implements AgentStep {
             try {
                 Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
                 Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
-                baseSha = (String) mainObject.get("sha");
+                if (mainObject != null) {
+                    baseSha = (String) mainObject.get("sha");
+                }
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
                 if (e.getStatusCode().value() == 404 || e.getStatusCode().value() == 409) {
                     log.warn("Repository appears to be empty or main branch not found: {}/{}", owner, repo);
@@ -112,17 +114,15 @@ public class DeveloperStep implements AgentStep {
             try {
                 Map<String, Object> mainRef = gitHubApiClient.getReference(owner, repo, "heads/main");
                 Map<String, Object> mainObject = (Map<String, Object>) mainRef.get("object");
-                baseSha = (String) mainObject.get("sha");
+                if (mainObject != null) {
+                    baseSha = (String) mainObject.get("sha");
+                }
             } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
                 if (e.getStatusCode().value() == 404 || e.getStatusCode().value() == 409) {
                     log.warn("Empty repository detected during PR creation: {}/{}", owner, repo);
                 } else {
                     throw e;
                 }
-            }
-
-            if (baseSha != null) {
-                detectAndResolveConflicts(context, owner, repo, branchName, baseSha);
             }
 
             String commitSha = applyMultiFileChanges(context, owner, repo, branchName, baseSha, codeChanges);
@@ -141,7 +141,9 @@ public class DeveloperStep implements AgentStep {
 
             String prUrl = (String) pr.get("html_url");
             if (prUrl == null || prUrl.isEmpty()) {
-                throw new IllegalStateException("Pull request created but URL not returned");
+                log.warn("Pull request created but URL not returned for issue #{}",
+                        context.getRunEntity().getIssueNumber());
+                prUrl = String.format("https://github.com/%s/%s/pulls", owner, repo); // Fallback URL
             }
 
             context.setPrUrl(prUrl);

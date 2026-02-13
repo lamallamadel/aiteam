@@ -3,6 +3,7 @@ package com.atlasia.ai.service;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.service.exception.AgentStepException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest
+@org.springframework.test.context.TestPropertySource(properties = {
+        "atlasia.orchestrator.repo-allowlist=src/,docs/,pom.xml",
+        "atlasia.orchestrator.workflow-protect-prefix=.github/workflows/"
+})
 class DeveloperStepIntegrationTest {
 
     @Autowired
@@ -46,8 +51,7 @@ class DeveloperStepIntegrationTest {
                 456,
                 "full",
                 RunStatus.DEVELOPER,
-                Instant.now()
-        );
+                Instant.now());
 
         context = new RunContext(runEntity, "test-owner", "test-repo");
         context.setBranchName("ai/issue-456");
@@ -59,7 +63,7 @@ class DeveloperStepIntegrationTest {
 
         context.setArchitectureNotes("""
                 # Architecture Notes
-                
+
                 Use service layer pattern with proper validation.
                 Implement idempotency for payment operations.
                 Add comprehensive error handling and logging.
@@ -104,8 +108,10 @@ class DeveloperStepIntegrationTest {
         verify(gitHubApiClient, times(1)).createBranch(anyString(), anyString(), anyString(), anyString());
         verify(gitHubApiClient, times(2)).createBlob(anyString(), anyString(), anyString(), anyString());
         verify(gitHubApiClient, times(1)).createTree(anyString(), anyString(), anyList(), anyString());
-        verify(gitHubApiClient, times(1)).createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(), anyMap());
-        verify(gitHubApiClient, times(1)).createPullRequest(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(gitHubApiClient, times(1)).createCommit(anyString(), anyString(), anyString(), anyString(), anyList(),
+                anyMap(), anyMap());
+        verify(gitHubApiClient, times(1)).createPullRequest(anyString(), anyString(), anyString(), anyString(),
+                anyString(), anyString());
     }
 
     @Test
@@ -148,7 +154,8 @@ class DeveloperStepIntegrationTest {
 
         assertNotNull(result);
         verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap());
-        verify(gitHubApiClient).createBlob(eq("test-owner"), eq("test-repo"), contains("Implementation Plan"), eq("utf-8"));
+        verify(gitHubApiClient).createBlob(eq("test-owner"), eq("test-repo"), contains("Implementation Plan"),
+                eq("utf-8"));
     }
 
     @Test
@@ -174,7 +181,7 @@ class DeveloperStepIntegrationTest {
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(llmResponse);
 
-        assertThrows(DeveloperStep.DeveloperStepException.class, () -> {
+        assertThrows(AgentStepException.class, () -> {
             developerStep.execute(context);
         });
     }
@@ -202,7 +209,7 @@ class DeveloperStepIntegrationTest {
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(llmResponse);
 
-        assertThrows(DeveloperStep.DeveloperStepException.class, () -> {
+        assertThrows(AgentStepException.class, () -> {
             developerStep.execute(context);
         });
     }
@@ -267,16 +274,15 @@ class DeveloperStepIntegrationTest {
                 argThat(author -> {
                     Map<String, Object> a = (Map<String, Object>) author;
                     return "Atlasia AI Bot".equals(a.get("name")) &&
-                           "ai-bot@atlasia.io".equals(a.get("email")) &&
-                           a.get("date") != null;
+                            "ai-bot@atlasia.io".equals(a.get("email")) &&
+                            a.get("date") != null;
                 }),
                 argThat(committer -> {
                     Map<String, Object> c = (Map<String, Object>) committer;
                     return "Atlasia AI Bot".equals(c.get("name")) &&
-                           "ai-bot@atlasia.io".equals(c.get("email")) &&
-                           c.get("date") != null;
-                })
-        );
+                            "ai-bot@atlasia.io".equals(c.get("email")) &&
+                            c.get("date") != null;
+                }));
     }
 
     @Test
@@ -340,13 +346,15 @@ class DeveloperStepIntegrationTest {
         when(gitHubApiClient.createTree(anyString(), anyString(), anyList(), anyString()))
                 .thenReturn(Map.of("sha", "new-tree-sha"));
 
-        when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(), anyMap()))
+        when(gitHubApiClient.createCommit(anyString(), anyString(), anyString(), anyString(), anyList(), anyMap(),
+                anyMap()))
                 .thenReturn(Map.of("sha", "commit-sha-123"));
 
         when(gitHubApiClient.updateReference(anyString(), anyString(), anyString(), anyString(), anyBoolean()))
                 .thenReturn(Map.of("ref", "refs/heads/test"));
 
-        when(gitHubApiClient.createPullRequest(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+        when(gitHubApiClient.createPullRequest(anyString(), anyString(), anyString(), anyString(), anyString(),
+                anyString()))
                 .thenReturn(Map.of("html_url", "https://github.com/test-owner/test-repo/pull/789"));
     }
 }
