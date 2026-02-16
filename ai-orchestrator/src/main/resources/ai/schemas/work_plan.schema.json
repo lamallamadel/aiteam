@@ -10,7 +10,9 @@
   ],
   "properties": {
     "branchName": {
-      "type": "string"
+      "type": "string",
+      "pattern": "^ai/issue-[0-9]+-[a-z0-9-]+$",
+      "description": "Branch name following the pattern: ai/issue-<num>-<slug>"
     },
     "tasks": {
       "type": "array",
@@ -26,7 +28,8 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Unique task identifier (e.g., T1, T2)"
           },
           "area": {
             "type": "string",
@@ -51,6 +54,14 @@
             "items": {
               "type": "string"
             }
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of task IDs that must be completed before this task can start",
+            "default": []
           }
         }
       }
