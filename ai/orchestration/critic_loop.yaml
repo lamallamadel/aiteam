@@ -1,0 +1,293 @@
+# ============================================================================
+# Critic Loop — Atlasia AI Pipeline
+# ============================================================================
+# Defines the dual-agent verification pattern (Reflexion) and conflict
+# resolution protocol for the multi-perspective review system.
+#
+# Key principle: The agent that WRITES should never be the sole agent that
+# VERIFIES. Separate creation from evaluation to catch blind spots.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Core Principle: Dual-Agent Verification
+# ---------------------------------------------------------------------------
+principle: >
+  Reliability in multi-agent systems comes from adversarial verification.
+  A Developer writes code; a separate Review team evaluates it. A Tester
+  validates green CI; a separate Review team checks for logic errors that
+  tests don't catch. No agent self-certifies its own output.
+
+# ---------------------------------------------------------------------------
+# Critic Loop Architecture
+# ---------------------------------------------------------------------------
+critic_loop:
+  description: >
+    The Critic Loop is a bounded feedback cycle where a Critic Agent evaluates
+    the output of a Producer Agent. If the critic rejects, the producer
+    re-enters with the critic's findings as additional context. The loop is
+    bounded by max_iterations to prevent infinite cycles and runaway costs.
+
+  # =========================================================================
+  # Loop 1: Review → Developer (Code Quality Critique)
+  # =========================================================================
+  review_developer_loop:
+    producer: developer
+    critic: review
+    artifact_under_review: "implementation_report.md + PR diff"
+    critique_artifact: "persona_review.json"
+    entry_condition: "Developer completes implementation and produces PR"
+    exit_conditions:
+      success: "persona_review.json status is 'approved' or 'approved_with_minor_issues'"
+      failure: "Loop counter exceeds max_iterations (2)"
+    max_iterations: 2
+
+    loop_mechanics:
+      iteration_1:
+        description: "First review pass — full multi-perspective review"
+        producer_receives:
+          - "work_plan.json (original scope)"
+          - "architecture_notes.md (design contract)"
+        critic_receives:
+          - "pr_url (the PR to review)"
+          - "implementation_report.md (developer's summary)"
+        critic_produces: "persona_review.json with verdict"
+        on_rejection:
+          action: "Route back to developer with filtered findings"
+          context_passed:
+            - "persona_review.json (findings ranked by severity)"
+            - "Filtered list: only critical and high findings requiring action"
+            - "implementation_report.md (developer's original summary, for reference)"
+          context_stripped:
+            - "Individual reviewer reasoning and chain-of-thought"
+            - "Medium/low findings (present in artifact but not action-required)"
+            - "Review supervisor's synthesis logic"
+          developer_instruction: >
+            You are re-entering due to review findings. Address ALL critical
+            and high findings in persona_review.json. For each: identify the
+            file/line, apply the fix, update implementation_report.md.
+            Do NOT refactor unrelated code.
+
+      iteration_2:
+        description: "Second review pass — focused re-review of fixes only"
+        producer_receives:
+          - "Same as iteration_1 PLUS persona_review.json from iteration 1"
+        critic_receives:
+          - "Updated PR diff (only the new commits)"
+          - "Updated implementation_report.md"
+          - "Previous persona_review.json (to verify fixes were applied)"
+        critic_focus: >
+          The critic ONLY evaluates whether the previously reported critical/high
+          findings have been addressed. It does NOT perform a full re-review.
+          New findings are only reported if the fix introduced a regression.
+        on_rejection:
+          action: "Escalate to human — loop limit exceeded"
+          escalation_reason: "Review-Developer loop exceeded 2 iterations without resolution"
+
+  # =========================================================================
+  # Loop 2: Tester → Developer (Test Failure Critique)
+  # =========================================================================
+  tester_developer_loop:
+    producer: developer
+    critic: tester
+    artifact_under_review: "PR diff + CI/E2E results"
+    critique_artifact: "test_report.json"
+    entry_condition: "Review approved AND tester finds CI/E2E failures that its internal fix loop cannot resolve"
+    exit_conditions:
+      success: "test_report.json ciStatus is 'GREEN'"
+      failure: "Loop counter exceeds max_iterations (2)"
+    max_iterations: 2
+
+    tester_internal_fix_loop:
+      description: >
+        Before escalating to the developer, the tester has its own internal
+        fix loop. It attempts to fix simple failures (typos, missing imports,
+        selector changes) autonomously. Only if this internal loop exhausts
+        its budget does it escalate to the developer.
+      ci_fix_budget: 3
+      e2e_fix_budget: 2
+      on_budget_exceeded: "Produce test_report.json with diagnostics and escalate to developer"
+
+    loop_mechanics:
+      iteration_1:
+        description: "Developer addresses root causes identified by tester"
+        producer_receives:
+          - "test_report.json (failure diagnostics, root cause analysis)"
+          - "Specific failing test names and error traces"
+          - "Tester's recommended fix approach (if provided)"
+        context_stripped:
+          - "Full CI/E2E log output (summarized in test_report)"
+          - "Tester's internal fix loop attempts"
+          - "Browser automation traces"
+        developer_instruction: >
+          You are re-entering due to test failures the tester could not resolve.
+          Read test_report.json and address root causes. Focus on the failing
+          tests listed — do NOT refactor unrelated code.
+
+      iteration_2:
+        description: "Second attempt — developer addresses remaining failures"
+        on_failure:
+          action: "Escalate to human"
+          escalation_reason: "Tester-Developer loop exceeded 2 iterations without green CI"
+
+# ---------------------------------------------------------------------------
+# Conflict Resolution Protocol
+# ---------------------------------------------------------------------------
+conflict_resolution:
+  description: >
+    When multiple review roles produce contradictory findings about the same
+    code, the Review supervisor must resolve the conflict before producing
+    the final persona_review.json. This protocol defines the resolution
+    hierarchy and mechanisms.
+
+  # =========================================================================
+  # Conflict Detection
+  # =========================================================================
+  detection:
+    description: >
+      The Review supervisor detects conflicts during the 'synthesize' phase
+      by comparing findings from all four reviewers for overlapping locations.
+    conflict_signals:
+      - signal: "severity_disagreement"
+        description: "Two reviewers flag the same file/function but assign different severity levels"
+        example: "Security says 'critical SQL injection', Code Quality says 'low style issue'"
+      - signal: "verdict_disagreement"
+        description: "Reviewers disagree on the overall verdict for the PR"
+        example: "Security says 'rejected', SRE says 'approved'"
+      - signal: "approach_disagreement"
+        description: "Reviewers suggest contradictory fixes for the same issue"
+        example: "Security says 'add input validation', Performance says 'remove validation overhead'"
+      - signal: "priority_conflict"
+        description: "Reviewers disagree on which issues should be addressed first"
+        example: "Frontend says 'fix accessibility first', SRE says 'fix performance first'"
+      - signal: "cross_domain_tradeoff"
+        description: "Fixing one domain's finding would worsen another domain's concern"
+        example: "Adding rate limiting (SRE) would degrade user experience (Frontend UX)"
+
+  # =========================================================================
+  # Resolution Strategies (applied in priority order)
+  # =========================================================================
+  strategies:
+
+    # Strategy 1: Severity Hierarchy (automatic)
+    - name: "severity_hierarchy"
+      description: >
+        When severity levels disagree, the HIGHER severity always wins.
+        A 'critical' finding cannot be downgraded by another reviewer's
+        'low' assessment of the same location.
+      applies_to: ["severity_disagreement"]
+      mechanism: "Take the maximum severity across all reviewers for overlapping findings"
+      automatic: true
+      example: >
+        Security: critical (SQL injection at UserService:42)
+        Code Quality: medium (code style at UserService:42)
+        Resolution: critical — security's assessment prevails
+
+    # Strategy 2: Domain Authority (automatic)
+    - name: "domain_authority"
+      description: >
+        Each reviewer has domain authority over their specialty. When there's
+        an approach disagreement, the domain expert's recommendation prevails
+        for findings within their domain.
+      applies_to: ["approach_disagreement", "priority_conflict"]
+      mechanism: "Route the finding to the reviewer whose domain matches the finding category"
+      automatic: true
+      domain_mapping:
+        security-engineer: ["sql_injection", "xss", "auth", "secrets", "input_validation", "csrf", "encryption"]
+        code-quality-engineer: ["complexity", "duplication", "naming", "error_handling", "design_patterns", "performance"]
+        sre-engineer: ["availability", "scalability", "observability", "database", "caching", "deployment", "resilience"]
+        frontend-ux-engineer: ["accessibility", "responsiveness", "i18n", "usability", "component_design", "state_management"]
+      tie_breaking: >
+        If a finding spans two domains equally (e.g., input validation is both
+        security AND usability), security domain takes precedence.
+
+    # Strategy 3: Arbiter Judgment (semi-automatic)
+    - name: "arbiter_judgment"
+      description: >
+        For cross-domain tradeoffs that cannot be resolved by hierarchy or
+        domain authority, the Review supervisor acts as arbiter. It evaluates
+        both positions against the project's quality rubric and makes a
+        judgment call.
+      applies_to: ["cross_domain_tradeoff", "verdict_disagreement"]
+      mechanism: >
+        The Review supervisor weighs both positions against:
+        1. The project's quality gates (docs/QUALITY_GATES.md)
+        2. The original work_plan.json requirements
+        3. The severity of each position
+        Then produces a reasoned judgment recorded in conflict_resolution.
+      automatic: false
+      rubric:
+        - "Security concerns ALWAYS outweigh convenience/performance concerns"
+        - "Data integrity concerns outweigh UX concerns"
+        - "Critical/high findings cannot be dismissed by arbiter — only escalated"
+        - "The arbiter must document its reasoning in the conflict_resolution record"
+
+    # Strategy 4: Human Escalation (manual)
+    - name: "human_escalation"
+      description: >
+        When the arbiter cannot resolve the conflict (e.g., two critical-severity
+        positions from different domains), escalate to a human with both
+        positions clearly presented.
+      applies_to: ["any unresolvable conflict"]
+      mechanism: >
+        Produce an escalation.json with both positions, evidence, and a
+        recommended resolution. The human decides.
+      trigger_conditions:
+        - "Two or more reviewers assign critical severity to conflicting positions"
+        - "The conflict involves a security vs. business requirement tradeoff"
+        - "The arbiter's rubric does not clearly favor one position"
+
+  # =========================================================================
+  # Resolution Record
+  # =========================================================================
+  record:
+    description: >
+      Every conflict resolution is recorded in the task_ledger.json under
+      the conflict_resolutions array. This provides an audit trail for
+      understanding why certain findings were prioritized over others.
+    schema: "ai/schemas/conflict_resolution.schema.json"
+    retention: "Persisted alongside the persona_review.json in the blackboard"
+
+# ---------------------------------------------------------------------------
+# Self-Correction Guardrails
+# ---------------------------------------------------------------------------
+guardrails:
+  description: >
+    Guardrails prevent the critic loop from degrading into unproductive cycles
+    or accumulating unbounded context.
+
+  rules:
+    - name: "No Context Accumulation"
+      description: >
+        On loop-back, the developer receives ONLY the new critique artifact
+        plus its original inputs. Previous critique artifacts are NOT stacked.
+        This prevents exponential context growth across iterations.
+      enforcement: "Orchestrator strips prior-iteration critique artifacts before dispatch"
+
+    - name: "Focused Re-Review"
+      description: >
+        On iteration 2+, the critic ONLY evaluates whether previously reported
+        critical/high findings were addressed. It does NOT perform a full
+        re-review from scratch. This prevents finding inflation.
+      enforcement: "Review supervisor passes previous findings as a checklist to iteration 2 reviewers"
+
+    - name: "Escalation Over Persistence"
+      description: >
+        If the loop limit is reached, ALWAYS escalate to a human rather than
+        attempting a third iteration. Human judgment is cheaper than an
+        infinite loop.
+      enforcement: "Orchestrator checks loop counter BEFORE dispatching and escalates if exceeded"
+
+    - name: "No Self-Review"
+      description: >
+        An agent NEVER reviews its own output. The developer cannot mark
+        review findings as 'resolved' — only the review team can verify fixes.
+      enforcement: "Orchestrator never routes review artifacts back to their producer for self-certification"
+
+    - name: "Regression Detection"
+      description: >
+        On iteration 2+, the critic checks whether the fix introduced NEW
+        critical/high issues. If a fix creates a regression, it is flagged
+        with severity 'critical' and the loop counts against the limit.
+      enforcement: "Review supervisor compares iteration N findings against iteration N-1 to detect regressions"

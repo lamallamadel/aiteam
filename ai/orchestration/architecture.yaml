@@ -8,12 +8,12 @@
 # right coordination model at each stage of the workflow.
 # ============================================================================
 
-version: "1.0"
+version: "2.0"
 
 # ---------------------------------------------------------------------------
 # Pattern Selection Rationale
 # ---------------------------------------------------------------------------
-# The Atlasia pipeline uses three orchestration patterns in concert:
+# The Atlasia pipeline uses FIVE orchestration patterns in concert:
 #
 # 1. SEQUENTIAL (Pipeline) — The backbone. Deterministic flow from PM to Writer.
 #    Easiest to debug, trace, and reason about. Each step produces a structured
@@ -28,15 +28,25 @@ version: "1.0"
 #    Code Quality Engineer, SRE Engineer, Frontend UX Engineer) and synthesizes
 #    their output. The orchestrator never talks to reviewers directly.
 #
+# 4. CRITIC LOOP (Dual-Agent Verification) — The agent that writes should
+#    never be the sole agent that verifies. Separate creation from evaluation
+#    with bounded feedback loops and conflict resolution.
+#
+# 5. TASK LEDGER (Execution Planning) — Before dispatching any agent, the
+#    orchestrator generates a plan (task_ledger.json) listing every intended
+#    step. This ledger is the "shared brain" of the team.
+#
 # This hybrid avoids the chaos of a pure network topology while allowing
 # the flexibility needed for real software engineering workflows.
 
 architecture:
-  name: "Hybrid Sequential-Graph-Hierarchical"
+  name: "Hybrid Sequential-Graph-Hierarchical-Critic-Ledger"
   description: >
-    A three-layer orchestration architecture combining the predictability of a
-    linear pipeline, the resilience of graph-based retry loops, and the depth
-    of hierarchical multi-perspective review.
+    A five-layer orchestration architecture combining the predictability of a
+    linear pipeline, the resilience of graph-based retry loops, the depth of
+    hierarchical multi-perspective review, the reliability of dual-agent
+    critic loops with conflict resolution, and the transparency of a shared
+    task ledger for execution planning and observability.
 
   # -------------------------------------------------------------------------
   # Layer 1: Sequential Pipeline (The Backbone)
@@ -124,9 +134,29 @@ architecture:
         writer: { type: "terminal", forward: null }
         escalation: { type: "terminal", forward: null }
       transitions:
-        - "Every transition logs: {from, to, reason, artifact_id, correlation_id, timestamp}."
-        - "Loop-back transitions increment a counter per edge."
-        - "If any edge counter exceeds max_iterations, transition to 'escalation' instead."
+        description: >
+          Every state transition is logged as a structured record conforming to
+          state_transition.schema.json. This provides a complete audit trail.
+        schema: "ai/schemas/state_transition.schema.json"
+        rules:
+          - "Every transition logs: {from, to, type, reason, artifact_id, correlation_id, timestamp}."
+          - "Loop-back transitions increment a counter per edge."
+          - "If any edge counter exceeds max_iterations, transition to 'escalation' instead."
+          - "Forward transitions require artifact schema validation BEFORE the transition is committed."
+          - "Gate transitions (gate_pause, gate_resume) record human decisions."
+        valid_transition_matrix:
+          pm: ["qualifier"]
+          qualifier: ["architect"]
+          architect: ["developer"]
+          developer: ["review"]
+          review: ["tester", "developer"]
+          tester: ["writer", "developer"]
+          writer: []
+          escalation: []
+        enforcement: >
+          The orchestrator validates every transition against the valid_transition_matrix.
+          Any transition not in the matrix is rejected with an error. This prevents
+          skip-ahead and ensures the pipeline follows the declared topology.
 
   # -------------------------------------------------------------------------
   # Layer 3: Hierarchical Delegation (Supervisor Pattern)
@@ -153,6 +183,71 @@ architecture:
       - "Reviewers do NOT see each other's findings during review."
       - "Reviewers do NOT see the full conversation history — only the PR diff and their checklist."
       - "The supervisor does NOT forward reviewer internal reasoning to the orchestrator."
+
+  # -------------------------------------------------------------------------
+  # Layer 4: Critic Loop (Dual-Agent Verification)
+  # -------------------------------------------------------------------------
+  critic_loop:
+    description: >
+      The Critic Loop enforces the principle that the agent which WRITES
+      should never be the sole agent that VERIFIES. Separate creation from
+      evaluation to catch blind spots. Defined in detail in critic_loop.yaml.
+    protocol: "ai/orchestration/critic_loop.yaml"
+    loops:
+      - producer: developer
+        critic: review
+        artifact: "persona_review.json"
+        max_iterations: 2
+        resolution: "Escalation to human if unresolved after 2 iterations"
+      - producer: developer
+        critic: tester
+        artifact: "test_report.json"
+        max_iterations: 2
+        resolution: "Escalation to human if unresolved after 2 iterations"
+    conflict_resolution:
+      description: >
+        When multiple review roles produce contradictory findings, the
+        Review supervisor resolves the conflict using a priority-ordered
+        strategy chain: severity_hierarchy → domain_authority → arbiter_judgment → human_escalation.
+      schema: "ai/schemas/conflict_resolution.schema.json"
+      strategies:
+        - { name: "severity_hierarchy", automatic: true, description: "Higher severity always wins" }
+        - { name: "domain_authority", automatic: true, description: "Domain expert prevails within their specialty" }
+        - { name: "arbiter_judgment", automatic: false, description: "Review supervisor weighs positions against quality rubric" }
+        - { name: "human_escalation", automatic: false, description: "Unresolvable conflicts escalate to human" }
+    guardrails:
+      - "No context accumulation across loop iterations"
+      - "Focused re-review on iteration 2+ (only verify prior fixes)"
+      - "Escalation over persistence — never attempt a 3rd loop"
+      - "No self-review — producer cannot certify its own output"
+      - "Regression detection on re-review iterations"
+
+  # -------------------------------------------------------------------------
+  # Layer 5: Task Ledger (Execution Planning)
+  # -------------------------------------------------------------------------
+  task_ledger:
+    description: >
+      Before dispatching any agent, the orchestrator generates a Task Ledger
+      (task_ledger.json) that lists every planned step, gate, and artifact.
+      This ledger is the "shared brain" of the team — a living document
+      updated at every state transition. Defined in detail in task_ledger.yaml.
+    protocol: "ai/orchestration/task_ledger.yaml"
+    schema: "ai/schemas/task_ledger.schema.json"
+    lifecycle:
+      - phase: "planning"
+        trigger: "Workflow start"
+        output: "task_ledger.json + plan.md"
+      - phase: "executing"
+        trigger: "Every state transition"
+        output: "Updated task_ledger.json + plan.md"
+      - phase: "terminal"
+        trigger: "Workflow completion, escalation, or abort"
+        output: "Final task_ledger.json with full audit trail"
+    blackboard_entry:
+      key: "task_ledger"
+      producer: orchestrator
+      consumers: ["all agents (read-only)"]
+      access: "Only the orchestrator can write; all agents can read"
 
 # ---------------------------------------------------------------------------
 # Anti-Patterns — Explicitly Forbidden

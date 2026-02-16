@@ -33,6 +33,11 @@ blackboard:
       Agents write to the blackboard by producing their declared output artifact.
       The orchestrator validates all writes against JSON schemas before committing.
   entries:
+    - key: "task_ledger"
+      producer: orchestrator
+      consumers: [pm, qualifier, architect, developer, review, tester, writer]
+      schema: "ai/schemas/task_ledger.schema.json"
+      description: "Execution plan and progress tracker — read-only for agents, write by orchestrator"
     - key: "ticket_plan"
       producer: pm
       consumers: [qualifier]
@@ -57,6 +62,11 @@ blackboard:
       producer: review
       consumers: [tester, developer]
       schema: "ai/schemas/persona_review.schema.json"
+    - key: "conflict_resolution"
+      producer: review
+      consumers: [orchestrator]
+      schema: "ai/schemas/conflict_resolution.schema.json"
+      description: "Produced when review roles disagree — records resolution rationale"
     - key: "test_report"
       producer: tester
       consumers: [writer, developer]
@@ -127,6 +137,7 @@ handoff_notes:
   description: >
     Every agent MUST include structured handoff notes in or alongside its output
     artifact. These notes are the ONLY free-form context the next agent receives.
+  schema: "ai/schemas/handoff_notes.schema.json"
   required_fields:
     - field: "summary"
       description: "2-3 sentence summary of what was done and the key outcome."
