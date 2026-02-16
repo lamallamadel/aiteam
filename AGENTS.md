@@ -19,12 +19,12 @@ docker compose -f infra/docker-compose.ai.yml up -d  # Start infrastructure
 - **Frontend**: Node 20+, Angular (inferred), Playwright E2E
 - **Infra**: Docker Compose, Postgres 16
 
-## Gems & Personas
-The orchestrator is powered by specialized AI "Gems":
-- **Aabo**: Security & Infrastructure
-- **Aksil**: Architecture & Performance
-- **Imad**: Full-stack & Cloud-Native
-- **Tiziri**: UX & Product Strategy
+## Review Roles (formerly Gems & Personas)
+The orchestrator is powered by specialized AI "Review Roles":
+- **Security Engineer**: Security & Infrastructure
+- **Code Quality Engineer**: Architecture & Performance
+- **SRE Engineer**: Full-stack & Cloud-Native
+- **Frontend UX Engineer**: UX & Product Strategy
 
 Access them directly via the "Chat Mode" in the UI.
 

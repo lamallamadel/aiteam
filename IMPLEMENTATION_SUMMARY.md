@@ -17,8 +17,8 @@ Following a global review, the orchestrator has been upgraded with cross-run int
 
 ### 3. AI Workshop (Dual-Mode Interface)
 - **Code Mode**: Full autonomous agent pipeline (PM, Architect, Developer) for deep engineering tasks and PR generation.
-- **Chat Mode (Gems)**: Direct line to specialized AI Personas (Aabo, Aksil, etc.) for lightweight brainstorming, prompt engineering, and research.
-- **Dynamic Sidebar**: Navigation hub for discovering and interacting with "Gems" without needing a repository context.
+- **Chat Mode (Review Roles)**: Direct line to specialized AI Review Roles (Security Engineer, Code Quality Engineer, etc.) for lightweight brainstorming, prompt engineering, and research.
+- **Dynamic Sidebar**: Navigation hub for discovering and interacting with "Review Roles" without needing a repository context.
 
 ### 4. Repository Resilience & Empty Repo Support
 - **Zero-State Support**: The orchestrator now detects empty repositories (missing `main` branch) and performs initial commits to jumpstart the development workflow.

@@ -26,11 +26,11 @@ mcp:
     - "Use `read_file` via the FileSystem MCP to inspect source files at finding locations."
     - "Delegate MCP connections to persona reviewers based on their permission sets."
     - "Use `add_pull_request_review` to post the consolidated review (requires_confirmation)."
-  persona_mcp_delegation:
-    aabo: [github, filesystem]
-    aksil: [github, filesystem]
-    imad: [github, filesystem, postgres]
-    tiziri: [github, filesystem, browser]
+  reviewer_mcp_delegation:
+    security-engineer: [github, filesystem]
+    code-quality-engineer: [github, filesystem]
+    sre-engineer: [github, filesystem, postgres]
+    frontend-ux-engineer: [github, filesystem, browser]
 workflow:
   - step: discover
     description: >
@@ -45,11 +45,11 @@ workflow:
       scoped MCP tool belt.
   - step: collect
     description: >
-      Collect findings from all four personas:
-      - Aabo (Security): vulnerabilities, secret exposure, auth issues
-      - Aksil (Code Quality): correctness, patterns, complexity, tests
-      - Imad (Infrastructure): resource limits, idempotency, observability
-      - Tiziri (Frontend UX): accessibility, loading states, responsiveness
+      Collect findings from all four specialist reviewers:
+      - Security Engineer: vulnerabilities, secret exposure, auth issues, supply chain
+      - Code Quality Engineer: correctness, patterns, complexity, tests, fitness functions
+      - SRE Engineer: resource limits, idempotency, observability, SLO impact
+      - Frontend UX Engineer: accessibility, loading states, responsiveness, Core Web Vitals
   - step: synthesize
     description: >
       Merge all findings, deduplicate, and rank by severity.
@@ -88,10 +88,10 @@ rules:
   - "Be constructive and specific — never vague."
   - "Critical/high findings block approval; medium/low do not."
 delegates_to:
-  - aabo
-  - aksil
-  - imad
-  - tiziri
+  - security-engineer
+  - code-quality-engineer
+  - sre-engineer
+  - frontend-ux-engineer
 boundaries:
   can_read:
     - "ai-orchestrator/src/**"

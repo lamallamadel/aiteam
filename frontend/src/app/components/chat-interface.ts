@@ -172,8 +172,8 @@ interface Message {
     .sender-label { font-size: 0.7rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
     
     /* Persona specific colors */
-    .persona-aksil .bubble { border-left: 3px solid #f43f5e; }
-    .persona-aksil .sender-label { color: #f43f5e; }
+    .persona-code-quality-engineer .bubble { border-left: 3px solid #f43f5e; }
+    .persona-code-quality-engineer .sender-label { color: #f43f5e; }
     .persona-morgan .bubble { border-left: 3px solid #8b5cf6; }
     .persona-morgan .sender-label { color: #8b5cf6; }
     .persona-atlasia .bubble { border-left: 3px solid #38bdf8; }
@@ -549,7 +549,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     const voices = window.speechSynthesis.getVoices();
     if (this.selectedPersona?.toLowerCase() === 'morgan') {
       utterance.pitch = 0.8; // Deeper voice
-    } else if (this.selectedPersona?.toLowerCase() === 'aksil') {
+    } else if (this.selectedPersona?.toLowerCase() === 'code-quality-engineer') {
       utterance.rate = 1.2; // Faster voice
     }
 

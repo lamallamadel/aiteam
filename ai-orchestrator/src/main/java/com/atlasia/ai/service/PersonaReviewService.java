@@ -149,7 +149,7 @@ public class PersonaReviewService {
         
         prompt.append("Your task is to review the provided code changes and identify issues, provide recommendations, ");
         prompt.append("and suggest specific enhancements. For each issue, specify the severity level (critical, high, medium, low), ");
-        prompt.append("affected file path, description, and whether it's mandatory to fix (critical/high security issues from Aabo are mandatory).\n\n");
+        prompt.append("affected file path, description, and whether it's mandatory to fix (critical/high security issues from Security Engineer are mandatory).\n\n");
         
         prompt.append("Focus on your area of expertise and be thorough but practical. ");
         prompt.append("Only flag real issues that matter for code quality, security, or user experience.");
@@ -173,7 +173,7 @@ public class PersonaReviewService {
         prompt.append("3. Provide specific, actionable recommendations\n");
         prompt.append("4. Suggest enhancements aligned with your required enhancements list\n");
         prompt.append("5. Assign appropriate severity levels to each issue\n");
-        prompt.append("6. Mark security-related critical/high issues as mandatory if you are Aabo\n\n");
+        prompt.append("6. Mark security-related critical/high issues as mandatory if you are Security Engineer\n\n");
         
         prompt.append("Focus on providing value - only flag real problems and skip minor nitpicks.\n");
         
@@ -202,7 +202,7 @@ public class PersonaReviewService {
                     "filePath", Map.of("type", "string", "description", "Path to affected file"),
                     "description", Map.of("type", "string", "description", "Clear description of the issue"),
                     "recommendation", Map.of("type", "string", "description", "Specific recommendation to address the issue"),
-                    "mandatory", Map.of("type", "boolean", "description", "Whether this fix is mandatory (true for Aabo critical/high security issues)")
+                    "mandatory", Map.of("type", "boolean", "description", "Whether this fix is mandatory (true for Security Engineer critical/high security issues)")
                 ),
                 "required", List.of("severity", "filePath", "description", "recommendation", "mandatory"),
                 "additionalProperties", false
@@ -261,7 +261,7 @@ public class PersonaReviewService {
                         issue.description, issue.recommendation);
                 report.mergedRecommendations.add(recommendation);
                 
-                if (issue.mandatory && review.personaName.equalsIgnoreCase("aabo")) {
+                if (issue.mandatory && review.personaName.equalsIgnoreCase("security-engineer")) {
                     applySecurityFix(codeChanges, issue);
                     report.securityFixesApplied = true;
                 }

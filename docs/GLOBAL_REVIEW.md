@@ -23,7 +23,7 @@ Le projet utilise un système de configuration par fichiers YAML et validation p
 
 - **Configurations des Agents** : Situées dans `ai/agents/`, elles définissent clairement missions, entrées et sorties (ex: [qualifier.yaml](file:///c:/Users/a891780/Atlasia-ai-pack/ai/agents/qualifier.yaml)).
 - **Contrôle Qualité** : Les schémas JSON dans `ai/schemas/` servent de contrats d'interface, garantis par le `JsonSchemaValidator`.
-- **Personas de Revue** : Le dossier `ai/agents/personas/` contient des profils spécialisés (ex: `aabo` pour la sécurité) avec des checklists précises, ce qui professionnalise la génération de code par IA.
+- **Personas de Revue** : Le dossier `ai/agents/personas/` contient des profils spécialisés (ex: `security-engineer` pour la sécurité) avec des checklists précises, ce qui professionnalise la génération de code par IA.
 
 ---
 
@@ -43,7 +43,7 @@ Le projet utilise un système de configuration par fichiers YAML et validation p
 ## 4. Recommandations
 
 1.  **Finalisation du Frontend** : Amorce de la structure Angular/React si le projet l'exige, car les agents s'attendent à trouver des fichiers dans ce dossier.
-2.  **Sécurité** : Étendre les checks de `aabo.yaml` pour inclure des scans de dépendances automatisés dans le pipeline de l'orchestrateur.
+2.  **Sécurité** : Étendre les checks de `security-engineer.yaml` pour inclure des scans de dépendances automatisés dans le pipeline de l'orchestrateur.
 3.  **Documentation** : Mettre à jour `IMPLEMENTATION_SUMMARY.md` pour refléter l'état réel des fichiers présents dans le repo afin de ne pas induire les futurs développeurs (ou agents) en erreur.
 
 ---

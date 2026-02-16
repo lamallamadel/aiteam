@@ -28,12 +28,12 @@ Atlasia transforms multi-week development cycles into high-velocity "bolts" meas
 | Writer | Documentation updates, changelog, README maintenance | `docs_update` |
 
 ### Chat Mode (Interactive Dialogue)
-| Gem | Specialization |
-|-----|---------------|
-| Aabo | Security: MIME validation, secret detection, XSS/SQLi prevention |
-| Aksil | Code Quality: error handling, SOLID principles, test coverage |
-| Imad | Infrastructure: Docker, Kubernetes, caching, scalability |
-| Tiziri | Frontend/UX: accessibility, responsive design, performance |
+| Review Role | Specialization |
+|-------------|---------------|
+| Security Engineer | Security: MIME validation, secret detection, XSS/SQLi prevention |
+| Code Quality Engineer | Code Quality: error handling, SOLID principles, test coverage |
+| SRE Engineer | Infrastructure: Docker, Kubernetes, caching, scalability |
+| Frontend UX Engineer | Frontend/UX: accessibility, responsive design, performance |
 
 ## Constraints
 
