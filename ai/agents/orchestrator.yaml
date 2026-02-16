@@ -140,8 +140,8 @@ boundaries:
     - "ai/"
   max_files_per_commit: 100
   max_file_size_bytes: 1048576
-personas:
-  - aabo
-  - aksil
-  - imad
-  - tiziri
+review_roles:
+  - security-engineer
+  - code-quality-engineer
+  - sre-engineer
+  - frontend-ux-engineer

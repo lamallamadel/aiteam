@@ -8,7 +8,7 @@ Standardized terminology for the Atlasia platform. All agents, documentation, an
 
 - **Agent**: A specialized LLM-powered step in the pipeline. Each agent has a defined role, inputs, outputs, and operational boundaries. Agents: PM, Qualifier, Architect, Developer, Tester, Writer.
 
-- **Gem (Persona)**: A domain-expert AI personality used for interactive chat and code review. Four gems: Aabo (Security), Aksil (Code Quality), Imad (Infrastructure), Tiziri (Frontend/UX).
+- **Review Role (formerly Gem)**: A domain-expert AI personality used for interactive chat and code review. Four review roles: Security Engineer (Security), Code Quality Engineer (Code Quality), SRE Engineer (Infrastructure), Frontend UX Engineer (Frontend/UX).
 
 - **Artifact**: A structured output produced by an agent step. Stored as JSONB in the `ai_run_artifact` table. Examples: `ticket_plan.json`, `work_plan.json`, `architecture_notes.md`, `test_report.json`, `pr_url`.
 
@@ -28,7 +28,7 @@ Standardized terminology for the Atlasia platform. All agents, documentation, an
 
 ## Architecture Terminology
 
-- **Dual-Mode Architecture**: Atlasia operates in two modes: Code Mode (autonomous pipeline triggered by `ai:run` label) and Chat Mode (interactive dialogue with Gem personas).
+- **Dual-Mode Architecture**: Atlasia operates in two modes: Code Mode (autonomous pipeline triggered by `ai:run` label) and Chat Mode (interactive dialogue with Review Role personas).
 
 - **Human-on-the-Loop (HOTL)**: The oversight paradigm where agents operate autonomously by default, with human engineers intervening only at escalation thresholds or boundary conditions. Contrasted with Human-in-the-Loop (HITL), where every step requires approval.
 
@@ -68,7 +68,7 @@ Standardized terminology for the Atlasia platform. All agents, documentation, an
 
 - **Reflexion Pattern**: A self-correction step where an agent critiques its own output before submission. The architect lists 3 potential design weaknesses; the developer lists 3 potential bugs. Issues found are fixed before the artifact is produced.
 
-- **Adversarial Review**: The code review pattern where four independent persona agents (Aabo, Aksil, Imad, Tiziri) examine the same PR through different expert lenses in parallel, then findings are synthesized by the Review supervisor. Ensures multi-perspective quality verification.
+- **Adversarial Review**: The code review pattern where four independent persona agents (Security Engineer, Code Quality Engineer, SRE Engineer, Frontend UX Engineer) examine the same PR through different expert lenses in parallel, then findings are synthesized by the Review supervisor. Ensures multi-perspective quality verification.
 
 - **Graph Loop-Back**: A conditional workflow edge that routes the pipeline backward on failure instead of forward. Two loop-back edges exist: review → developer (on changes_required) and tester → developer (on unresolvable test failures). Each is bounded by max_iterations to prevent infinite cycles.
 

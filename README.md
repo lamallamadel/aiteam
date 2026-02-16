@@ -9,12 +9,12 @@ CODE MODE (Autonomous Pipeline)
 Issue -> [PM] -> [Qualifier] -> [Architect] -> [Developer] -> [Review] -> [Tester] -> [Writer] -> PR
 
 CHAT MODE (Interactive AI Dialogue)
-User <-> [Gem Persona] (Aabo | Aksil | Imad | Tiziri)
+User <-> [Review Role] (Security Engineer | Code Quality Engineer | SRE Engineer | Frontend UX Engineer)
 ```
 
 **Code Mode** — Triggered by the `ai:run` GitHub label. Executes the full pipeline autonomously: requirement analysis, architecture validation, code generation, persona-based review, testing with CI fix loops, and documentation updates.
 
-**Chat Mode** — Direct conversations with specialized AI personas (Gems) for brainstorming, code review, and research.
+**Chat Mode** — Direct conversations with specialized AI personas (Review Roles) for brainstorming, code review, and research.
 
 ## Tech Stack
 
@@ -74,7 +74,7 @@ atlasia-ai-pack/
   frontend/            Angular 21 dashboard (components, services, models)
   ai/
     agents/            Agent YAML contracts (orchestrator, pm, qualifier, ...)
-    agents/personas/   Gem persona definitions (aabo, aksil, imad, tiziri)
+    agents/personas/   Review Role definitions (security-engineer, code-quality-engineer, sre-engineer, frontend-ux-engineer)
     schemas/           JSON schema validation (ticket_plan, work_plan, ...)
     playbooks/         Operational playbooks (branching, CI fix loops, ...)
   docs/                Quality gates, domain glossary, runbooks

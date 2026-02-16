@@ -11,7 +11,7 @@
   "properties": {
     "personaName": {
       "type": "string",
-      "description": "Name of the persona performing the review (aabo, aksil, imad, tiziri)"
+      "description": "Name of the review role performing the review (security-engineer, code-quality-engineer, sre-engineer, frontend-ux-engineer)"
     },
     "riskFindings": {
       "type": "array",

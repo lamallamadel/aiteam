@@ -69,8 +69,8 @@ class PersonaReviewServiceTest {
 
     @Test
     void testReviewCodeChanges_withSecurityRejection() throws Exception {
-        PersonaConfig aaboConfig = createAaboPersonaConfig();
-        when(personaConfigLoader.getPersonas()).thenReturn(List.of(aaboConfig));
+        PersonaConfig securityEngineerConfig = createSecurityEngineerPersonaConfig();
+        when(personaConfigLoader.getPersonas()).thenReturn(List.of(securityEngineerConfig));
 
         String llmResponse = """
                 {
@@ -102,11 +102,11 @@ class PersonaReviewServiceTest {
         assertEquals(1, report.getFindings().size());
         assertTrue(report.isSecurityFixesApplied());
 
-        PersonaReviewService.PersonaReview aaboReview = report.getFindings().get(0);
-        assertEquals("aabo", aaboReview.getPersonaName());
-        assertEquals(1, aaboReview.getIssues().size());
+        PersonaReviewService.PersonaReview securityEngineerReview = report.getFindings().get(0);
+        assertEquals("security-engineer", securityEngineerReview.getPersonaName());
+        assertEquals(1, securityEngineerReview.getIssues().size());
 
-        PersonaReviewService.PersonaIssue issue = aaboReview.getIssues().get(0);
+        PersonaReviewService.PersonaIssue issue = securityEngineerReview.getIssues().get(0);
         assertEquals("critical", issue.getSeverity());
         assertTrue(issue.isMandatory());
 
@@ -115,8 +115,8 @@ class PersonaReviewServiceTest {
 
     @Test
     void testReviewCodeChanges_withInfraRecommendation() throws Exception {
-        PersonaConfig imadConfig = createImadPersonaConfig();
-        when(personaConfigLoader.getPersonas()).thenReturn(List.of(imadConfig));
+        PersonaConfig sreEngineerConfig = createSreEngineerPersonaConfig();
+        when(personaConfigLoader.getPersonas()).thenReturn(List.of(sreEngineerConfig));
 
         String llmResponse = """
                 {
@@ -153,12 +153,12 @@ class PersonaReviewServiceTest {
         assertEquals(1, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        PersonaReviewService.PersonaReview imadReview = report.getFindings().get(0);
-        assertEquals("imad", imadReview.getPersonaName());
-        assertEquals(1, imadReview.getIssues().size());
-        assertEquals(2, imadReview.getEnhancements().size());
+        PersonaReviewService.PersonaReview sreEngineerReview = report.getFindings().get(0);
+        assertEquals("sre-engineer", sreEngineerReview.getPersonaName());
+        assertEquals(1, sreEngineerReview.getIssues().size());
+        assertEquals(2, sreEngineerReview.getEnhancements().size());
 
-        PersonaReviewService.PersonaIssue issue = imadReview.getIssues().get(0);
+        PersonaReviewService.PersonaIssue issue = sreEngineerReview.getIssues().get(0);
         assertEquals("medium", issue.getSeverity());
         assertFalse(issue.isMandatory());
 
@@ -168,8 +168,8 @@ class PersonaReviewServiceTest {
 
     @Test
     void testReviewCodeChanges_withFrontendEnhancement() throws Exception {
-        PersonaConfig tiziriConfig = createTiziriPersonaConfig();
-        when(personaConfigLoader.getPersonas()).thenReturn(List.of(tiziriConfig));
+        PersonaConfig frontendUxEngineerConfig = createFrontendUxEngineerPersonaConfig();
+        when(personaConfigLoader.getPersonas()).thenReturn(List.of(frontendUxEngineerConfig));
 
         String llmResponse = """
                 {
@@ -211,11 +211,11 @@ class PersonaReviewServiceTest {
         assertEquals(1, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        PersonaReviewService.PersonaReview tiziriReview = report.getFindings().get(0);
-        assertEquals("tiziri", tiziriReview.getPersonaName());
-        assertEquals("Frontend Experience Guardian", tiziriReview.getPersonaRole());
-        assertEquals(1, tiziriReview.getIssues().size());
-        assertEquals(3, tiziriReview.getEnhancements().size());
+        PersonaReviewService.PersonaReview frontendUxEngineerReview = report.getFindings().get(0);
+        assertEquals("frontend-ux-engineer", frontendUxEngineerReview.getPersonaName());
+        assertEquals("Frontend Experience Guardian", frontendUxEngineerReview.getPersonaRole());
+        assertEquals(1, frontendUxEngineerReview.getIssues().size());
+        assertEquals(3, frontendUxEngineerReview.getEnhancements().size());
 
         assertTrue(report.getMergedRecommendations().stream()
                 .anyMatch(r -> r.contains("progress_feedback")));
@@ -227,12 +227,12 @@ class PersonaReviewServiceTest {
 
     @Test
     void testReviewCodeChanges_withMultiplePersonas() throws Exception {
-        PersonaConfig aaboConfig = createAaboPersonaConfig();
-        PersonaConfig aksilConfig = createAksilPersonaConfig();
+        PersonaConfig securityEngineerConfig = createSecurityEngineerPersonaConfig();
+        PersonaConfig codeQualityEngineerConfig = createCodeQualityEngineerPersonaConfig();
 
-        when(personaConfigLoader.getPersonas()).thenReturn(List.of(aaboConfig, aksilConfig));
+        when(personaConfigLoader.getPersonas()).thenReturn(List.of(securityEngineerConfig, codeQualityEngineerConfig));
 
-        String aaboResponse = """
+        String securityEngineerResponse = """
                 {
                     "overallAssessment": "Security looks good",
                     "issues": [],
@@ -240,7 +240,7 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        String aksilResponse = """
+        String codeQualityEngineerResponse = """
                 {
                     "overallAssessment": "Code quality is acceptable",
                     "issues": [
@@ -263,7 +263,7 @@ class PersonaReviewServiceTest {
                 """;
 
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(aaboResponse, aksilResponse);
+                .thenReturn(securityEngineerResponse, codeQualityEngineerResponse);
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -289,8 +289,8 @@ class PersonaReviewServiceTest {
 
     @Test
     void testReviewCodeChanges_withLlmFailure() throws Exception {
-        PersonaConfig aaboConfig = createAaboPersonaConfig();
-        when(personaConfigLoader.getPersonas()).thenReturn(List.of(aaboConfig));
+        PersonaConfig securityEngineerConfig = createSecurityEngineerPersonaConfig();
+        when(personaConfigLoader.getPersonas()).thenReturn(List.of(securityEngineerConfig));
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
@@ -304,9 +304,9 @@ class PersonaReviewServiceTest {
         assertEquals(0, failedReview.getIssues().size());
     }
 
-    private PersonaConfig createAaboPersonaConfig() {
+    private PersonaConfig createSecurityEngineerPersonaConfig() {
         return new PersonaConfig(
-                "aabo",
+                "security-engineer",
                 "Security Specialist",
                 "Identify security vulnerabilities",
                 List.of("Input validation", "SQL injection", "XSS prevention"),
@@ -319,9 +319,9 @@ class PersonaReviewServiceTest {
                         new PersonaConfig.Enhancement("sanitization", "File uploads must be validated")));
     }
 
-    private PersonaConfig createImadPersonaConfig() {
+    private PersonaConfig createSreEngineerPersonaConfig() {
         return new PersonaConfig(
-                "imad",
+                "sre-engineer",
                 "Infrastructure Architect",
                 "Validate infrastructure decisions",
                 List.of("Caching strategy", "Scalability", "Performance"),
@@ -334,9 +334,9 @@ class PersonaReviewServiceTest {
                         new PersonaConfig.Enhancement("scalability", "Architecture must support horizontal scaling")));
     }
 
-    private PersonaConfig createTiziriPersonaConfig() {
+    private PersonaConfig createFrontendUxEngineerPersonaConfig() {
         return new PersonaConfig(
-                "tiziri",
+                "frontend-ux-engineer",
                 "Frontend Experience Guardian",
                 "Ensure excellent user experience",
                 List.of("Progress feedback", "Accessibility", "Error messaging"),
@@ -349,9 +349,9 @@ class PersonaReviewServiceTest {
                         new PersonaConfig.Enhancement("accessibility", "Meet WCAG 2.1 AA standards")));
     }
 
-    private PersonaConfig createAksilPersonaConfig() {
+    private PersonaConfig createCodeQualityEngineerPersonaConfig() {
         return new PersonaConfig(
-                "aksil",
+                "code-quality-engineer",
                 "Code Quality Guardian",
                 "Ensure code maintainability",
                 List.of("Error handling", "Test coverage", "Code duplication"),

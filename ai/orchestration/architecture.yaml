@@ -24,9 +24,9 @@ version: "1.0"
 #    Edges are conditional: success → forward, failure → loop-back.
 #
 # 3. HIERARCHICAL (Supervisor) — For code review. The Review agent is a
-#    supervisor that delegates to four persona sub-agents (Aabo, Aksil, Imad,
-#    Tiziri) and synthesizes their output. The orchestrator never talks to
-#    personas directly.
+#    supervisor that delegates to four specialist review roles (Security Engineer,
+#    Code Quality Engineer, SRE Engineer, Frontend UX Engineer) and synthesizes
+#    their output. The orchestrator never talks to reviewers directly.
 #
 # This hybrid avoids the chaos of a pure network topology while allowing
 # the flexibility needed for real software engineering workflows.
@@ -133,26 +133,26 @@ architecture:
   # -------------------------------------------------------------------------
   hierarchical_delegation:
     description: >
-      The Review agent acts as a supervisor, delegating work to four persona
-      sub-agents. The orchestrator dispatches to the Review agent; the Review
-      agent internally fans out to personas and synthesizes results. The
-      orchestrator never interacts with personas directly.
+      The Review agent acts as a supervisor, delegating work to four specialist
+      review roles. The orchestrator dispatches to the Review agent; the Review
+      agent internally fans out to reviewers and synthesizes results. The
+      orchestrator never interacts with reviewers directly.
     supervisor: review
     delegates:
-      - { persona: aabo,   role: "Security Review",       parallel: true }
-      - { persona: aksil,  role: "Code Quality Review",   parallel: true }
-      - { persona: imad,   role: "Infrastructure Review", parallel: true }
-      - { persona: tiziri, role: "Frontend UX Review",    parallel: true }
+      - { reviewer: security-engineer,       role: "Security Review",       parallel: true }
+      - { reviewer: code-quality-engineer,   role: "Code Quality Review",   parallel: true }
+      - { reviewer: sre-engineer,            role: "Infrastructure Review", parallel: true }
+      - { reviewer: frontend-ux-engineer,    role: "Frontend UX Review",    parallel: true }
     protocol:
-      - "The supervisor receives the PR diff and fans out to all four personas in parallel."
-      - "Each persona receives ONLY: the PR diff, their scoped MCP connections, and the review checklist."
-      - "Each persona produces: a list of findings with severity, location, description, and suggested fix."
+      - "The supervisor receives the PR diff and fans out to all four specialist reviewers in parallel."
+      - "Each reviewer receives ONLY: the PR diff, their scoped MCP connections, and the review checklist."
+      - "Each reviewer produces: a list of findings with severity, location, description, and suggested fix."
       - "The supervisor collects, deduplicates, ranks, and synthesizes findings into persona_review.json."
       - "The supervisor determines the overall verdict: approved, approved_with_minor_issues, changes_required, rejected."
     context_isolation:
-      - "Personas do NOT see each other's findings during review."
-      - "Personas do NOT see the full conversation history — only the PR diff and their checklist."
-      - "The supervisor does NOT forward persona internal reasoning to the orchestrator."
+      - "Reviewers do NOT see each other's findings during review."
+      - "Reviewers do NOT see the full conversation history — only the PR diff and their checklist."
+      - "The supervisor does NOT forward reviewer internal reasoning to the orchestrator."
 
 # ---------------------------------------------------------------------------
 # Anti-Patterns — Explicitly Forbidden
@@ -170,6 +170,6 @@ anti_patterns:
     description: "Retry loops without max_iterations lead to infinite cycles and runaway costs."
     violation_action: "Every loop-back edge MUST declare max_iterations. Default is 2 if not specified."
 
-  - name: "Direct Persona Access"
-    description: "The orchestrator must not dispatch directly to persona agents. Always route through the Review supervisor."
-    violation_action: "Persona agents reject any dispatch not originating from the Review agent."
+  - name: "Direct Reviewer Access"
+    description: "The orchestrator must not dispatch directly to specialist reviewers. Always route through the Review supervisor."
+    violation_action: "Reviewer agents reject any dispatch not originating from the Review agent."

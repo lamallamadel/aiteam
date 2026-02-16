@@ -182,11 +182,11 @@ agents:
         allowed_tools: [list_directory, read_file, search_files]
 
 # ---------------------------------------------------------------------------
-# Persona → Server Permissions (Review Context)
+# Review Role → Server Permissions (Review Context)
 # ---------------------------------------------------------------------------
 personas:
 
-  aabo:
+  security-engineer:
     description: "Security review — reads code, PRs, and dependency manifests."
     servers:
       github:
@@ -202,7 +202,7 @@ personas:
           - "frontend/package.json"
           - "frontend/package-lock.json"
 
-  aksil:
+  code-quality-engineer:
     description: "Code quality review — reads code, tests, and architecture docs."
     servers:
       github:
@@ -216,7 +216,7 @@ personas:
           - "frontend/src/**"
           - "docs/**"
 
-  imad:
+  sre-engineer:
     description: "Infrastructure review — reads configs, Docker, IaC, and DB schemas."
     servers:
       github:
@@ -235,7 +235,7 @@ personas:
         permission: read_only
         allowed_tools: [list_tables, describe_table]
 
-  tiziri:
+  frontend-ux-engineer:
     description: "Frontend UX review — reads components, templates, styles, and runs visual checks."
     servers:
       github:
