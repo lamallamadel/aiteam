@@ -1,0 +1,206 @@
+# ============================================================================
+# Handoff Protocol — Atlasia AI Pipeline
+# ============================================================================
+# Defines how agents pass the baton: structured artifacts, context isolation,
+# the blackboard pattern, and anti-patterns to avoid.
+#
+# Key principle: agents communicate through ARTIFACTS, not conversation history.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Core Principle: Structured Artifacts Over Chat History
+# ---------------------------------------------------------------------------
+principle: >
+  Agents NEVER receive the full conversation history of the previous agent.
+  Instead, each agent produces a structured artifact (JSON, Markdown, or URL)
+  that serves as the clean, validated input for the next agent. This prevents
+  context pollution, reduces hallucinations, and makes the pipeline debuggable.
+
+# ---------------------------------------------------------------------------
+# The Blackboard Pattern
+# ---------------------------------------------------------------------------
+blackboard:
+  description: >
+    A shared memory store where agents read and write state. The orchestrator
+    manages the blackboard, ensuring agents only read entries they are authorized
+    to consume and only write entries they are authorized to produce.
+  implementation:
+    storage: "ai_run_artifact table (JSONB) keyed by correlation_id + agent_name."
+    access_pattern: >
+      Agents read from the blackboard by requesting specific artifact keys.
+      Agents write to the blackboard by producing their declared output artifact.
+      The orchestrator validates all writes against JSON schemas before committing.
+  entries:
+    - key: "ticket_plan"
+      producer: pm
+      consumers: [qualifier]
+      schema: "ai/schemas/ticket_plan.schema.json"
+    - key: "work_plan"
+      producer: qualifier
+      consumers: [architect, developer]
+      schema: "ai/schemas/work_plan.schema.json"
+    - key: "architecture_notes"
+      producer: architect
+      consumers: [developer]
+      schema: null
+    - key: "pr_url"
+      producer: developer
+      consumers: [review, tester, writer]
+      schema: null
+    - key: "implementation_report"
+      producer: developer
+      consumers: [review, writer]
+      schema: null
+    - key: "persona_review"
+      producer: review
+      consumers: [tester, developer]
+      schema: "ai/schemas/persona_review.schema.json"
+    - key: "test_report"
+      producer: tester
+      consumers: [writer, developer]
+      schema: "ai/schemas/test_report.schema.json"
+    - key: "escalation"
+      producer: "any"
+      consumers: [orchestrator]
+      schema: "ai/schemas/escalation.schema.json"
+    - key: "docs_patch"
+      producer: writer
+      consumers: []
+      schema: null
+  rules:
+    - "An agent can ONLY read blackboard entries listed in its `consumers` set."
+    - "An agent can ONLY write blackboard entries listed in its `producer` declaration."
+    - "The orchestrator validates every write against the declared JSON schema."
+    - "Blackboard entries are immutable once written — updates create new versions."
+    - "All entries are tagged with: correlation_id, agent_name, timestamp, schema_version."
+
+# ---------------------------------------------------------------------------
+# Context Isolation Rules
+# ---------------------------------------------------------------------------
+context_isolation:
+  description: >
+    Strict rules governing what context each agent receives. The goal is to
+    give each agent the MINIMUM context needed to do its job, preventing
+    context pollution and reducing hallucination risk.
+  rules:
+    what_agents_receive:
+      - "The system prompt (persona, mission, rules, MCP connections)."
+      - "Their declared input artifacts from the blackboard (and ONLY those)."
+      - "The handoff notes from the previous agent (structured, not free-form)."
+      - "The Correlation ID for tracing."
+    what_agents_do_NOT_receive:
+      - "The full conversation history of any previous agent."
+      - "The chain-of-thought traces of any previous agent."
+      - "Raw MCP tool call logs from any previous agent."
+      - "Artifacts not declared in their input list."
+      - "Other agents' internal planning blocks (<planning>, <thinking>)."
+
+  per_agent_context:
+    pm:
+      receives: ["github_issue (via MCP)", "docs/DOMAIN_GLOSSARY.md (via MCP)"]
+      does_not_receive: ["repo source code", "prior bolt artifacts"]
+    qualifier:
+      receives: ["ticket_plan.json", "DOMAIN_GLOSSARY.md (via MCP)", "repo structure (via MCP)"]
+      does_not_receive: ["PM's chain-of-thought", "PM's MCP call logs"]
+    architect:
+      receives: ["work_plan.json", "repo structure (via MCP)", "ADRs (via MCP)", "DB schema (via MCP)"]
+      does_not_receive: ["Qualifier's reasoning", "ticket_plan.json (superseded by work_plan)"]
+    developer:
+      receives: ["work_plan.json", "architecture_notes.md", "repo code (via MCP)"]
+      does_not_receive: ["Architect's chain-of-thought", "ticket_plan.json"]
+    review:
+      receives: ["pr_url", "implementation_report.md", "PR diff (via MCP)"]
+      does_not_receive: ["Developer's planning blocks", "work_plan.json"]
+    tester:
+      receives: ["pr_url", "persona_review.json", "CI/E2E results (via MCP)"]
+      does_not_receive: ["Review personas' internal findings", "Developer's code reasoning"]
+    writer:
+      receives: ["pr_url", "implementation_report.md", "test_report.json", "PR diff (via MCP)"]
+      does_not_receive: ["Any agent's chain-of-thought", "Tester's fix loop attempts"]
+
+# ---------------------------------------------------------------------------
+# Handoff Note Structure
+# ---------------------------------------------------------------------------
+handoff_notes:
+  description: >
+    Every agent MUST include structured handoff notes in or alongside its output
+    artifact. These notes are the ONLY free-form context the next agent receives.
+  required_fields:
+    - field: "summary"
+      description: "2-3 sentence summary of what was done and the key outcome."
+    - field: "decisions"
+      description: "List of key decisions made and their rationale."
+    - field: "open_questions"
+      description: "Unresolved questions or ambiguities for the next agent to address."
+    - field: "risks"
+      description: "Identified risks with suggested mitigations."
+    - field: "deviations"
+      description: "Any deviations from the input artifact's expectations, with justification."
+  validation: >
+    The orchestrator validates that handoff_notes are non-empty before allowing
+    the transition. An agent that produces an artifact with empty handoff notes
+    is asked to regenerate with notes included.
+
+# ---------------------------------------------------------------------------
+# Loop-Back Handoff (Graph Edges)
+# ---------------------------------------------------------------------------
+loop_back_handoff:
+  description: >
+    When the workflow loops back (review → developer, tester → developer),
+    the returning artifact is APPENDED to the developer's input set, not
+    replacing it. The developer receives:
+    1. Its original inputs (work_plan.json, architecture_notes.md).
+    2. The loop-back artifact (persona_review.json or test_report.json).
+    3. A structured delta describing what to fix.
+
+  review_to_developer:
+    context_provided:
+      - "persona_review.json — the consolidated review with ranked findings."
+      - "A filtered list of ONLY critical and high findings requiring action."
+      - "The developer's original implementation_report.md for reference."
+    context_stripped:
+      - "Persona internal reasoning and chain-of-thought."
+      - "Medium/low findings (included in artifact but not highlighted for action)."
+      - "Review agent's synthesis reasoning."
+    instruction_to_developer: >
+      You are re-entering the implementation step due to review findings.
+      Read persona_review.json and address ALL critical and high findings.
+      For each finding: identify the file and line, apply the fix, and add
+      a note in implementation_report.md explaining the change.
+
+  tester_to_developer:
+    context_provided:
+      - "test_report.json — the full diagnostic report with failure details."
+      - "Specific failing test names, error messages, and root cause analysis."
+      - "The tester's recommended fix approach (if provided)."
+    context_stripped:
+      - "Full CI/E2E log output (summarized in test_report)."
+      - "The tester's internal fix loop attempts and intermediate patches."
+      - "Browser automation traces."
+    instruction_to_developer: >
+      You are re-entering the implementation step due to test failures that
+      the tester could not resolve. Read test_report.json and address the
+      root causes. Focus on the failing tests listed — do not refactor
+      unrelated code.
+
+# ---------------------------------------------------------------------------
+# Anti-Patterns
+# ---------------------------------------------------------------------------
+anti_patterns:
+  - name: "Context Dumping"
+    description: "Forwarding the entire previous agent's output (including reasoning) as raw text."
+    fix: "Extract the structured artifact only. Strip chain-of-thought and MCP logs."
+
+  - name: "Implicit Handoff"
+    description: "Assuming the next agent will 'figure it out' without structured notes."
+    fix: "Require non-empty handoff_notes with all required fields populated."
+
+  - name: "Circular Context"
+    description: "Passing the same context through multiple loop iterations, growing exponentially."
+    fix: "On loop-back, pass only the new artifact (findings/report) plus the original inputs. Never accumulate."
+
+  - name: "Side-Channel Communication"
+    description: "Agents referencing shared files or state not tracked on the blackboard."
+    fix: "All inter-agent state must go through the blackboard. No direct file-based communication."

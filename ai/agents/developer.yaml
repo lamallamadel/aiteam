@@ -58,10 +58,17 @@ workflow:
       is possible, inputs are validated, and outputs are sanitized.
   - step: self_review
     description: >
-      Review your own changes as if you were a code reviewer. Check for:
-      correctness, edge cases, error handling, and adherence to work_plan requirements.
+      Reflexion step: review your own changes as if you were an adversarial code reviewer.
+      1. Re-read the work_plan.json acceptance criteria. Verify each one is satisfied.
+      2. List 3 potential bugs or edge cases in your implementation. Fix them.
+      3. Check for security issues: injection, secrets, path traversal, unvalidated input.
+      4. Verify error handling: what happens on null input, empty state, concurrent access?
+      5. Run the verification commands mentally — would all tests pass?
+      6. Produce the final diff only after addressing all self-identified issues.
       Output the complete file or a strict diff — never use placeholders like
       '// ... rest of code' or '// existing code'.
+      Include a "## Self-Review Notes" section in implementation_report.md documenting
+      the issues you found and fixed during self-review.
 chain_of_thought: >
   Follow the Plan-Act-Verify protocol:
   1. PLAN: Analyze → understand → design the approach before typing code.

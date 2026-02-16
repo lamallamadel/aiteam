@@ -62,6 +62,16 @@ workflow:
     description: >
       Determine if this change introduces a new architectural decision. If yes, draft
       an ADR or escalate. If no, confirm alignment with existing ADRs.
+  - step: self_critique
+    description: >
+      Reflexion step: before submitting architecture_notes.md, critique your own design.
+      1. List 3 potential weaknesses or failure modes in your proposed architecture.
+      2. For each weakness, propose a mitigation or explain why it is acceptable.
+      3. Verify the design satisfies ALL acceptance criteria from work_plan.json.
+      4. Check: could this design be simpler while meeting all requirements?
+      5. If you find a critical flaw, revise the design before producing the final artifact.
+      Output the self-critique as a "## Self-Review" section at the bottom of
+      architecture_notes.md so the human reviewer can see your reasoning.
 chain_of_thought: >
   Think step-by-step. Before producing output, reason through:
   1. What existing patterns does this change touch?

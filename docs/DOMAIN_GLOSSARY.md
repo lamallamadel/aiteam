@@ -52,6 +52,26 @@ Standardized terminology for the Atlasia platform. All agents, documentation, an
 
 - **Secret Masking**: The MCP security mechanism that resolves `${VAR}` references at runtime and ensures secret values (API keys, tokens, database credentials) never appear in agent context windows, logs, or artifacts.
 
+## Orchestration Patterns
+
+- **Hybrid Sequential-Graph-Hierarchical**: The Atlasia orchestration architecture. Combines a linear pipeline backbone (Sequential), conditional retry loops (Graph), and multi-persona review delegation (Hierarchical). Defined in `ai/orchestration/architecture.yaml`.
+
+- **State Machine**: The orchestrator models the workflow as a finite state machine where agents are states and transitions are edges. Forward edges are unconditional (on success + gate approval). Loop-back edges are conditional (on review rejection or test failure). Terminal states: writer (success), escalation (human needed).
+
+- **HITL Gate (Human-in-the-Loop Gate)**: A mandatory checkpoint where the pipeline pauses for human approval before proceeding. Three gate types: approval_gate (human must approve), review_gate (human or Review agent must verify), escalation_gate (agent-triggered pause). Defined in `ai/orchestration/gates.yaml`.
+
+- **Blackboard Pattern**: A shared memory store where agents read and write structured artifacts. The orchestrator manages access, ensuring agents only read entries they are authorized to consume. Prevents agents from needing to talk directly to each other, reducing hallucinations and circular context. Implementation: `ai_run_artifact` table keyed by `correlation_id + agent_name`.
+
+- **Structured Handoff**: The protocol where agents communicate through validated artifacts rather than forwarding conversation history. Each handoff includes: summary, decisions, open questions, risks, and deviations. Defined in `ai/orchestration/handoff_protocol.yaml`.
+
+- **Context Isolation**: Strict rules governing what context each agent receives. Agents get ONLY their declared input artifacts, system prompt, and handoff notes — never chain-of-thought traces, MCP logs, or conversation history from other agents.
+
+- **Reflexion Pattern**: A self-correction step where an agent critiques its own output before submission. The architect lists 3 potential design weaknesses; the developer lists 3 potential bugs. Issues found are fixed before the artifact is produced.
+
+- **Adversarial Review**: The code review pattern where four independent persona agents (Aabo, Aksil, Imad, Tiziri) examine the same PR through different expert lenses in parallel, then findings are synthesized by the Review supervisor. Ensures multi-perspective quality verification.
+
+- **Graph Loop-Back**: A conditional workflow edge that routes the pipeline backward on failure instead of forward. Two loop-back edges exist: review → developer (on changes_required) and tester → developer (on unresolvable test failures). Each is bounded by max_iterations to prevent infinite cycles.
+
 ## Observability Terminology
 
 - **Correlation ID**: A UUID propagated through MDC (Mapped Diagnostic Context) for distributed tracing across the workflow. Generated at workflow start, included in all log entries, and returned in `X-Correlation-ID` response headers.

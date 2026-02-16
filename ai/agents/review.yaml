@@ -62,6 +62,18 @@ workflow:
       - 'changes_required': High or critical findings that must be addressed.
       - 'rejected': Fundamental design flaws or security vulnerabilities.
       If the code is clean across all perspectives, respond with 'LGTM'.
+  - step: route
+    description: >
+      Based on the decision, determine the next workflow transition:
+      - If 'approved' or 'approved_with_minor_issues': produce persona_review.json
+        and hand off FORWARD to the tester agent.
+      - If 'changes_required': produce persona_review.json with a filtered list
+        of critical/high findings. The orchestrator routes BACK to the developer.
+        Include specific, actionable fix instructions for each finding.
+      - If 'rejected': produce persona_review.json AND escalation.json. The
+        orchestrator pauses for human intervention.
+      The routing decision is recorded in persona_review.json under the
+      'verdict' and 'routing' fields.
 chain_of_thought: >
   For each persona's findings, reason through:
   1. Is this finding actionable? (specific location + suggested fix)

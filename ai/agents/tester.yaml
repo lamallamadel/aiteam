@@ -58,6 +58,20 @@ workflow:
     description: >
       Generate test_report.json with per-area status, coverage metrics,
       and detailed notes on any issues encountered or fixed.
+  - step: route
+    description: >
+      Based on the test results, determine the next workflow transition:
+      - If ciStatus is 'GREEN' and all tests pass: produce test_report.json
+        and hand off FORWARD to the writer agent.
+      - If ciStatus is 'RED' and the internal fix loop is exhausted (CI: 3
+        tries, E2E: 2 tries): produce test_report.json with full diagnostic
+        detail (failing tests, root cause analysis, attempted fixes). The
+        orchestrator routes BACK to the developer with this diagnostic context.
+      - If the tester-developer loop itself exceeds 2 iterations: produce
+        test_report.json AND escalation.json. The pipeline pauses for human
+        intervention.
+      The routing decision is recorded in test_report.json under the
+      'routing' field with values: 'forward', 'loop_back_developer', or 'escalate'.
 chain_of_thought: >
   Think step-by-step when diagnosing failures:
   1. What exactly failed? (read the full error, not just the summary)

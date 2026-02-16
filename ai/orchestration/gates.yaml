@@ -1,0 +1,157 @@
+# ============================================================================
+# HITL Gates — Atlasia AI Pipeline
+# ============================================================================
+# Human-in-the-Loop gates are mandatory checkpoints where the pipeline pauses
+# for human approval before proceeding. Gates prevent costly autonomous errors
+# at high-stakes transition points.
+#
+# Gate Types:
+#   approval_gate  — Human must explicitly approve before the next agent starts.
+#   review_gate    — Human (or Review agent) must verify output before merge.
+#   escalation_gate — Pipeline paused due to agent-triggered escalation.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Gate Enforcement Policy
+# ---------------------------------------------------------------------------
+enforcement:
+  description: >
+    The orchestrator evaluates gates at each stage transition. If a gate is
+    defined for the transition, the pipeline pauses and emits an SSE event
+    notifying the human. The pipeline resumes only when the human responds
+    with APPROVE, REJECT, or MODIFY.
+  responses:
+    approve: "Pipeline proceeds to the next agent with the artifact as-is."
+    reject: "Pipeline halts. The bolt is marked ABORTED. Human provides reason."
+    modify: "Human edits the artifact. Pipeline proceeds with the modified version."
+  timeout:
+    duration_hours: 48
+    on_timeout: "Pipeline is automatically ABORTED with reason: 'HITL gate timeout'."
+  notification:
+    channel: "SSE + GitHub PR comment"
+    format: "Gate name, transition, artifact summary, and approval link."
+
+# ---------------------------------------------------------------------------
+# Gate Definitions
+# ---------------------------------------------------------------------------
+gates:
+
+  # =========================================================================
+  # Gate 1: Architecture Approval
+  # =========================================================================
+  architecture_approval:
+    type: approval_gate
+    transition: "architect → developer"
+    description: >
+      The Architect's design (architecture_notes.md) must be approved by a human
+      before the Developer begins implementation. This prevents costly rework if
+      the design direction is wrong.
+    trigger: "Always — every bolt passes through this gate."
+    artifact_reviewed: "architecture_notes.md"
+    approval_criteria:
+      - "Design aligns with business requirements from work_plan.json."
+      - "No unauthorized new dependencies introduced."
+      - "Database schema changes are acceptable."
+      - "API contracts are consistent with existing patterns."
+      - "Security implications are addressed."
+    bypass_conditions:
+      - condition: "The architecture_notes.md contains only 'no_change' (refactor-only tickets)."
+        description: "Trivial changes that do not alter architecture can skip this gate."
+    on_reject: >
+      The architect receives the rejection reason and re-enters the design loop.
+      Max 2 re-design attempts before escalation.
+
+  # =========================================================================
+  # Gate 2: PR Review Gate
+  # =========================================================================
+  pr_review:
+    type: review_gate
+    transition: "developer → review"
+    description: >
+      The Developer cannot merge code directly. The PR must go through the
+      multi-persona review process. This gate ensures no code reaches main
+      without adversarial review.
+    trigger: "Always — every bolt produces a PR that must be reviewed."
+    artifact_reviewed: "pr_url"
+    approval_criteria:
+      - "PR diff is complete and matches the work_plan scope."
+      - "Tests are included for all new functionality."
+      - "No secrets, credentials, or sensitive data in the diff."
+      - "implementation_report.md accurately describes the changes."
+    enforcement: >
+      This gate is AUTOMATICALLY enforced by the pipeline structure: the
+      Developer hands off to the Review agent, not to the Tester. The Review
+      agent's verdict determines whether the pipeline proceeds or loops back.
+    on_reject: >
+      The review agent produces persona_review.json with status 'changes_required'.
+      The graph loop-back edge routes the workflow back to the developer.
+
+  # =========================================================================
+  # Gate 3: Merge Approval
+  # =========================================================================
+  merge_approval:
+    type: approval_gate
+    transition: "tester → writer (pre-merge)"
+    description: >
+      After all tests pass and the review is clean, a human must approve the
+      final merge. The bot cannot merge the PR autonomously.
+    trigger: "Always — no autonomous merge."
+    artifact_reviewed: "test_report.json"
+    approval_criteria:
+      - "All CI tests pass (ciStatus: GREEN)."
+      - "Coverage thresholds are maintained (>=70% backend, >=60% frontend)."
+      - "No critical or high findings remain from persona_review.json."
+      - "E2E tests pass (if applicable)."
+    enforcement: >
+      The `git_push` and `create_pull_request` MCP tools are tagged with
+      `requires_confirmation` in ai/mcp/servers.yaml. The merge itself is
+      a GitHub operation that requires human approval.
+    on_reject: >
+      The bolt is paused. Human provides specific feedback. The orchestrator
+      routes back to the appropriate agent (developer or tester).
+
+  # =========================================================================
+  # Gate 4: Escalation Gate (Dynamic)
+  # =========================================================================
+  escalation:
+    type: escalation_gate
+    transition: "any → human"
+    description: >
+      Any agent can trigger an escalation by producing an escalation.json artifact.
+      The pipeline pauses immediately and waits for human decision.
+    trigger: "Dynamic — triggered by agent escalation."
+    artifact_reviewed: "escalation.json"
+    triggers:
+      - "Business objective ambiguous after analysis (PM)."
+      - "Conflicting requirements that cannot be resolved (Qualifier)."
+      - "Non-trivial DB schema change affecting >2 tables (Architect)."
+      - "Introduction of a major new dependency (Architect)."
+      - "Security architecture modification (Architect)."
+      - "CI fix loop exceeded 3 iterations (Tester)."
+      - "E2E fix loop exceeded 2 iterations (Tester)."
+      - "Agent exceeded 3 LLM attempts without valid output (Any)."
+      - "Review-Developer loop exceeded 2 iterations (Orchestrator)."
+      - "Tester-Developer loop exceeded 2 iterations (Orchestrator)."
+    responses:
+      proceed: "Human resolves the blocker and instructs the pipeline to continue."
+      abort: "The bolt is terminated. The PR (if any) is closed with an explanation."
+      modify: "Human provides additional context or modifies an artifact, then the pipeline resumes."
+
+# ---------------------------------------------------------------------------
+# Gate Audit Trail
+# ---------------------------------------------------------------------------
+audit:
+  description: >
+    Every gate interaction is logged to the ai_run_artifact table for
+    traceability and compliance.
+  fields:
+    - "gate_name: Which gate was triggered."
+    - "transition: The agent transition (from → to)."
+    - "artifact_id: The artifact under review."
+    - "correlation_id: The bolt's Correlation ID."
+    - "human_response: APPROVE | REJECT | MODIFY."
+    - "human_comment: Free-text explanation."
+    - "timestamp: ISO 8601 timestamp of the response."
+    - "duration_ms: Time between gate trigger and human response."

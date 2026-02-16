@@ -17,6 +17,50 @@ workflow:
 gates_source: "docs/QUALITY_GATES.md"
 glossary_source: "docs/DOMAIN_GLOSSARY.md"
 escalation_schema: "ai/schemas/escalation.schema.json"
+orchestration:
+  architecture: "ai/orchestration/architecture.yaml"
+  gates: "ai/orchestration/gates.yaml"
+  handoff_protocol: "ai/orchestration/handoff_protocol.yaml"
+  pattern: "Hybrid Sequential-Graph-Hierarchical"
+  state_machine:
+    description: >
+      The orchestrator models the workflow as a finite state machine. Forward
+      edges are unconditional (on success + gate approval). Loop-back edges
+      are conditional (on review rejection or test failure). The orchestrator
+      tracks the current state, transition history, and loop iteration counts.
+    states:
+      pm: { type: "sequential", forward: "qualifier" }
+      qualifier: { type: "sequential", forward: "architect" }
+      architect: { type: "gated", forward: "developer", gate: "architecture_approval" }
+      developer: { type: "sequential", forward: "review" }
+      review: { type: "conditional", forward: "tester", loop_back: "developer" }
+      tester: { type: "conditional", forward: "writer", loop_back: "developer" }
+      writer: { type: "terminal" }
+      escalation: { type: "terminal" }
+    loop_counters:
+      review_developer: { current: 0, max: 2 }
+      tester_developer: { current: 0, max: 2 }
+    on_loop_limit: "Produce escalation.json and transition to escalation state."
+  gate_enforcement:
+    description: >
+      At each stage transition, the orchestrator checks if a HITL gate is
+      defined for that transition. If so, the pipeline pauses and emits an
+      SSE event for human approval.
+    gates_checked:
+      - { transition: "architect → developer", gate: "architecture_approval", type: "approval_gate" }
+      - { transition: "developer → review", gate: "pr_review", type: "review_gate" }
+      - { transition: "tester → writer", gate: "merge_approval", type: "approval_gate" }
+      - { transition: "any → human", gate: "escalation", type: "escalation_gate" }
+  context_isolation:
+    description: >
+      The orchestrator enforces strict context boundaries. When dispatching
+      to an agent, it provides ONLY the declared input artifacts from the
+      blackboard — never the full conversation history of previous agents.
+    rules:
+      - "Strip chain-of-thought traces before forwarding artifacts."
+      - "Strip MCP tool call logs from inter-agent messages."
+      - "On loop-back, pass only the new artifact plus original inputs — never accumulate."
+      - "Validate that handoff notes are non-empty before allowing transition."
 mcp:
   registry: "ai/mcp/servers.yaml"
   permissions: "ai/mcp/permissions.yaml"
