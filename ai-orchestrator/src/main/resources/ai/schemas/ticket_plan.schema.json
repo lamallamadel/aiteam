@@ -8,7 +8,8 @@
     "summary",
     "acceptanceCriteria",
     "outOfScope",
-    "risks"
+    "risks",
+    "priority"
   ],
   "properties": {
     "issueId": {
@@ -19,6 +20,13 @@
     },
     "summary": {
       "type": "string"
+    },
+    "userStories": {
+      "type": "array",
+      "description": "User stories in 'As a [role], I want [action], so that [benefit]' format",
+      "items": {
+        "type": "string"
+      }
     },
     "acceptanceCriteria": {
       "type": "array",
@@ -36,8 +44,30 @@
     "risks": {
       "type": "array",
       "items": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "mitigation": {
+                "type": "string",
+                "description": "Suggested mitigation strategy for this risk"
+              }
+            }
+          }
+        ]
       }
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["P0", "P1", "P2", "P3"],
+      "description": "Priority classification: P0 (critical blocker), P1 (must-have), P2 (should-have), P3 (nice-to-have)"
     },
     "labelsToApply": {
       "type": "array",
