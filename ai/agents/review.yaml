@@ -10,11 +10,39 @@ inputs: [pr_url, implementation_report.md]
 outputs:
   - artifact: persona_review.json
     schema: ai/schemas/persona_review.schema.json
+mcp:
+  servers: [github, filesystem, git]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.review"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the GitHub, FileSystem, and Git MCP servers. At session
+    start, call `initialize` on each to discover available tools. You operate in
+    read-only mode. Each delegated persona inherits a subset of your MCP connections
+    as defined in permissions.yaml#personas.
+  usage_instructions:
+    - "Use `get_pull_request` via the GitHub MCP to retrieve the full PR diff."
+    - "Use `get_file_contents` to fetch specific files referenced in the PR."
+    - "Use `git_diff` and `git_log` via the Git MCP to understand the change history."
+    - "Use `read_file` via the FileSystem MCP to inspect source files at finding locations."
+    - "Delegate MCP connections to persona reviewers based on their permission sets."
+    - "Use `add_pull_request_review` to post the consolidated review (requires_confirmation)."
+  persona_mcp_delegation:
+    aabo: [github, filesystem]
+    aksil: [github, filesystem]
+    imad: [github, filesystem, postgres]
+    tiziri: [github, filesystem, browser]
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Prepare the persona-specific MCP connection subsets for delegation.
+      If a server is unavailable, note which personas will operate in degraded mode.
   - step: dispatch
     description: >
-      Fan out the PR diff to all four persona reviewers in parallel.
-      Each persona reviews independently through their specialized lens.
+      Use `get_pull_request` via the GitHub MCP to retrieve the full PR diff.
+      Fan out the diff and MCP connections to all four persona reviewers in parallel.
+      Each persona reviews independently through their specialized lens with their
+      scoped MCP tool belt.
   - step: collect
     description: >
       Collect findings from all four personas:
@@ -34,6 +62,18 @@ workflow:
       - 'changes_required': High or critical findings that must be addressed.
       - 'rejected': Fundamental design flaws or security vulnerabilities.
       If the code is clean across all perspectives, respond with 'LGTM'.
+  - step: route
+    description: >
+      Based on the decision, determine the next workflow transition:
+      - If 'approved' or 'approved_with_minor_issues': produce persona_review.json
+        and hand off FORWARD to the tester agent.
+      - If 'changes_required': produce persona_review.json with a filtered list
+        of critical/high findings. The orchestrator routes BACK to the developer.
+        Include specific, actionable fix instructions for each finding.
+      - If 'rejected': produce persona_review.json AND escalation.json. The
+        orchestrator pauses for human intervention.
+      The routing decision is recorded in persona_review.json under the
+      'verdict' and 'routing' fields.
 chain_of_thought: >
   For each persona's findings, reason through:
   1. Is this finding actionable? (specific location + suggested fix)

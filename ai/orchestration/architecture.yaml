@@ -1,0 +1,175 @@
+# ============================================================================
+# Orchestration Architecture — Atlasia AI Pipeline
+# ============================================================================
+# Defines the hybrid orchestration pattern: a sequential pipeline base with
+# graph-based retry loops and hierarchical delegation for code review.
+#
+# This is NOT a single pattern — it is a deliberate hybrid that uses the
+# right coordination model at each stage of the workflow.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Pattern Selection Rationale
+# ---------------------------------------------------------------------------
+# The Atlasia pipeline uses three orchestration patterns in concert:
+#
+# 1. SEQUENTIAL (Pipeline) — The backbone. Deterministic flow from PM to Writer.
+#    Easiest to debug, trace, and reason about. Each step produces a structured
+#    artifact consumed by the next.
+#
+# 2. GRAPH (State Machine) — For retry loops. When the Tester finds failures,
+#    the workflow loops back to the Developer, not forward to the Writer.
+#    Edges are conditional: success → forward, failure → loop-back.
+#
+# 3. HIERARCHICAL (Supervisor) — For code review. The Review agent is a
+#    supervisor that delegates to four persona sub-agents (Aabo, Aksil, Imad,
+#    Tiziri) and synthesizes their output. The orchestrator never talks to
+#    personas directly.
+#
+# This hybrid avoids the chaos of a pure network topology while allowing
+# the flexibility needed for real software engineering workflows.
+
+architecture:
+  name: "Hybrid Sequential-Graph-Hierarchical"
+  description: >
+    A three-layer orchestration architecture combining the predictability of a
+    linear pipeline, the resilience of graph-based retry loops, and the depth
+    of hierarchical multi-perspective review.
+
+  # -------------------------------------------------------------------------
+  # Layer 1: Sequential Pipeline (The Backbone)
+  # -------------------------------------------------------------------------
+  sequential_pipeline:
+    description: >
+      The default flow. Tasks move linearly from PM to Writer. Each agent
+      reads the artifact from the previous step and produces the artifact
+      for the next. No agent can skip a step or jump ahead.
+    flow:
+      - { node: pm,        produces: "ticket_plan.json",         next: qualifier }
+      - { node: qualifier,  produces: "work_plan.json",           next: architect }
+      - { node: architect,  produces: "architecture_notes.md",    next: developer }
+      - { node: developer,  produces: "implementation_report.md", next: review }
+      - { node: review,     produces: "persona_review.json",      next: [tester, developer] }
+      - { node: tester,     produces: "test_report.json",         next: [writer, developer] }
+      - { node: writer,     produces: "docs_patch",               next: null }
+    invariants:
+      - "Agents execute in strict order unless a graph edge reroutes the flow."
+      - "Each transition is gated by artifact schema validation and quality checks."
+      - "The orchestrator tracks progress via the Correlation ID."
+
+  # -------------------------------------------------------------------------
+  # Layer 2: Graph-Based Retry Loops (Conditional Edges)
+  # -------------------------------------------------------------------------
+  graph_loops:
+    description: >
+      When an agent detects a failure that requires rework, the workflow loops
+      back to the responsible agent instead of proceeding forward. These loops
+      are bounded by max_iterations to prevent infinite cycles.
+    edges:
+      review_to_developer:
+        from: review
+        to: developer
+        condition: "persona_review.json status is 'changes_required' or 'rejected'"
+        description: >
+          If the review agent finds critical/high findings, the workflow routes
+          back to the developer with the persona_review.json as additional input.
+          The developer addresses the findings and re-submits.
+        max_iterations: 2
+        on_limit_exceeded: "escalation"
+        context_passed:
+          - "persona_review.json (findings only, not full conversation)"
+          - "implementation_report.md (original, for reference)"
+        context_excluded:
+          - "Persona internal reasoning traces"
+          - "Review agent's chain-of-thought"
+
+      tester_to_developer:
+        from: tester
+        to: developer
+        condition: "test_report.json ciStatus is 'RED' AND fix_loop iterations exhausted"
+        description: >
+          If the tester's internal fix loop cannot resolve failures (CI: 3 tries,
+          E2E: 2 tries), the workflow escalates to the developer with the full
+          diagnostic report. The developer addresses root causes and re-submits.
+        max_iterations: 2
+        on_limit_exceeded: "escalation"
+        context_passed:
+          - "test_report.json (failure diagnostics and root cause analysis)"
+          - "Specific failing test names and error traces"
+        context_excluded:
+          - "Full CI log output (summarized in test_report)"
+          - "Tester's internal fix attempts"
+
+    state_machine:
+      description: >
+        The workflow is modeled as a finite state machine where each agent is
+        a state and transitions are edges. Forward edges are unconditional
+        (on success). Loop-back edges are conditional (on failure). Terminal
+        states: writer (success), escalation (human needed).
+      states:
+        pm: { type: "sequential", forward: "qualifier" }
+        qualifier: { type: "sequential", forward: "architect" }
+        architect: { type: "sequential", forward: "developer" }
+        developer: { type: "sequential", forward: "review" }
+        review:
+          type: "conditional"
+          forward: "tester"
+          loop_back: { target: "developer", condition: "changes_required OR rejected" }
+        tester:
+          type: "conditional"
+          forward: "writer"
+          loop_back: { target: "developer", condition: "ci_red AND fix_loop_exhausted" }
+        writer: { type: "terminal", forward: null }
+        escalation: { type: "terminal", forward: null }
+      transitions:
+        - "Every transition logs: {from, to, reason, artifact_id, correlation_id, timestamp}."
+        - "Loop-back transitions increment a counter per edge."
+        - "If any edge counter exceeds max_iterations, transition to 'escalation' instead."
+
+  # -------------------------------------------------------------------------
+  # Layer 3: Hierarchical Delegation (Supervisor Pattern)
+  # -------------------------------------------------------------------------
+  hierarchical_delegation:
+    description: >
+      The Review agent acts as a supervisor, delegating work to four persona
+      sub-agents. The orchestrator dispatches to the Review agent; the Review
+      agent internally fans out to personas and synthesizes results. The
+      orchestrator never interacts with personas directly.
+    supervisor: review
+    delegates:
+      - { persona: aabo,   role: "Security Review",       parallel: true }
+      - { persona: aksil,  role: "Code Quality Review",   parallel: true }
+      - { persona: imad,   role: "Infrastructure Review", parallel: true }
+      - { persona: tiziri, role: "Frontend UX Review",    parallel: true }
+    protocol:
+      - "The supervisor receives the PR diff and fans out to all four personas in parallel."
+      - "Each persona receives ONLY: the PR diff, their scoped MCP connections, and the review checklist."
+      - "Each persona produces: a list of findings with severity, location, description, and suggested fix."
+      - "The supervisor collects, deduplicates, ranks, and synthesizes findings into persona_review.json."
+      - "The supervisor determines the overall verdict: approved, approved_with_minor_issues, changes_required, rejected."
+    context_isolation:
+      - "Personas do NOT see each other's findings during review."
+      - "Personas do NOT see the full conversation history — only the PR diff and their checklist."
+      - "The supervisor does NOT forward persona internal reasoning to the orchestrator."
+
+# ---------------------------------------------------------------------------
+# Anti-Patterns — Explicitly Forbidden
+# ---------------------------------------------------------------------------
+anti_patterns:
+  - name: "Full-Context Forwarding"
+    description: "Never forward the entire conversation history between agents. Use structured artifacts only."
+    violation_action: "The orchestrator strips all non-artifact content from inter-agent messages."
+
+  - name: "Skip-Ahead"
+    description: "No agent can skip steps in the pipeline (e.g., PM cannot hand off directly to Developer)."
+    violation_action: "The orchestrator rejects any handoff that does not match the declared workflow order."
+
+  - name: "Unbounded Loops"
+    description: "Retry loops without max_iterations lead to infinite cycles and runaway costs."
+    violation_action: "Every loop-back edge MUST declare max_iterations. Default is 2 if not specified."
+
+  - name: "Direct Persona Access"
+    description: "The orchestrator must not dispatch directly to persona agents. Always route through the Review supervisor."
+    violation_action: "Persona agents reject any dispatch not originating from the Review agent."

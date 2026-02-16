@@ -1,0 +1,250 @@
+# ============================================================================
+# MCP Server Registry — Atlasia AI Orchestrator
+# ============================================================================
+# Central catalog of all Model Context Protocol servers available to the agent
+# pipeline. Each agent connects only to the servers granted by permissions.yaml.
+#
+# Servers follow JSON-RPC 2.0 over stdio/SSE transport as defined by the MCP
+# specification. Agents MUST call `initialize` on each connected server at
+# session start to discover available tools and resources.
+# ============================================================================
+
+version: "1.0"
+
+servers:
+
+  # --------------------------------------------------------------------------
+  # Source Control & Project Management
+  # --------------------------------------------------------------------------
+  github:
+    description: "GitHub API — issues, PRs, reviews, labels, and repository metadata."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_TOKEN: "${GITHUB_TOKEN}"
+    capabilities:
+      tools:
+        - search_issues
+        - get_issue
+        - create_issue
+        - update_issue
+        - list_pull_requests
+        - get_pull_request
+        - create_pull_request
+        - add_pull_request_review
+        - list_labels
+        - add_labels
+        - get_file_contents
+      resources:
+        - "repo://owner/repo/issues/*"
+        - "repo://owner/repo/pulls/*"
+    requires_confirmation:
+      - create_pull_request
+      - add_pull_request_review
+      - create_issue
+      - update_issue
+      - add_labels
+
+  # --------------------------------------------------------------------------
+  # File System Access
+  # --------------------------------------------------------------------------
+  filesystem:
+    description: "Scoped local file system — read, write, list, search project files."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE_ROOT}"]
+    env:
+      WORKSPACE_ROOT: "${WORKSPACE_ROOT}"
+    capabilities:
+      tools:
+        - list_directory
+        - read_file
+        - write_file
+        - search_files
+        - get_file_info
+        - read_multiple_files
+        - move_file
+        - create_directory
+      resources:
+        - "file://${WORKSPACE_ROOT}/**"
+    requires_confirmation:
+      - write_file
+      - move_file
+      - create_directory
+
+  # --------------------------------------------------------------------------
+  # Git Operations
+  # --------------------------------------------------------------------------
+  git:
+    description: "Git operations — branching, commits, diffs, and log history."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-git", "--repository", "${WORKSPACE_ROOT}"]
+    env:
+      WORKSPACE_ROOT: "${WORKSPACE_ROOT}"
+    capabilities:
+      tools:
+        - git_status
+        - git_diff
+        - git_log
+        - git_show
+        - git_branch
+        - git_checkout
+        - git_add
+        - git_commit
+        - git_push
+      resources:
+        - "git://branches"
+        - "git://log"
+        - "git://diff"
+    requires_confirmation:
+      - git_commit
+      - git_push
+      - git_checkout
+
+  # --------------------------------------------------------------------------
+  # Database Inspection
+  # --------------------------------------------------------------------------
+  postgres:
+    description: "PostgreSQL schema inspection and read queries for migration validation."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"]
+    env:
+      DATABASE_URL: "${DATABASE_URL}"
+    capabilities:
+      tools:
+        - run_query
+        - list_tables
+        - describe_table
+      resources:
+        - "db://schema/*"
+        - "db://tables/*"
+    requires_confirmation:
+      - run_query
+
+  # --------------------------------------------------------------------------
+  # Vector Store — Architecture Decision Retrieval
+  # --------------------------------------------------------------------------
+  vector_store:
+    description: "Semantic search over Architecture Decision Records, past designs, and documentation embeddings."
+    transport: sse
+    url: "${VECTOR_STORE_URL}"
+    env:
+      VECTOR_STORE_URL: "${VECTOR_STORE_URL}"
+      VECTOR_STORE_API_KEY: "${VECTOR_STORE_API_KEY}"
+    capabilities:
+      tools:
+        - semantic_search
+        - retrieve_document
+        - list_collections
+      resources:
+        - "vector://collections/adr"
+        - "vector://collections/docs"
+        - "vector://collections/architecture"
+    requires_confirmation: []
+
+  # --------------------------------------------------------------------------
+  # Browser Automation — E2E & Visual Testing
+  # --------------------------------------------------------------------------
+  browser:
+    description: "Playwright browser automation for E2E testing and UI verification."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@anthropic/mcp-server-playwright"]
+    capabilities:
+      tools:
+        - navigate
+        - click
+        - fill
+        - screenshot
+        - evaluate
+        - wait_for_selector
+        - get_text
+        - assert_visible
+      resources:
+        - "browser://pages/*"
+    requires_confirmation:
+      - evaluate
+
+  # --------------------------------------------------------------------------
+  # Log Aggregator — Observability & Diagnostics
+  # --------------------------------------------------------------------------
+  logs:
+    description: "Log aggregation for querying application logs, error traces, and metrics."
+    transport: sse
+    url: "${LOG_SERVER_URL}"
+    env:
+      LOG_SERVER_URL: "${LOG_SERVER_URL}"
+      LOG_SERVER_API_KEY: "${LOG_SERVER_API_KEY}"
+    capabilities:
+      tools:
+        - query_logs
+        - get_error_trace
+        - search_by_correlation_id
+        - get_metrics
+      resources:
+        - "logs://application/*"
+        - "logs://error_traces/*"
+    requires_confirmation: []
+
+  # --------------------------------------------------------------------------
+  # CI/CD Pipeline
+  # --------------------------------------------------------------------------
+  ci:
+    description: "CI/CD pipeline status, build logs, and workflow triggers."
+    transport: sse
+    url: "${CI_SERVER_URL}"
+    env:
+      CI_SERVER_URL: "${CI_SERVER_URL}"
+      CI_SERVER_TOKEN: "${CI_SERVER_TOKEN}"
+    capabilities:
+      tools:
+        - get_workflow_status
+        - get_build_logs
+        - list_workflows
+        - get_test_results
+      resources:
+        - "ci://workflows/*"
+        - "ci://builds/*"
+    requires_confirmation: []
+
+  # --------------------------------------------------------------------------
+  # Documentation Server
+  # --------------------------------------------------------------------------
+  docs:
+    description: "Structured documentation access — Notion, Confluence, or local markdown."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "${DOCS_ROOT}"]
+    env:
+      DOCS_ROOT: "${WORKSPACE_ROOT}/docs"
+    capabilities:
+      tools:
+        - list_directory
+        - read_file
+        - search_files
+      resources:
+        - "file://${WORKSPACE_ROOT}/docs/**"
+    requires_confirmation: []
+
+  # --------------------------------------------------------------------------
+  # Angular CLI (Frontend Tooling)
+  # --------------------------------------------------------------------------
+  angular_cli:
+    description: "Angular CLI MCP for component generation, build, and project analysis."
+    transport: stdio
+    command: "npx"
+    args: ["-y", "@angular/cli", "mcp"]
+    capabilities:
+      tools:
+        - generate_component
+        - analyze_project
+        - build
+        - lint
+      resources:
+        - "angular://project/*"
+    requires_confirmation:
+      - generate_component
+      - build

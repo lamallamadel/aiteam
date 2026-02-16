@@ -9,12 +9,33 @@ inputs: [ticket_plan.json, docs/DOMAIN_GLOSSARY.md, docs/ADR/*]
 outputs:
   - artifact: work_plan.json
     schema: ai/schemas/work_plan.schema.json
+mcp:
+  servers: [github, filesystem, docs]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.qualifier"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the GitHub, FileSystem, and Docs MCP servers. At session
+    start, call `initialize` on each to discover available tools. Operate in
+    read-only mode — you inspect but never modify.
+  usage_instructions:
+    - "Use `get_issue` via the GitHub MCP to pull the original issue for cross-reference."
+    - "Use `list_directory` via the FileSystem MCP to map the folder structure for task planning."
+    - "Use `read_file` to inspect source files at likely touch points before declaring filesLikely."
+    - "Use `search_files` to find existing tests that cover the area being modified."
+    - "Use `read_file` via the Docs MCP to pull ADRs and DOMAIN_GLOSSARY.md."
+    - "Never call write or modify tools — your role is analysis only."
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Verify you have read access to the filesystem, GitHub, and docs
+      before proceeding. If a server is unavailable, note the degraded capability.
   - step: review_ticket
     description: >
-      Read the ticket_plan.json from PM. Identify any remaining ambiguity,
-      unstated assumptions, or missing edge cases. Cross-reference with
-      DOMAIN_GLOSSARY.md and existing ADRs.
+      Read the ticket_plan.json from PM. Use `get_issue` to pull the original
+      GitHub issue for cross-reference. Use `read_file` to check
+      DOMAIN_GLOSSARY.md and existing ADRs. Identify any remaining ambiguity,
+      unstated assumptions, or missing edge cases.
   - step: clarify_requirements
     description: >
       Convert every vague or implicit requirement into a testable criterion.

@@ -10,20 +10,46 @@ inputs: [pr_url, ci_logs, e2e_logs]
 outputs:
   - artifact: test_report.json
     schema: ai/schemas/test_report.schema.json
+mcp:
+  servers: [filesystem, browser, logs, ci, git]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.tester"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the FileSystem, Browser (Playwright), Logs, CI, and Git MCP
+    servers. At session start, call `initialize` on each to discover available tools.
+    You can write only to test files; all other paths are read-only.
+  usage_instructions:
+    - "Use `read_file` via the FileSystem MCP to inspect the PR diff and source code."
+    - "Use `navigate` via the Browser MCP to open localhost:4200 and perform E2E user flows."
+    - "Use `screenshot` to capture visual state for test evidence."
+    - "Use `query_logs` and `get_error_trace` via the Logs MCP to correlate failures with error traces."
+    - "Use `search_by_correlation_id` to trace a failure across the full request lifecycle."
+    - "Use `get_build_logs` and `get_test_results` via the CI MCP to analyze pipeline results."
+    - "Use `git_diff` via the Git MCP to identify exactly which lines changed."
+    - "Use `write_file` only for test files (src/test/**, *.spec.ts) — never modify production code."
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Verify you have access to browser automation, log querying, and CI
+      results before proceeding. If a server is unavailable, note the degraded capability.
   - step: analyze_coverage
     description: >
-      Review the PR diff to identify all code paths that need testing.
-      Categorize required tests into: happy path, edge cases, negative tests,
-      and security tests.
+      Use `git_diff` via the Git MCP to review the PR diff. Use `read_file` via
+      the FileSystem MCP to inspect changed source files. Identify all code paths
+      that need testing. Categorize required tests into: happy path, edge cases,
+      negative tests, and security tests.
   - step: execute_ci
     description: >
-      Run the full CI verification suite. Capture and analyze all output.
+      Run the full CI verification suite. Use `get_workflow_status` and
+      `get_build_logs` via the CI MCP to capture and analyze all output.
       If failures occur, enter the fix loop.
   - step: diagnose_failures
     description: >
-      For each failure: read logs, identify root cause (not just symptoms),
-      classify as code bug, test bug, flaky test, or environment issue.
+      For each failure: use `get_error_trace` via the Logs MCP to retrieve
+      the exact error trace. Use `search_by_correlation_id` to correlate with
+      the test timestamp. Identify root cause (not just symptoms), classify as
+      code bug, test bug, flaky test, or environment issue.
   - step: fix_loop
     description: >
       Apply minimal, targeted patches. Rerun tests. Track iteration count.
@@ -32,6 +58,20 @@ workflow:
     description: >
       Generate test_report.json with per-area status, coverage metrics,
       and detailed notes on any issues encountered or fixed.
+  - step: route
+    description: >
+      Based on the test results, determine the next workflow transition:
+      - If ciStatus is 'GREEN' and all tests pass: produce test_report.json
+        and hand off FORWARD to the writer agent.
+      - If ciStatus is 'RED' and the internal fix loop is exhausted (CI: 3
+        tries, E2E: 2 tries): produce test_report.json with full diagnostic
+        detail (failing tests, root cause analysis, attempted fixes). The
+        orchestrator routes BACK to the developer with this diagnostic context.
+      - If the tester-developer loop itself exceeds 2 iterations: produce
+        test_report.json AND escalation.json. The pipeline pauses for human
+        intervention.
+      The routing decision is recorded in test_report.json under the
+      'routing' field with values: 'forward', 'loop_back_developer', or 'escalate'.
 chain_of_thought: >
   Think step-by-step when diagnosing failures:
   1. What exactly failed? (read the full error, not just the summary)

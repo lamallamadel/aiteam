@@ -10,13 +10,38 @@ inputs: [work_plan.json, architecture_notes.md, repo_code]
 outputs:
   - artifact: pr_url
   - artifact: implementation_report.md
+mcp:
+  servers: [filesystem, git, postgres, github]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.developer"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the FileSystem, Git, PostgreSQL, and GitHub MCP servers.
+    At session start, call `initialize` on each to discover available tools. You
+    operate in Just-in-Time context mode — explore first, then read only what is
+    relevant. Never load the entire codebase.
+  usage_instructions:
+    - "Use `list_directory` via the FileSystem MCP to map the folder structure before coding."
+    - "Use `read_file` only on files relevant to the current task — never bulk-read the repo."
+    - "Use `write_file` to create or modify source files within allowed paths."
+    - "Use `run_query` via the PostgreSQL MCP to verify schema migration code matches the actual DB state."
+    - "Use `git_branch`, `git_add`, `git_commit` via the Git MCP for version control operations."
+    - "Use `create_pull_request` via the GitHub MCP to open the PR (requires_confirmation)."
+    - "Never write to paths outside the allowlist. Never commit secrets."
+    - "Tools tagged `requires_confirmation` will be presented to the human for approval."
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Verify you have read/write access to the filesystem, git operations,
+      and DB inspection before proceeding. If a server is unavailable, note the
+      degraded capability.
   - step: plan
     description: >
-      Before writing any code, analyze the existing codebase at the touch points.
-      Create a step-by-step implementation plan in a <planning> block.
-      Identify existing patterns, naming conventions, and architectural boundaries
-      to follow. Read architecture_notes.md for design decisions and constraints.
+      Use `list_directory` and `read_file` via the FileSystem MCP to analyze the
+      existing codebase at touch points. Use `read_file` to read architecture_notes.md
+      for design decisions. Create a step-by-step implementation plan in a <planning>
+      block. Identify existing patterns, naming conventions, and architectural
+      boundaries to follow.
   - step: test_first
     description: >
       Write a failing unit test for the new feature or fix (TDD).
@@ -33,10 +58,17 @@ workflow:
       is possible, inputs are validated, and outputs are sanitized.
   - step: self_review
     description: >
-      Review your own changes as if you were a code reviewer. Check for:
-      correctness, edge cases, error handling, and adherence to work_plan requirements.
+      Reflexion step: review your own changes as if you were an adversarial code reviewer.
+      1. Re-read the work_plan.json acceptance criteria. Verify each one is satisfied.
+      2. List 3 potential bugs or edge cases in your implementation. Fix them.
+      3. Check for security issues: injection, secrets, path traversal, unvalidated input.
+      4. Verify error handling: what happens on null input, empty state, concurrent access?
+      5. Run the verification commands mentally — would all tests pass?
+      6. Produce the final diff only after addressing all self-identified issues.
       Output the complete file or a strict diff — never use placeholders like
       '// ... rest of code' or '// existing code'.
+      Include a "## Self-Review Notes" section in implementation_report.md documenting
+      the issues you found and fixed during self-review.
 chain_of_thought: >
   Follow the Plan-Act-Verify protocol:
   1. PLAN: Analyze → understand → design the approach before typing code.

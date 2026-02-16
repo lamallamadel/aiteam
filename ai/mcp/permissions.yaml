@@ -1,0 +1,251 @@
+# ============================================================================
+# MCP Permission Matrix — Atlasia AI Orchestrator
+# ============================================================================
+# Maps each agent (and persona) to the MCP servers it may access, with
+# explicit read/write scoping. Follows the Principle of Least Privilege:
+# agents receive only the tools and resources they need for their role.
+#
+# Permission Levels:
+#   read_only   — Can call read/query tools; write tools are blocked.
+#   read_write  — Can call both read and write tools within scoped paths.
+#   execute     — Can trigger actions (e.g., browser navigate, CI workflows).
+#
+# requires_confirmation tools (defined in servers.yaml) ALWAYS require human
+# approval regardless of permission level.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Global Defaults
+# ---------------------------------------------------------------------------
+defaults:
+  secret_masking: true
+  log_tool_calls: true
+  max_tool_calls_per_step: 25
+  timeout_per_tool_call_ms: 30000
+
+# ---------------------------------------------------------------------------
+# Agent → Server Permissions
+# ---------------------------------------------------------------------------
+agents:
+
+  orchestrator:
+    description: "Coordination-only access — reads pipeline state, no direct data mutation."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_issue, list_pull_requests, get_pull_request, list_labels]
+      ci:
+        permission: read_only
+        allowed_tools: [get_workflow_status, get_build_logs, list_workflows]
+
+  pm:
+    description: "Requirements gathering — reads issues, docs; never modifies source."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [search_issues, get_issue, list_labels, get_file_contents]
+      docs:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files]
+
+  qualifier:
+    description: "Requirements clarification — reads code structure, docs, and tickets."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_issue, get_file_contents]
+      filesystem:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files, get_file_info]
+        allowed_paths:
+          - "docs/**"
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "ai/schemas/**"
+      docs:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files]
+
+  architect:
+    description: "Design & validation — reads code, ADRs, DB schema; writes architecture notes only."
+    servers:
+      filesystem:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files, read_multiple_files, get_file_info]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "docs/**"
+          - "ai-orchestrator/pom.xml"
+          - "frontend/package.json"
+      vector_store:
+        permission: read_only
+        allowed_tools: [semantic_search, retrieve_document, list_collections]
+      postgres:
+        permission: read_only
+        allowed_tools: [list_tables, describe_table]
+      docs:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files]
+
+  developer:
+    description: "Implementation — full read/write within allowed paths; git operations; DB schema inspection."
+    servers:
+      filesystem:
+        permission: read_write
+        allowed_tools: [list_directory, read_file, write_file, search_files, read_multiple_files, get_file_info, create_directory]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "docs/**"
+          - "infra/**"
+          - "ai/**"
+        denied_paths:
+          - ".github/workflows/**"
+          - "**/.env"
+          - "**/secrets/**"
+      git:
+        permission: read_write
+        allowed_tools: [git_status, git_diff, git_log, git_show, git_branch, git_checkout, git_add, git_commit, git_push]
+      postgres:
+        permission: read_only
+        allowed_tools: [run_query, list_tables, describe_table]
+      github:
+        permission: read_write
+        allowed_tools: [get_issue, create_pull_request, get_file_contents]
+
+  review:
+    description: "Code review coordination — reads PRs, code, and docs; posts review comments."
+    servers:
+      github:
+        permission: read_write
+        allowed_tools: [get_pull_request, get_file_contents, add_pull_request_review]
+      filesystem:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files, read_multiple_files]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "docs/**"
+      git:
+        permission: read_only
+        allowed_tools: [git_diff, git_log, git_show]
+
+  tester:
+    description: "Quality assurance — runs tests, reads logs, inspects browser; limited source writes for test fixes."
+    servers:
+      filesystem:
+        permission: read_write
+        allowed_tools: [list_directory, read_file, write_file, search_files, get_file_info]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+        write_paths:
+          - "ai-orchestrator/src/test/**"
+          - "frontend/src/**/*.spec.ts"
+      browser:
+        permission: execute
+        allowed_tools: [navigate, click, fill, screenshot, wait_for_selector, get_text, assert_visible]
+      logs:
+        permission: read_only
+        allowed_tools: [query_logs, get_error_trace, search_by_correlation_id, get_metrics]
+      ci:
+        permission: read_only
+        allowed_tools: [get_workflow_status, get_build_logs, get_test_results]
+      git:
+        permission: read_only
+        allowed_tools: [git_diff, git_log, git_status]
+
+  writer:
+    description: "Documentation — reads everything, writes only to docs paths."
+    servers:
+      filesystem:
+        permission: read_write
+        allowed_tools: [list_directory, read_file, write_file, search_files, read_multiple_files, get_file_info]
+        allowed_paths:
+          - "**/*"
+        write_paths:
+          - "docs/**"
+          - "README.md"
+          - "AGENTS.md"
+          - "ai-orchestrator/README.md"
+      github:
+        permission: read_only
+        allowed_tools: [get_pull_request, get_file_contents]
+      git:
+        permission: read_only
+        allowed_tools: [git_diff, git_log]
+      docs:
+        permission: read_only
+        allowed_tools: [list_directory, read_file, search_files]
+
+# ---------------------------------------------------------------------------
+# Persona → Server Permissions (Review Context)
+# ---------------------------------------------------------------------------
+personas:
+
+  aabo:
+    description: "Security review — reads code, PRs, and dependency manifests."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_pull_request, get_file_contents]
+      filesystem:
+        permission: read_only
+        allowed_tools: [read_file, search_files, list_directory]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "ai-orchestrator/pom.xml"
+          - "frontend/package.json"
+          - "frontend/package-lock.json"
+
+  aksil:
+    description: "Code quality review — reads code, tests, and architecture docs."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_pull_request, get_file_contents]
+      filesystem:
+        permission: read_only
+        allowed_tools: [read_file, search_files, list_directory, read_multiple_files]
+        allowed_paths:
+          - "ai-orchestrator/src/**"
+          - "frontend/src/**"
+          - "docs/**"
+
+  imad:
+    description: "Infrastructure review — reads configs, Docker, IaC, and DB schemas."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_pull_request, get_file_contents]
+      filesystem:
+        permission: read_only
+        allowed_tools: [read_file, search_files, list_directory]
+        allowed_paths:
+          - "infra/**"
+          - "ai-orchestrator/src/main/resources/**"
+          - "docker-compose*.yml"
+          - "Dockerfile*"
+          - "frontend/Dockerfile*"
+      postgres:
+        permission: read_only
+        allowed_tools: [list_tables, describe_table]
+
+  tiziri:
+    description: "Frontend UX review — reads components, templates, styles, and runs visual checks."
+    servers:
+      github:
+        permission: read_only
+        allowed_tools: [get_pull_request, get_file_contents]
+      filesystem:
+        permission: read_only
+        allowed_tools: [read_file, search_files, list_directory]
+        allowed_paths:
+          - "frontend/src/**"
+      browser:
+        permission: execute
+        allowed_tools: [navigate, screenshot, get_text, assert_visible, wait_for_selector]

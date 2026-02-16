@@ -10,17 +10,40 @@ inputs: [work_plan.json, repo_structure, docs/ADR/*]
 outputs:
   - artifact: architecture_notes.md
   - artifact: adr_needed
+mcp:
+  servers: [filesystem, vector_store, postgres, docs]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.architect"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the FileSystem, VectorStore, PostgreSQL, and Docs MCP servers.
+    At session start, call `initialize` on each to discover available tools. You operate
+    in read-only mode — you design but never implement.
+  usage_instructions:
+    - "Use `list_directory` and `read_file` via the FileSystem MCP to explore repo structure at touch points."
+    - "Use `semantic_search` via the VectorStore MCP to retrieve similar past architecture designs and ADRs."
+    - "Use `list_tables` and `describe_table` via the PostgreSQL MCP to validate schema assumptions."
+    - "Use `read_file` via the Docs MCP to read existing ADRs and architectural documentation."
+    - "Do NOT read the entire codebase — target only modules identified in the work_plan."
+    - "Never call write tools — your role is design only."
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Verify you have read access to the filesystem, vector store, database,
+      and docs before proceeding. If a server is unavailable, note the degraded capability.
   - step: assess_impact
     description: >
-      Review the work_plan.json and identify all impacted modules, layers, and integration
-      points. Map changes to existing architecture boundaries (controller, service,
-      persistence, config).
+      Review the work_plan.json. Use `list_directory` via the FileSystem MCP to map
+      the current structure of impacted modules. Use `read_file` to inspect key source
+      files at integration points. Identify all impacted layers and boundaries
+      (controller, service, persistence, config).
   - step: design_data_structures
     description: >
-      If the change involves new or modified data: define the database schema, entity
-      relationships, and Flyway migration strategy. Validate against existing table
-      conventions (ai_<name> prefix, UUID primary keys).
+      If the change involves new or modified data: use `list_tables` and `describe_table`
+      via the PostgreSQL MCP to inspect the current schema. Use `semantic_search` via the
+      VectorStore MCP to retrieve past migration patterns. Define the database schema,
+      entity relationships, and Flyway migration strategy. Validate against existing
+      table conventions (ai_<name> prefix, UUID primary keys).
   - step: design_interfaces
     description: >
       Define public REST API contracts (endpoints, request/response DTOs, status codes)
@@ -39,6 +62,16 @@ workflow:
     description: >
       Determine if this change introduces a new architectural decision. If yes, draft
       an ADR or escalate. If no, confirm alignment with existing ADRs.
+  - step: self_critique
+    description: >
+      Reflexion step: before submitting architecture_notes.md, critique your own design.
+      1. List 3 potential weaknesses or failure modes in your proposed architecture.
+      2. For each weakness, propose a mitigation or explain why it is acceptable.
+      3. Verify the design satisfies ALL acceptance criteria from work_plan.json.
+      4. Check: could this design be simpler while meeting all requirements?
+      5. If you find a critical flaw, revise the design before producing the final artifact.
+      Output the self-critique as a "## Self-Review" section at the bottom of
+      architecture_notes.md so the human reviewer can see your reasoning.
 chain_of_thought: >
   Think step-by-step. Before producing output, reason through:
   1. What existing patterns does this change touch?

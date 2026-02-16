@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlasia.io/schemas/mcp_server.schema.json",
+  "title": "MCP Server Definition",
+  "description": "Schema for Model Context Protocol server entries in the Atlasia AI Orchestrator server registry (ai/mcp/servers.yaml).",
+  "type": "object",
+  "required": ["description", "transport", "capabilities"],
+  "properties": {
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the server's purpose."
+    },
+    "transport": {
+      "type": "string",
+      "enum": ["stdio", "sse"],
+      "description": "MCP transport protocol. 'stdio' for local process communication, 'sse' for remote HTTP Server-Sent Events."
+    },
+    "command": {
+      "type": "string",
+      "description": "Executable command to launch the server (stdio transport only)."
+    },
+    "args": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Command-line arguments for the server process (stdio transport only)."
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Remote server URL (sse transport only)."
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Environment variables required by the server. Values use ${VAR} syntax for secret injection."
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["tools"],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Tool names exposed by this server, discovered via the MCP initialize handshake."
+        },
+        "resources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Resource URI patterns exposed by this server."
+        }
+      },
+      "additionalProperties": false
+    },
+    "requires_confirmation": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tool names that require human-in-the-loop approval before execution."
+    }
+  },
+  "additionalProperties": false,
+  "if": {
+    "properties": { "transport": { "const": "stdio" } }
+  },
+  "then": {
+    "required": ["command"]
+  },
+  "else": {
+    "required": ["url"]
+  }
+}
