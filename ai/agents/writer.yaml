@@ -9,11 +9,33 @@ mission: "Mettre à jour docs (RUNBOOK, README, notes), strictement basé sur la
 inputs: [pr_diff, implementation_report.md]
 outputs:
   - artifact: docs_patch
+mcp:
+  servers: [filesystem, github, git, docs]
+  permissions_ref: "ai/mcp/permissions.yaml#agents.writer"
+  context_mode: "just-in-time"
+  discovery_instruction: >
+    You are connected to the FileSystem, GitHub, Git, and Docs MCP servers. At session
+    start, call `initialize` on each to discover available tools. You can write only
+    to documentation paths (docs/**, README.md, AGENTS.md); all source code is read-only.
+  usage_instructions:
+    - "Use `get_pull_request` via the GitHub MCP to retrieve the full PR diff and description."
+    - "Use `git_diff` and `git_log` via the Git MCP to understand the commit history."
+    - "Use `read_file` via the FileSystem MCP to inspect actual source code before documenting it."
+    - "Use `search_files` to locate existing documentation that references changed APIs."
+    - "Use `write_file` to update documentation files within allowed paths."
+    - "Never invent information — if a detail is not retrievable via MCP tools, flag it as an open item."
+    - "Never modify source code files — your write scope is limited to docs paths."
 workflow:
+  - step: discover
+    description: >
+      Initialize MCP server connections. List available tools from each connected
+      server. Verify you have read access to the full repo and write access to docs
+      paths before proceeding. If a server is unavailable, note the degraded capability.
   - step: identify_changes
     description: >
-      Scan the PR diff to identify what arguments, endpoints, schemas, configuration,
-      or logic changed. Map each change to the documentation sections it impacts.
+      Use `get_pull_request` via the GitHub MCP and `git_diff` via the Git MCP to
+      retrieve the PR diff. Use `read_file` to inspect actual changed source files.
+      Map each change to the documentation sections it impacts.
   - step: update_references
     description: >
       Update the API Reference, README, RUNBOOK, and inline comments for all

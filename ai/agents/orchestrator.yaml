@@ -17,6 +17,38 @@ workflow:
 gates_source: "docs/QUALITY_GATES.md"
 glossary_source: "docs/DOMAIN_GLOSSARY.md"
 escalation_schema: "ai/schemas/escalation.schema.json"
+mcp:
+  registry: "ai/mcp/servers.yaml"
+  permissions: "ai/mcp/permissions.yaml"
+  server_schema: "ai/schemas/mcp_server.schema.json"
+  discovery_protocol:
+    description: >
+      At pipeline startup, the orchestrator initializes all MCP server connections
+      declared in the registry. Each agent receives only the server connections
+      permitted by its role in permissions.yaml.
+    steps:
+      - "Load ai/mcp/servers.yaml and validate each entry against mcp_server.schema.json."
+      - "For each server, call the MCP `initialize` method to perform capability negotiation."
+      - "Cache the discovered tool list and resource URIs per server."
+      - "Before dispatching to an agent, inject only the MCP connections allowed by permissions.yaml."
+      - "If a server fails initialization, log the error and continue — the agent operates in degraded mode without that server."
+    rules:
+      - "Agents MUST NOT hallucinate tools not returned by the `initialize` handshake."
+      - "Agents MUST use the JSON-RPC 2.0 schema provided by the server for tool invocations."
+      - "Tools tagged with `requires_confirmation` MUST be presented to the human for approval before execution."
+      - "All tool call arguments and results are logged with the Correlation ID for tracing."
+      - "Secret values (${VAR} references) are resolved at runtime and NEVER appear in agent context or logs."
+  coordination:
+    pre_dispatch: >
+      Before routing a task to an agent, the orchestrator:
+      1. Resolves the agent's MCP permission set from permissions.yaml.
+      2. Injects active server connections (already initialized) into the agent context.
+      3. Appends the tool discovery summary to the agent's system prompt preamble.
+    post_collect: >
+      After an agent completes its step, the orchestrator:
+      1. Validates the output artifact against its JSON schema.
+      2. Records all MCP tool calls made during the step in the audit trail.
+      3. Disconnects write-capable server connections to prevent cross-step mutations.
 max_iterations:
   ci_fix_loops: 3
   e2e_fix_loops: 2
