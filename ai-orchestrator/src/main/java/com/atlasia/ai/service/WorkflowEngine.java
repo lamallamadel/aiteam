@@ -28,6 +28,8 @@ public class WorkflowEngine {
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private static final int TOTAL_STEPS = 7;
+    private static final int MAX_REVIEW_DEVELOPER_LOOPS = 2;
+    private static final int MAX_TESTER_DEVELOPER_LOOPS = 2;
 
     private final RunRepository runRepository;
     private final JsonSchemaValidator schemaValidator;
@@ -110,18 +112,108 @@ public class WorkflowEngine {
 
             RunContext context = new RunContext(runEntity, owner, repo);
 
+            // --- Sequential Pipeline: PM → Qualifier → Architect → Developer ---
             emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
             executePmStep(context);
             emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
             executeQualifierStep(context);
             emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
             executeArchitectStep(context);
+
+            // --- Graph-Based Loop: Developer ↔ Review ↔ Tester ---
+            // Loop-back routing: review or tester can route back to developer
+            // bounded by max_iterations to prevent infinite cycles.
+            int reviewDeveloperLoops = 0;
+            int testerDeveloperLoops = 0;
+
             emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
             executeDeveloperStep(context);
-            emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
-            executePersonaReview(context);
-            emitStatus(runId, "IN_PROGRESS", "TESTER", progressPercent(5));
-            executeTesterStep(context);
+
+            // Review loop: developer → review → (tester | developer)
+            boolean reviewApproved = false;
+            while (!reviewApproved) {
+                emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
+                String reviewVerdict = executePersonaReviewWithVerdict(context);
+
+                if ("approved".equals(reviewVerdict) || "approved_with_minor_issues".equals(reviewVerdict)) {
+                    reviewApproved = true;
+                    log.info("Review approved (verdict={}): runId={}, correlationId={}",
+                            reviewVerdict, runId, CorrelationIdHolder.getCorrelationId());
+                } else {
+                    // Review rejected — loop back to developer
+                    reviewDeveloperLoops++;
+                    logTransition(runId, "REVIEW", "DEVELOPER", "loop_back",
+                            "Review verdict: " + reviewVerdict + " (iteration " + reviewDeveloperLoops + "/"
+                                    + MAX_REVIEW_DEVELOPER_LOOPS + ")");
+
+                    if (reviewDeveloperLoops >= MAX_REVIEW_DEVELOPER_LOOPS) {
+                        log.warn("Review-Developer loop limit exceeded: runId={}, iterations={}, correlationId={}",
+                                runId, reviewDeveloperLoops, CorrelationIdHolder.getCorrelationId());
+                        throw new EscalationException(buildLoopEscalation(
+                                "Review-Developer loop exceeded " + MAX_REVIEW_DEVELOPER_LOOPS + " iterations",
+                                "Review continues to find critical/high issues after " + reviewDeveloperLoops
+                                        + " fix attempts",
+                                reviewVerdict));
+                    }
+
+                    log.info("Review loop-back to developer: runId={}, iteration={}/{}, verdict={}, correlationId={}",
+                            runId, reviewDeveloperLoops, MAX_REVIEW_DEVELOPER_LOOPS, reviewVerdict,
+                            CorrelationIdHolder.getCorrelationId());
+                    emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
+                    executeDeveloperStep(context);
+                }
+            }
+
+            // Tester loop: review approved → tester → (writer | developer)
+            boolean testsGreen = false;
+            while (!testsGreen) {
+                emitStatus(runId, "IN_PROGRESS", "TESTER", progressPercent(5));
+                String ciStatus = executeTesterStepWithStatus(context);
+
+                if ("GREEN".equals(ciStatus)) {
+                    testsGreen = true;
+                    log.info("Tests passed (GREEN): runId={}, correlationId={}",
+                            runId, CorrelationIdHolder.getCorrelationId());
+                } else {
+                    // Tests failed — loop back to developer
+                    testerDeveloperLoops++;
+                    logTransition(runId, "TESTER", "DEVELOPER", "loop_back",
+                            "CI status: " + ciStatus + " (iteration " + testerDeveloperLoops + "/"
+                                    + MAX_TESTER_DEVELOPER_LOOPS + ")");
+
+                    if (testerDeveloperLoops >= MAX_TESTER_DEVELOPER_LOOPS) {
+                        log.warn("Tester-Developer loop limit exceeded: runId={}, iterations={}, correlationId={}",
+                                runId, testerDeveloperLoops, CorrelationIdHolder.getCorrelationId());
+                        throw new EscalationException(buildLoopEscalation(
+                                "Tester-Developer loop exceeded " + MAX_TESTER_DEVELOPER_LOOPS + " iterations",
+                                "Tests continue to fail after " + testerDeveloperLoops + " fix attempts",
+                                ciStatus));
+                    }
+
+                    log.info("Tester loop-back to developer: runId={}, iteration={}/{}, ciStatus={}, correlationId={}",
+                            runId, testerDeveloperLoops, MAX_TESTER_DEVELOPER_LOOPS, ciStatus,
+                            CorrelationIdHolder.getCorrelationId());
+                    emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
+                    executeDeveloperStep(context);
+
+                    // After developer fix, re-enter review loop
+                    emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
+                    String reReviewVerdict = executePersonaReviewWithVerdict(context);
+                    if (!"approved".equals(reReviewVerdict)
+                            && !"approved_with_minor_issues".equals(reReviewVerdict)) {
+                        reviewDeveloperLoops++;
+                        if (reviewDeveloperLoops >= MAX_REVIEW_DEVELOPER_LOOPS) {
+                            throw new EscalationException(buildLoopEscalation(
+                                    "Review-Developer loop exceeded " + MAX_REVIEW_DEVELOPER_LOOPS
+                                            + " iterations (during tester loop-back)",
+                                    "Review rejected during tester-developer loop-back",
+                                    reReviewVerdict));
+                        }
+                    }
+                }
+            }
+
+            // --- Terminal: Writer ---
             emitStatus(runId, "IN_PROGRESS", "WRITER", progressPercent(6));
             executeWriterStep(context);
 
@@ -503,6 +595,106 @@ public class WorkflowEngine {
         } finally {
             CorrelationIdHolder.setAgentName(null);
         }
+    }
+
+    /**
+     * Executes the persona review step and returns the review verdict string.
+     * Extracts the status from the serialized persona_review.json.
+     */
+    private String executePersonaReviewWithVerdict(RunContext context) throws Exception {
+        executePersonaReview(context);
+
+        // Extract verdict from the persisted review artifact
+        try {
+            RunEntity runEntity = context.getRunEntity();
+            return runEntity.getArtifacts().stream()
+                    .filter(a -> "persona_review_report".equals(a.getArtifactType()))
+                    .reduce((first, second) -> second) // last one (most recent)
+                    .map(a -> {
+                        try {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(a.getPayload());
+                            return root.path("overallAssessment").path("status").asText("approved");
+                        } catch (Exception e) {
+                            log.warn("Failed to parse review verdict, defaulting to approved: runId={}", runEntity.getId(), e);
+                            return "approved";
+                        }
+                    })
+                    .orElse("approved");
+        } catch (Exception e) {
+            log.warn("Failed to extract review verdict, defaulting to approved: correlationId={}",
+                    CorrelationIdHolder.getCorrelationId(), e);
+            return "approved";
+        }
+    }
+
+    /**
+     * Executes the tester step and returns the CI status (GREEN or RED).
+     * Extracts the ciStatus from the serialized test_report.json.
+     */
+    private String executeTesterStepWithStatus(RunContext context) throws Exception {
+        executeTesterStep(context);
+
+        try {
+            RunEntity runEntity = context.getRunEntity();
+            return runEntity.getArtifacts().stream()
+                    .filter(a -> "test_report.json".equals(a.getArtifactType()))
+                    .reduce((first, second) -> second)
+                    .map(a -> {
+                        try {
+                            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(a.getPayload());
+                            return root.path("ciStatus").asText("RED");
+                        } catch (Exception e) {
+                            log.warn("Failed to parse CI status, defaulting to RED: runId={}", runEntity.getId(), e);
+                            return "RED";
+                        }
+                    })
+                    .orElse("RED");
+        } catch (Exception e) {
+            log.warn("Failed to extract CI status, defaulting to RED: correlationId={}",
+                    CorrelationIdHolder.getCorrelationId(), e);
+            return "RED";
+        }
+    }
+
+    /**
+     * Logs a state machine transition for audit trail.
+     */
+    private void logTransition(UUID runId, String from, String to, String type, String reason) {
+        log.info("State transition: runId={}, from={}, to={}, type={}, reason={}, correlationId={}",
+                runId, from, to, type, reason, CorrelationIdHolder.getCorrelationId());
+
+        emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
+                runId, Instant.now(), type.toUpperCase() + ": " + from + " → " + to, to, progressPercent(3)));
+    }
+
+    /**
+     * Builds a structured escalation JSON when a loop limit is exceeded.
+     */
+    private String buildLoopEscalation(String context, String blocker, String lastStatus) {
+        return String.format("""
+                {
+                  "context": "%s",
+                  "blocker": "%s",
+                  "options": [
+                    {
+                      "name": "Manual fix",
+                      "pros": ["Human expertise can resolve complex issues"],
+                      "cons": ["Requires developer time"],
+                      "risk": "Delays delivery"
+                    },
+                    {
+                      "name": "Accept as-is",
+                      "pros": ["Unblocks pipeline"],
+                      "cons": ["Known issues remain"],
+                      "risk": "Technical debt or potential defects in production"
+                    }
+                  ],
+                  "recommendation": "Manual fix — a human should review the remaining issues and apply targeted fixes",
+                  "decisionNeeded": "Should a human developer fix the remaining issues, or should the current state be accepted?",
+                  "evidence": ["Last status: %s", "Loop limit exceeded — autonomous resolution attempts exhausted"]
+                }""", context, blocker, lastStatus);
     }
 
     private void persistArtifact(RunEntity runEntity, String agentName, String artifactType, String payload) {

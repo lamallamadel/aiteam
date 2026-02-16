@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TaskLedger",
+  "description": "The orchestrator's execution plan generated BEFORE dispatching any agent. This ledger serves as the shared 'brain' for the team, tracking intended steps, actual progress, and deviations. Persisted as task_ledger.json in the blackboard.",
+  "type": "object",
+  "required": [
+    "correlationId",
+    "issueId",
+    "createdAt",
+    "status",
+    "planned_steps",
+    "loop_counters",
+    "current_step"
+  ],
+  "properties": {
+    "correlationId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID correlating all artifacts in this workflow run"
+    },
+    "issueId": {
+      "type": "integer",
+      "description": "GitHub issue number triggering this workflow"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the ledger was created"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last ledger update"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planning", "executing", "looping_back", "waiting_gate", "escalated", "completed", "aborted"],
+      "description": "Current overall workflow status"
+    },
+    "current_step": {
+      "type": "string",
+      "enum": ["pm", "qualifier", "architect", "developer", "review", "tester", "writer", "none"],
+      "description": "Which agent is currently executing"
+    },
+    "planned_steps": {
+      "type": "array",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["step", "agent", "status", "produces"],
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Step number in execution order"
+          },
+          "agent": {
+            "type": "string",
+            "description": "Agent name responsible for this step"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "skipped", "failed", "looped_back"],
+            "description": "Current status of this step"
+          },
+          "produces": {
+            "type": "string",
+            "description": "Artifact this step produces"
+          },
+          "consumes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Artifacts this step reads from the blackboard"
+          },
+          "gate": {
+            "type": "string",
+            "description": "HITL gate that must be passed after this step, if any"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_ms": {
+            "type": "integer"
+          },
+          "iteration": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1,
+            "description": "Which iteration of this step (increments on loop-back)"
+          },
+          "loop_back_reason": {
+            "type": "string",
+            "description": "Why this step was re-entered (only on iteration > 1)"
+          }
+        }
+      },
+      "description": "Ordered list of planned execution steps"
+    },
+    "loop_counters": {
+      "type": "object",
+      "required": ["review_to_developer", "tester_to_developer"],
+      "properties": {
+        "review_to_developer": {
+          "type": "object",
+          "required": ["current", "max"],
+          "properties": {
+            "current": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "tester_to_developer": {
+          "type": "object",
+          "required": ["current", "max"],
+          "properties": {
+            "current": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 1 }
+          }
+        }
+      },
+      "description": "Bounded loop iteration counters to prevent infinite cycles"
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "state_transition.schema.json"
+      },
+      "description": "Audit log of every state transition in this workflow"
+    },
+    "gate_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["gate_name", "transition", "decision", "timestamp"],
+        "properties": {
+          "gate_name": { "type": "string" },
+          "transition": { "type": "string" },
+          "decision": {
+            "type": "string",
+            "enum": ["approve", "reject", "modify", "timeout"]
+          },
+          "comment": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "response_time_ms": { "type": "integer" }
+        }
+      },
+      "description": "Record of all HITL gate decisions"
+    },
+    "conflict_resolutions": {
+      "type": "array",
+      "items": {
+        "$ref": "conflict_resolution.schema.json"
+      },
+      "description": "Record of reviewer conflicts and how they were resolved"
+    }
+  }
+}

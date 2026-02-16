@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HandoffNotes",
+  "description": "Structured handoff notes that accompany every artifact passed between agents. These are the ONLY free-form context the next agent receives alongside the structured artifact.",
+  "type": "object",
+  "required": [
+    "summary",
+    "decisions",
+    "open_questions",
+    "risks"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "2-3 sentence summary of what was done and the key outcome. Must be substantive, not boilerplate."
+    },
+    "decisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["decision", "rationale"],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "description": "What was decided"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this decision was made over alternatives"
+          },
+          "alternatives_considered": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other options that were evaluated and rejected"
+          }
+        }
+      },
+      "description": "Key decisions made during this step and their rationale"
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question"],
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "The unresolved question"
+          },
+          "context": {
+            "type": "string",
+            "description": "Why this question matters for downstream agents"
+          },
+          "suggested_owner": {
+            "type": "string",
+            "description": "Which downstream agent should resolve this"
+          }
+        }
+      },
+      "description": "Unresolved questions or ambiguities for downstream agents. Empty array is valid if everything is resolved."
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["risk", "severity"],
+        "properties": {
+          "risk": {
+            "type": "string",
+            "description": "Description of the identified risk"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"],
+            "description": "How severe this risk is if not mitigated"
+          },
+          "mitigation": {
+            "type": "string",
+            "description": "Suggested mitigation strategy"
+          }
+        }
+      },
+      "description": "Identified risks with severity and suggested mitigations. Empty array is valid if no risks identified."
+    },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["deviation", "justification"],
+        "properties": {
+          "deviation": {
+            "type": "string",
+            "description": "What deviated from the expected input or plan"
+          },
+          "justification": {
+            "type": "string",
+            "description": "Why this deviation was necessary"
+          }
+        }
+      },
+      "description": "Any departures from the input artifact's expectations. Optional — omit if none."
+    }
+  }
+}

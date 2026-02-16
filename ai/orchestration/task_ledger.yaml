@@ -1,0 +1,206 @@
+# ============================================================================
+# Task Ledger Protocol — Atlasia AI Pipeline
+# ============================================================================
+# The Task Ledger is the orchestrator's execution plan, generated BEFORE any
+# agent is dispatched. It is the "shared brain" of the team — a living
+# document that tracks intended steps, actual progress, loop-backs, gate
+# decisions, and deviations.
+#
+# Inspired by the "plan before you act" principle: the Orchestrator Agent
+# generates a plan.md (task_ledger.json) that lists every step it intends
+# to take. This ledger serves as the shared context for the team.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Ledger Lifecycle
+# ---------------------------------------------------------------------------
+lifecycle:
+  description: >
+    The task ledger is created at workflow start and updated at every state
+    transition. It is persisted as 'task_ledger.json' on the blackboard
+    (ai_run_artifact table) and also rendered as a human-readable 'plan.md'
+    artifact for HITL review.
+
+  phases:
+    # Phase 1: Planning
+    planning:
+      trigger: "Workflow start (before PM agent is dispatched)"
+      actions:
+        - "Generate task_ledger.json with all 7 planned steps"
+        - "Initialize loop counters to 0"
+        - "Set status to 'planning'"
+        - "Render plan.md from the ledger for human visibility"
+        - "Persist to blackboard as 'task_ledger' artifact"
+      output: "task_ledger.json (schema: ai/schemas/task_ledger.schema.json)"
+      plan_md_template: |
+        # Execution Plan — Issue #{issueId}
+
+        **Correlation ID:** {correlationId}
+        **Created:** {createdAt}
+        **Status:** {status}
+
+        ## Planned Steps
+
+        | # | Agent      | Produces               | Gate              | Status  |
+        |---|------------|------------------------|-------------------|---------|
+        | 1 | PM         | ticket_plan.json       | —                 | pending |
+        | 2 | Qualifier  | work_plan.json         | —                 | pending |
+        | 3 | Architect  | architecture_notes.md  | architecture_approval | pending |
+        | 4 | Developer  | implementation_report  | —                 | pending |
+        | 5 | Review     | persona_review.json    | pr_review         | pending |
+        | 6 | Tester     | test_report.json       | merge_approval    | pending |
+        | 7 | Writer     | docs_patch             | —                 | pending |
+
+        ## Loop Budgets
+
+        - Review → Developer: 0 / 2
+        - Tester → Developer: 0 / 2
+
+        ## Gate Decisions
+
+        _(none yet)_
+
+        ## Transition Log
+
+        _(workflow not started)_
+
+    # Phase 2: Executing
+    executing:
+      trigger: "Each state transition (forward, loop-back, gate pause/resume)"
+      actions:
+        - "Update current_step to the new agent"
+        - "Update the step's status (in_progress, completed, looped_back)"
+        - "Append a state_transition entry to the transitions array"
+        - "If loop-back: increment the relevant loop counter"
+        - "If gate: append to gate_decisions array"
+        - "Update the plan.md rendering"
+        - "Persist updated ledger to blackboard"
+      invariants:
+        - "The ledger is updated BEFORE the next agent starts (not after)"
+        - "Transition entries are append-only — never modified or deleted"
+        - "Loop counters are checked BEFORE dispatch — if exceeded, escalate instead"
+
+    # Phase 3: Completed / Escalated / Aborted
+    terminal:
+      trigger: "Workflow reaches terminal state (writer completes, escalation, or abort)"
+      actions:
+        - "Set status to 'completed', 'escalated', or 'aborted'"
+        - "Set current_step to 'none'"
+        - "Final plan.md rendering with all durations and outcomes"
+        - "Persist final ledger version"
+
+# ---------------------------------------------------------------------------
+# Ledger Update Protocol
+# ---------------------------------------------------------------------------
+update_protocol:
+  description: >
+    The orchestrator follows this protocol at every state transition to keep
+    the ledger synchronized with actual workflow state.
+
+  on_forward_transition:
+    description: "Normal progress from one agent to the next"
+    steps:
+      - "Mark the completed step as 'completed' with timestamps and duration"
+      - "Mark the next step as 'in_progress'"
+      - "Append a 'forward' state_transition entry"
+      - "Validate the outgoing artifact against its schema"
+      - "Validate handoff_notes against handoff_notes.schema.json"
+      - "Persist updated ledger"
+
+  on_loop_back:
+    description: "Workflow loops back from critic to producer"
+    steps:
+      - "Mark the current step as 'looped_back'"
+      - "Increment the relevant loop counter"
+      - "Check if loop counter exceeds max — if so, escalate instead"
+      - "Mark the target step as 'in_progress' with incremented iteration"
+      - "Set loop_back_reason on the target step"
+      - "Append a 'loop_back' state_transition entry"
+      - "Persist updated ledger"
+
+  on_gate_pause:
+    description: "Pipeline pauses at an HITL gate"
+    steps:
+      - "Set workflow status to 'waiting_gate'"
+      - "Append a 'gate_pause' state_transition entry with gate_name"
+      - "Emit SSE notification to human"
+      - "Persist updated ledger (will resume when human responds)"
+
+  on_gate_resume:
+    description: "Human responds to an HITL gate"
+    steps:
+      - "Record the decision in gate_decisions array"
+      - "Append a 'gate_resume' state_transition entry"
+      - "If decision is 'approve': proceed to next step"
+      - "If decision is 'reject': mark workflow as 'aborted' with reason"
+      - "If decision is 'modify': update the artifact and proceed"
+      - "Set workflow status back to 'executing'"
+      - "Persist updated ledger"
+
+  on_escalation:
+    description: "Agent or orchestrator triggers escalation"
+    steps:
+      - "Set workflow status to 'escalated'"
+      - "Set current_step to 'none'"
+      - "Append an 'escalation' state_transition entry"
+      - "Validate escalation.json against schema"
+      - "Persist final ledger"
+
+# ---------------------------------------------------------------------------
+# Ledger as Observability Source
+# ---------------------------------------------------------------------------
+observability:
+  description: >
+    The task ledger doubles as a structured observability source. The frontend
+    can render the ledger as a live execution timeline, and the backend can
+    use transition data for performance analysis and bottleneck detection.
+
+  sse_events:
+    description: "Each ledger update emits a corresponding SSE event"
+    mapping:
+      forward_transition: "WorkflowStatusUpdate + StepComplete"
+      loop_back: "WorkflowStatusUpdate (with loop iteration context)"
+      gate_pause: "WorkflowStatusUpdate (status: WAITING_GATE)"
+      gate_resume: "WorkflowStatusUpdate (status: IN_PROGRESS)"
+      escalation: "EscalationRaised"
+
+  metrics:
+    description: "Metrics derived from ledger data"
+    derivable:
+      - "Average step duration per agent"
+      - "Loop-back frequency per edge"
+      - "Gate response time distribution"
+      - "Escalation rate per agent"
+      - "Total workflow duration breakdown"
+      - "Iteration efficiency (issues resolved per loop iteration)"
+
+  frontend_rendering:
+    description: >
+      The frontend's workflow-stream.store.ts can consume the task_ledger.json
+      to render a rich execution timeline showing:
+    features:
+      - "Step-by-step progress with durations"
+      - "Loop-back arrows with iteration counts"
+      - "Gate pause indicators with human response times"
+      - "Conflict resolution summaries"
+      - "Live plan.md preview"
+
+# ---------------------------------------------------------------------------
+# Blackboard Entry
+# ---------------------------------------------------------------------------
+blackboard_entry:
+  key: "task_ledger"
+  producer: orchestrator
+  consumers: ["all agents (read-only)"]
+  schema: "ai/schemas/task_ledger.schema.json"
+  description: >
+    The task ledger is readable by all agents so they can understand their
+    position in the workflow and what has happened before them. However,
+    only the orchestrator can WRITE to the ledger.
+  access_rules:
+    - "Only the orchestrator can create or update the task_ledger"
+    - "Agents read the ledger to understand their position but cannot modify it"
+    - "The ledger is versioned — each update creates a new version"
+    - "Human reviewers at HITL gates see the plan.md rendering"

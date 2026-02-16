@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StateTransition",
+  "description": "A single state machine transition record. Every time the workflow moves between agents (forward or loop-back), a transition entry is logged for auditability and debugging.",
+  "type": "object",
+  "required": [
+    "from",
+    "to",
+    "type",
+    "reason",
+    "timestamp",
+    "correlationId"
+  ],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "Source agent/state name"
+    },
+    "to": {
+      "type": "string",
+      "description": "Target agent/state name"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["forward", "loop_back", "escalation", "gate_pause", "gate_resume", "abort"],
+      "description": "Type of transition"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable reason for this transition"
+    },
+    "artifact_id": {
+      "type": "string",
+      "description": "ID of the artifact that triggered or accompanies this transition"
+    },
+    "artifact_type": {
+      "type": "string",
+      "description": "Type of artifact produced (e.g., ticket_plan.json, persona_review.json)"
+    },
+    "loop_iteration": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Current iteration count for this loop-back edge (0 for forward transitions)"
+    },
+    "gate_name": {
+      "type": "string",
+      "description": "Name of HITL gate if this is a gate_pause or gate_resume transition"
+    },
+    "correlationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_since_previous_ms": {
+      "type": "integer",
+      "description": "Milliseconds elapsed since the previous transition"
+    },
+    "context_passed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of artifact keys passed to the target agent"
+    },
+    "context_stripped": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of context elements explicitly excluded from the handoff"
+    }
+  }
+}

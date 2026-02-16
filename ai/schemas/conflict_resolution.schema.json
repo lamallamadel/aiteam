@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConflictResolution",
+  "description": "Record of a conflict between review roles and how it was resolved. Created when two or more reviewers produce contradictory findings (e.g., Security says 'reject', Performance says 'approve').",
+  "type": "object",
+  "required": [
+    "conflictId",
+    "conflicting_parties",
+    "conflict_type",
+    "description",
+    "resolution_method",
+    "resolution",
+    "timestamp"
+  ],
+  "properties": {
+    "conflictId": {
+      "type": "string",
+      "description": "Unique identifier for this conflict"
+    },
+    "conflicting_parties": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["reviewer", "position", "severity"],
+        "properties": {
+          "reviewer": {
+            "type": "string",
+            "description": "Name of the review role (e.g., security-engineer, sre-engineer)"
+          },
+          "position": {
+            "type": "string",
+            "description": "The reviewer's stance (e.g., 'reject: SQL injection risk', 'approve: acceptable with rate limiting')"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "Severity the reviewer assigned"
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Supporting evidence for this reviewer's position"
+          }
+        }
+      },
+      "description": "The reviewers in conflict and their positions"
+    },
+    "conflict_type": {
+      "type": "string",
+      "enum": [
+        "severity_disagreement",
+        "verdict_disagreement",
+        "approach_disagreement",
+        "priority_conflict",
+        "cross_domain_tradeoff"
+      ],
+      "description": "Classification of the conflict type"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the conflict"
+    },
+    "affected_files": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files or locations involved in the conflict"
+    },
+    "resolution_method": {
+      "type": "string",
+      "enum": [
+        "severity_hierarchy",
+        "domain_authority",
+        "arbiter_judgment",
+        "human_escalation",
+        "consensus"
+      ],
+      "description": "Which conflict resolution strategy was applied"
+    },
+    "resolution": {
+      "type": "object",
+      "required": ["decision", "rationale"],
+      "properties": {
+        "decision": {
+          "type": "string",
+          "description": "The final decision that was made"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why this resolution was chosen"
+        },
+        "winning_party": {
+          "type": "string",
+          "description": "Which reviewer's position prevailed"
+        },
+        "compromises": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Compromises made to satisfy multiple parties"
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
