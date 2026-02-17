@@ -142,6 +142,7 @@ public class WorkflowEngine {
                 } else {
                     // Review rejected — loop back to developer
                     reviewDeveloperLoops++;
+                    metrics.recordReviewDeveloperLoopBack();
                     logTransition(runId, "REVIEW", "DEVELOPER", "loop_back",
                             "Review verdict: " + reviewVerdict + " (iteration " + reviewDeveloperLoops + "/"
                                     + MAX_REVIEW_DEVELOPER_LOOPS + ")");
@@ -177,6 +178,7 @@ public class WorkflowEngine {
                 } else {
                     // Tests failed — loop back to developer
                     testerDeveloperLoops++;
+                    metrics.recordTesterDeveloperLoopBack();
                     logTransition(runId, "TESTER", "DEVELOPER", "loop_back",
                             "CI status: " + ciStatus + " (iteration " + testerDeveloperLoops + "/"
                                     + MAX_TESTER_DEVELOPER_LOOPS + ")");

@@ -36,9 +36,15 @@ public class OrchestratorMetrics {
     private final Counter ciFixAttemptsTotal;
     private final Counter e2eFixAttemptsTotal;
 
+    private final Counter reviewDeveloperLoopBacks;
+    private final Counter testerDeveloperLoopBacks;
+    private final Counter guardrailViolationsTotal;
+    private final Counter conflictResolutionsTotal;
+
     private final Timer llmSemanticLatency;
     private final Counter tokenBudgetExceeded;
     private final DistributionSummary tokenUsagePerBolt;
+    private final DistributionSummary costPerBolt;
 
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -125,6 +131,27 @@ public class OrchestratorMetrics {
 
         this.tokenUsagePerBolt = DistributionSummary.builder("orchestrator.token.usage.per.bolt")
                 .description("Token usage distribution per bolt execution")
+                .register(meterRegistry);
+
+        this.reviewDeveloperLoopBacks = Counter.builder("orchestrator.loop.review.developer.total")
+                .description("Total number of review-to-developer loop-backs")
+                .register(meterRegistry);
+
+        this.testerDeveloperLoopBacks = Counter.builder("orchestrator.loop.tester.developer.total")
+                .description("Total number of tester-to-developer loop-backs")
+                .register(meterRegistry);
+
+        this.guardrailViolationsTotal = Counter.builder("orchestrator.guardrail.violations.total")
+                .description("Total number of security guardrail violations detected")
+                .register(meterRegistry);
+
+        this.conflictResolutionsTotal = Counter.builder("orchestrator.conflict.resolutions.total")
+                .description("Total number of reviewer conflict resolutions")
+                .register(meterRegistry);
+
+        this.costPerBolt = DistributionSummary.builder("orchestrator.cost.per.bolt")
+                .description("Estimated cost in USD per bolt execution")
+                .baseUnit("USD")
                 .register(meterRegistry);
     }
 
@@ -245,5 +272,25 @@ public class OrchestratorMetrics {
 
     public void recordTokenUsagePerBolt(double totalTokens) {
         tokenUsagePerBolt.record(totalTokens);
+    }
+
+    public void recordReviewDeveloperLoopBack() {
+        reviewDeveloperLoopBacks.increment();
+    }
+
+    public void recordTesterDeveloperLoopBack() {
+        testerDeveloperLoopBacks.increment();
+    }
+
+    public void recordGuardrailViolation(String guardrailName, String agentName) {
+        guardrailViolationsTotal.increment();
+    }
+
+    public void recordConflictResolution(String resolutionMethod) {
+        conflictResolutionsTotal.increment();
+    }
+
+    public void recordCostPerBolt(double costUsd) {
+        costPerBolt.record(costUsd);
     }
 }

@@ -1,0 +1,305 @@
+# ============================================================================
+# Evaluation Framework — Atlasia AI Pipeline
+# ============================================================================
+# Defines how to measure, benchmark, and continuously improve the quality of
+# the multi-agent pipeline. Covers per-run quality reports, agent effectiveness
+# metrics, regression detection, and continuous improvement loops.
+#
+# This framework answers: "Is the pipeline getting better or worse over time?"
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Per-Run Quality Report
+# ---------------------------------------------------------------------------
+quality_report:
+  description: >
+    After every workflow completes (success, failure, or escalation), the
+    orchestrator generates a quality_report.json summarizing the run's
+    performance, cost, and quality metrics. This report is used for
+    trend analysis and regression detection.
+  schema: "ai/schemas/quality_report.schema.json"
+  trigger: "Workflow terminal state (completed, escalated, aborted)"
+
+  metrics_collected:
+    # --- Efficiency Metrics ---
+    efficiency:
+      - name: "total_duration_ms"
+        description: "End-to-end workflow duration"
+        source: "task_ledger.json timestamps"
+      - name: "per_agent_duration_ms"
+        description: "Duration breakdown by agent"
+        source: "task_ledger.json step entries"
+      - name: "total_tokens_used"
+        description: "Total LLM tokens consumed"
+        source: "OrchestratorMetrics.llmTokensUsed"
+      - name: "total_llm_calls"
+        description: "Total LLM API invocations"
+        source: "OrchestratorMetrics.llmCallsTotal"
+      - name: "total_tool_calls"
+        description: "Total MCP tool invocations"
+        source: "Trace event counts"
+
+    # --- Quality Metrics ---
+    quality:
+      - name: "review_verdict"
+        description: "Final review status (approved, changes_required, rejected)"
+        source: "persona_review.json overallAssessment.status"
+      - name: "critical_findings_count"
+        description: "Number of critical issues found by review"
+        source: "persona_review.json overallAssessment.criticalIssueCount"
+      - name: "high_findings_count"
+        description: "Number of high-severity issues"
+        source: "persona_review.json overallAssessment.highIssueCount"
+      - name: "security_fixes_applied"
+        description: "Whether auto-security fixes were needed"
+        source: "PersonaReviewReport.securityFixesApplied"
+      - name: "ci_status"
+        description: "Final CI pass/fail"
+        source: "test_report.json ciStatus"
+      - name: "coverage_delta"
+        description: "Change in test coverage vs baseline"
+        source: "test_report.json details"
+
+    # --- Loop Metrics ---
+    loops:
+      - name: "review_developer_iterations"
+        description: "How many times review looped back to developer"
+        source: "task_ledger.json loop_counters.review_to_developer.current"
+      - name: "tester_developer_iterations"
+        description: "How many times tester looped back to developer"
+        source: "task_ledger.json loop_counters.tester_to_developer.current"
+      - name: "ci_fix_attempts"
+        description: "Tester's internal CI fix loop count"
+        source: "RunEntity.ciFixCount"
+      - name: "e2e_fix_attempts"
+        description: "Tester's internal E2E fix loop count"
+        source: "RunEntity.e2eFixCount"
+      - name: "conflict_resolutions"
+        description: "Number of reviewer conflicts resolved"
+        source: "task_ledger.json conflict_resolutions.length"
+
+    # --- Outcome Metrics ---
+    outcome:
+      - name: "final_status"
+        description: "completed | escalated | aborted | failed"
+        source: "RunEntity.status"
+      - name: "escalation_agent"
+        description: "Which agent triggered escalation (if any)"
+        source: "escalation.json context"
+      - name: "escalation_reason"
+        description: "Why the workflow escalated"
+        source: "escalation.json blocker"
+      - name: "gate_decisions"
+        description: "Human decisions at HITL gates"
+        source: "task_ledger.json gate_decisions"
+      - name: "gate_response_time_ms"
+        description: "How long humans took to respond to gates"
+        source: "task_ledger.json gate_decisions[].response_time_ms"
+
+# ---------------------------------------------------------------------------
+# Agent Effectiveness Scoring
+# ---------------------------------------------------------------------------
+agent_effectiveness:
+  description: >
+    Each agent is scored on effectiveness based on downstream outcomes.
+    A high-effectiveness agent produces output that downstream agents
+    accept without rework. A low-effectiveness agent triggers loop-backs.
+
+  scoring:
+    formula: >
+      effectiveness_score = 1.0 - (loop_backs_caused / total_executions)
+    interpretation:
+      excellent: ">= 0.9 — Agent rarely causes rework"
+      good: ">= 0.7 — Agent occasionally needs iteration"
+      needs_improvement: ">= 0.5 — Agent frequently causes rework"
+      failing: "< 0.5 — Agent's output is more often rejected than accepted"
+
+  per_agent_signals:
+    pm:
+      positive: "Qualifier accepts ticket_plan without questions"
+      negative: "Qualifier escalates due to ambiguous requirements"
+    qualifier:
+      positive: "Architect's design aligns with work_plan scope"
+      negative: "Architect deviates significantly from work_plan"
+    architect:
+      positive: "Developer implements without major design changes"
+      negative: "Developer must deviate from architecture_notes"
+    developer:
+      positive: "Review approves on first pass"
+      negative: "Review triggers loop-back"
+    review:
+      positive: "Findings are actionable and verified in next iteration"
+      negative: "False positives (critical finding but run succeeds)"
+    tester:
+      positive: "Tests pass on first run (CI GREEN)"
+      negative: "Fix loop exhausted, escalated to developer"
+    writer:
+      positive: "Docs are complete and accurate"
+      negative: "Docs require manual correction post-merge"
+
+  tracking:
+    storage: "AnalyticsService.agentsPerformance()"
+    metric: "orchestrator.agent.effectiveness (gauge, tagged by agent_name)"
+    cadence: "Computed daily from last 30 days of runs"
+
+# ---------------------------------------------------------------------------
+# Regression Detection
+# ---------------------------------------------------------------------------
+regression_detection:
+  description: >
+    Detect when the pipeline's quality degrades over time. Uses rolling
+    averages and threshold-based alerts to catch regressions early.
+
+  monitored_signals:
+    - signal: "escalation_rate"
+      description: "Percentage of workflows that escalate"
+      baseline_threshold: 0.30
+      alert_threshold: 0.50
+      window: "7-day rolling"
+      action: "Investigate which agent/step is causing escalations"
+
+    - signal: "loop_back_rate"
+      description: "Percentage of workflows with at least one loop-back"
+      baseline_threshold: 0.40
+      alert_threshold: 0.60
+      window: "7-day rolling"
+      action: "Check if review criteria became stricter or developer output degraded"
+
+    - signal: "avg_tokens_per_workflow"
+      description: "Average token consumption per workflow"
+      baseline_threshold: 200000
+      alert_threshold: 350000
+      window: "7-day rolling"
+      action: "Check for context bloat or excessive agent retries"
+
+    - signal: "avg_duration_per_workflow"
+      description: "Average workflow duration in milliseconds"
+      baseline_threshold: 600000   # 10 minutes
+      alert_threshold: 1200000     # 20 minutes
+      window: "7-day rolling"
+      action: "Profile slow agent steps, check for API latency issues"
+
+    - signal: "critical_findings_per_review"
+      description: "Average critical findings per review pass"
+      baseline_threshold: 1.0
+      alert_threshold: 3.0
+      window: "7-day rolling"
+      action: "Check if developer output quality degraded or review became stricter"
+
+    - signal: "gate_response_time"
+      description: "Average human response time at HITL gates"
+      baseline_threshold: 3600000  # 1 hour
+      alert_threshold: 14400000    # 4 hours
+      window: "7-day rolling"
+      action: "Check if humans are overwhelmed or gates are too frequent"
+
+  alerting:
+    channel: "Logged as WARNING in application logs + SSE event to dashboard"
+    format: >
+      REGRESSION DETECTED: {signal} exceeded alert threshold.
+      Current: {current_value}, Threshold: {alert_threshold},
+      Baseline: {baseline_threshold}, Window: {window}.
+      Recommended action: {action}
+
+# ---------------------------------------------------------------------------
+# Persona Calibration
+# ---------------------------------------------------------------------------
+persona_calibration:
+  description: >
+    Review role personas need periodic calibration to ensure their findings
+    are accurate and actionable. False positives waste developer time;
+    false negatives let bugs through.
+
+  calibration_signals:
+    false_positive_rate:
+      description: "Findings marked critical/high but the run succeeded without fixing them"
+      threshold: 0.15
+      action: "Relax the persona's severity criteria for the flagged category"
+
+    false_negative_rate:
+      description: "Bugs found in production that the persona should have caught"
+      threshold: 0.05
+      action: "Strengthen the persona's review checklist for the missed category"
+
+    finding_overlap:
+      description: "Multiple personas flagging the same issue (wasted tokens)"
+      threshold: 0.25
+      action: "Sharpen domain boundaries between personas to reduce overlap"
+
+    resolution_rate:
+      description: "Percentage of findings that developers actually address"
+      threshold: 0.80
+      action: "If < 80%, findings may be too vague — improve suggested fixes"
+
+  cadence: "Weekly calibration review (automated report, human approval for changes)"
+  storage: "PersonaLearningService.calculateEffectiveness()"
+
+# ---------------------------------------------------------------------------
+# End-to-End Benchmark
+# ---------------------------------------------------------------------------
+benchmark:
+  description: >
+    Periodic end-to-end benchmarking using known-good test cases to verify
+    the pipeline works correctly after system changes (model upgrades,
+    prompt changes, schema updates).
+
+  test_suite:
+    - name: "Simple feature addition"
+      description: "Add a new REST endpoint with CRUD operations"
+      expected_outcome: "completed"
+      expected_max_loops: 0
+      expected_max_duration_ms: 600000
+
+    - name: "Bug fix with test"
+      description: "Fix a null pointer exception and add regression test"
+      expected_outcome: "completed"
+      expected_max_loops: 1
+      expected_max_duration_ms: 480000
+
+    - name: "Security vulnerability fix"
+      description: "Fix SQL injection vulnerability flagged by security-engineer"
+      expected_outcome: "completed"
+      expected_security_fix: true
+      expected_max_duration_ms: 600000
+
+    - name: "Intentional escalation"
+      description: "Issue with conflicting requirements that should escalate"
+      expected_outcome: "escalated"
+      expected_escalation_agent: "qualifier"
+
+  cadence: "After every model upgrade or prompt change"
+  tracking:
+    metric: "orchestrator.benchmark.pass_rate (gauge)"
+    storage: "Benchmark results persisted as workflow runs with label 'benchmark'"
+
+# ---------------------------------------------------------------------------
+# Cost Analysis
+# ---------------------------------------------------------------------------
+cost_analysis:
+  description: >
+    Track the cost of running the pipeline to identify optimization
+    opportunities and ensure budgets are respected.
+
+  cost_model:
+    llm_cost_per_1k_input_tokens: 0.003     # Adjust per model
+    llm_cost_per_1k_output_tokens: 0.015     # Adjust per model
+    github_api_cost_per_call: 0.0             # Free (within rate limits)
+    compute_cost_per_minute: 0.01            # Server cost
+
+  per_run_cost:
+    formula: >
+      (input_tokens / 1000 * llm_cost_per_1k_input_tokens) +
+      (output_tokens / 1000 * llm_cost_per_1k_output_tokens) +
+      (duration_minutes * compute_cost_per_minute)
+
+  budget:
+    max_cost_per_run: 2.00      # USD
+    max_cost_per_day: 50.00     # USD
+    alert_threshold: 0.80       # Alert at 80% of budget
+
+  tracking:
+    metric: "orchestrator.cost.per.run (gauge)"
+    metric_daily: "orchestrator.cost.daily (gauge)"
+    storage: "quality_report.json cost section"

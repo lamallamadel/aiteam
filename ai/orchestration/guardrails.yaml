@@ -1,0 +1,261 @@
+# ============================================================================
+# Security Guardrails — Atlasia AI Pipeline
+# ============================================================================
+# Defines runtime security controls applied to all agent outputs before they
+# are persisted to the blackboard or forwarded to the next agent. These
+# guardrails protect against secrets leakage, injection attacks, resource
+# exhaustion, and unauthorized mutations.
+#
+# Enforcement: The orchestrator applies these checks AFTER an agent produces
+# output and BEFORE persisting the artifact or transitioning state.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Layer 1: Secret Scanning
+# ---------------------------------------------------------------------------
+secret_scanning:
+  description: >
+    Every artifact produced by an agent is scanned for secrets before it is
+    persisted to the blackboard or included in a PR. Secrets are detected
+    using regex patterns and entropy analysis.
+
+  patterns:
+    - name: "AWS Access Key"
+      regex: "AKIA[0-9A-Z]{16}"
+      severity: critical
+
+    - name: "AWS Secret Key"
+      regex: "(?i)aws_secret_access_key\\s*[:=]\\s*[A-Za-z0-9/+=]{40}"
+      severity: critical
+
+    - name: "GitHub Token"
+      regex: "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}"
+      severity: critical
+
+    - name: "Generic API Key"
+      regex: "(?i)(api[_-]?key|apikey|api[_-]?secret)\\s*[:=]\\s*['\"]?[A-Za-z0-9_\\-]{20,}['\"]?"
+      severity: high
+
+    - name: "Database URL with credentials"
+      regex: "(?i)(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@"
+      severity: critical
+
+    - name: "Private Key Block"
+      regex: "-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
+      severity: critical
+
+    - name: "JWT Token"
+      regex: "eyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}"
+      severity: high
+
+    - name: "Bearer Token"
+      regex: "(?i)bearer\\s+[A-Za-z0-9_\\-\\.]{20,}"
+      severity: high
+
+    - name: "Password in String"
+      regex: "(?i)(password|passwd|pwd)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"
+      severity: high
+
+    - name: "Hardcoded IP with Port"
+      regex: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d{2,5}"
+      severity: medium
+
+  on_detection:
+    critical: >
+      BLOCK the artifact. Do NOT persist to blackboard. Escalate immediately
+      with the pattern name and redacted location. The agent must regenerate
+      the artifact with the secret removed or replaced with an environment
+      variable reference (${VAR_NAME}).
+    high: >
+      FLAG the artifact. Persist with a warning annotation. Include in the
+      handoff notes for the next agent. If the artifact is code (PR diff),
+      block the commit until the secret is replaced.
+    medium: >
+      LOG a warning. Persist the artifact but add a medium-severity finding
+      to the quality report. The review agent will flag it during review.
+
+  exclusions:
+    - "Test fixtures with clearly fake values (e.g., 'test-api-key-12345')"
+    - "Environment variable references (${VAR_NAME})"
+    - "Documentation examples explicitly marked as placeholders"
+
+# ---------------------------------------------------------------------------
+# Layer 2: Output Size Limits
+# ---------------------------------------------------------------------------
+output_limits:
+  description: >
+    Prevents resource exhaustion from runaway agent outputs. Applied to all
+    artifacts before persistence.
+
+  per_artifact:
+    max_json_payload_bytes: 1048576    # 1 MB
+    max_markdown_payload_bytes: 2097152 # 2 MB
+    max_code_diff_lines: 5000
+    max_findings_per_review: 200
+    max_tasks_per_work_plan: 50
+
+  per_agent_step:
+    max_llm_calls: 10
+    max_tool_calls: 25
+    max_duration_ms: 300000            # 5 minutes
+    max_tokens_per_step: 100000
+
+  per_workflow:
+    max_total_tokens: 500000
+    max_total_duration_ms: 1800000     # 30 minutes
+    max_artifacts: 50
+
+  on_limit_exceeded:
+    action: "Truncate output and add a warning to handoff notes. If critical information was lost, escalate."
+    metric: "orchestrator.guardrail.limit.exceeded (counter, tagged by limit_name and agent_name)"
+
+# ---------------------------------------------------------------------------
+# Layer 3: Injection Prevention
+# ---------------------------------------------------------------------------
+injection_prevention:
+  description: >
+    Prevents prompt injection, SQL injection, and XSS in agent-generated
+    artifacts. Applied to all text content in artifacts.
+
+  prompt_injection:
+    description: >
+      Detect attempts to override system prompts in agent-produced content.
+      Agents should never produce content that could manipulate downstream
+      agents' behavior.
+    patterns:
+      - "Ignore previous instructions"
+      - "You are now"
+      - "System prompt:"
+      - "\\[INST\\]"
+      - "<\\|im_start\\|>system"
+    on_detection: >
+      FLAG the artifact with a high-severity warning. The orchestrator adds
+      a sanitization note to handoff notes. Content is NOT automatically
+      stripped (to avoid data loss) but is flagged for human review.
+
+  sql_injection:
+    description: >
+      Detect raw SQL in agent-generated code that does not use parameterized
+      queries. Applied to code artifacts (implementation_report, PR diff).
+    patterns:
+      - "Statement\\.execute\\("
+      - "\\+ .*\\+ .*WHERE"
+      - "String\\.format.*SELECT"
+      - "concat.*FROM.*WHERE"
+    on_detection: >
+      Add a critical finding to persona_review.json. The security-engineer
+      review role will verify during code review. Block merge until resolved.
+
+  xss_prevention:
+    description: >
+      Detect unescaped user input rendering in frontend code.
+    patterns:
+      - "innerHTML\\s*="
+      - "\\[innerHTML\\]="
+      - "dangerouslySetInnerHTML"
+      - "v-html="
+      - "document\\.write\\("
+    on_detection: >
+      Add a high finding to persona_review.json. The frontend-ux-engineer
+      will verify during code review.
+
+# ---------------------------------------------------------------------------
+# Layer 4: Mutation Scope Enforcement
+# ---------------------------------------------------------------------------
+mutation_scope:
+  description: >
+    Ensures agents only modify files within their declared scope. Applied
+    to all file-modifying operations.
+
+  allowed_paths:
+    developer:
+      write: ["ai-orchestrator/src/main/**", "frontend/src/**"]
+      create: ["ai-orchestrator/src/main/**", "frontend/src/**"]
+      delete: []  # Developers cannot delete files autonomously
+    tester:
+      write: ["ai-orchestrator/src/test/**", "frontend/src/**/*.spec.ts"]
+      create: ["ai-orchestrator/src/test/**"]
+      delete: []
+    writer:
+      write: ["docs/**"]
+      create: ["docs/**"]
+      delete: []
+
+  blocked_paths:
+    always:
+      - ".github/workflows/**"
+      - ".env*"
+      - "*.pem"
+      - "*.key"
+      - "**/credentials*"
+      - "**/secrets*"
+      - "docker-compose*.yml"
+      - "Dockerfile*"
+
+  on_violation:
+    action: "BLOCK the operation. Log the violation. Add to escalation context."
+    metric: "orchestrator.guardrail.scope.violation (counter, tagged by agent_name and path)"
+
+# ---------------------------------------------------------------------------
+# Layer 5: Rate Limiting
+# ---------------------------------------------------------------------------
+rate_limiting:
+  description: >
+    Prevents runaway costs from LLM API calls. Applied per agent step and
+    per workflow.
+
+  llm_api:
+    max_calls_per_step: 10
+    max_calls_per_workflow: 50
+    cooldown_on_error_ms: 2000
+    backoff_multiplier: 2.0
+    max_backoff_ms: 30000
+
+  github_api:
+    max_calls_per_step: 30
+    max_calls_per_workflow: 200
+    rate_limit_buffer_percent: 20   # Stop at 80% of GitHub's rate limit
+
+  mcp_tools:
+    max_calls_per_step: 25
+    max_calls_per_workflow: 150
+    timeout_per_call_ms: 30000
+
+  on_limit_exceeded:
+    action: "Pause the agent step. If budget is exhausted, escalate."
+    metric: "orchestrator.guardrail.rate.limit (counter, tagged by api_name and agent_name)"
+
+# ---------------------------------------------------------------------------
+# Layer 6: Token Budget Enforcement
+# ---------------------------------------------------------------------------
+token_budget:
+  description: >
+    Each agent step has a token budget. The orchestrator tracks token usage
+    across the workflow and enforces budgets to prevent cost overruns.
+
+  budgets:
+    pm:         { input: 8000,  output: 4000,  total: 12000 }
+    qualifier:  { input: 15000, output: 8000,  total: 23000 }
+    architect:  { input: 20000, output: 12000, total: 32000 }
+    developer:  { input: 30000, output: 25000, total: 55000 }
+    review:     { input: 25000, output: 15000, total: 40000 }
+    tester:     { input: 20000, output: 10000, total: 30000 }
+    writer:     { input: 15000, output: 8000,  total: 23000 }
+
+  workflow_total: 500000
+  overflow_margin_percent: 20  # Allow 20% overflow before hard stop
+
+  on_soft_limit:
+    action: "Log warning. Add to handoff notes. Continue execution."
+    threshold: "100% of budget"
+
+  on_hard_limit:
+    action: "Stop the agent step. Persist partial output. Escalate."
+    threshold: "120% of budget (overflow margin)"
+
+  tracking:
+    metric: "orchestrator.token.usage (gauge, tagged by agent_name)"
+    per_step: "Recorded in task_ledger.json step entry"
+    per_workflow: "Recorded in task_ledger.json top-level"
