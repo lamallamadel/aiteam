@@ -57,6 +57,15 @@ public class OrchestratorMetrics {
     private final Counter a2aDiscoveriesTotal;
     private final Counter votingExecutionsTotal;
 
+    private final Counter evalSuiteRunsTotal;
+    private final Counter evalScenarioPassTotal;
+    private final Counter evalScenarioFailTotal;
+    private final Counter shadowRunsTotal;
+    private final Counter shadowRunsCompletedTotal;
+    private final Counter shadowRunsFailedTotal;
+    private final Counter behaviorDiffRegressionsTotal;
+    private final DistributionSummary evalPassAt1Rate;
+
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
 
@@ -203,6 +212,38 @@ public class OrchestratorMetrics {
 
         this.votingExecutionsTotal = Counter.builder("orchestrator.voting.executions.total")
                 .description("Total number of majority voting executions")
+                .register(meterRegistry);
+
+        this.evalSuiteRunsTotal = Counter.builder("orchestrator.eval.suite.runs.total")
+                .description("Total number of evaluation suite executions")
+                .register(meterRegistry);
+
+        this.evalScenarioPassTotal = Counter.builder("orchestrator.eval.scenario.pass.total")
+                .description("Total number of evaluation scenarios that passed")
+                .register(meterRegistry);
+
+        this.evalScenarioFailTotal = Counter.builder("orchestrator.eval.scenario.fail.total")
+                .description("Total number of evaluation scenarios that failed")
+                .register(meterRegistry);
+
+        this.shadowRunsTotal = Counter.builder("orchestrator.shadow.runs.total")
+                .description("Total number of shadow mode workflow executions")
+                .register(meterRegistry);
+
+        this.shadowRunsCompletedTotal = Counter.builder("orchestrator.shadow.runs.completed.total")
+                .description("Total number of shadow mode runs that completed successfully")
+                .register(meterRegistry);
+
+        this.shadowRunsFailedTotal = Counter.builder("orchestrator.shadow.runs.failed.total")
+                .description("Total number of shadow mode runs that failed")
+                .register(meterRegistry);
+
+        this.behaviorDiffRegressionsTotal = Counter.builder("orchestrator.behavior.diff.regressions.total")
+                .description("Total number of regressions detected by behavior diffing")
+                .register(meterRegistry);
+
+        this.evalPassAt1Rate = DistributionSummary.builder("orchestrator.eval.pass.at.1.rate")
+                .description("Pass@1 rate distribution across eval suite runs")
                 .register(meterRegistry);
     }
 
@@ -380,5 +421,34 @@ public class OrchestratorMetrics {
 
     public void recordVotingExecution(String checkpoint) {
         votingExecutionsTotal.increment();
+    }
+
+    public void recordEvalSuiteRun(double passAt1Rate) {
+        evalSuiteRunsTotal.increment();
+        evalPassAt1Rate.record(passAt1Rate);
+    }
+
+    public void recordEvalScenarioPass() {
+        evalScenarioPassTotal.increment();
+    }
+
+    public void recordEvalScenarioFail() {
+        evalScenarioFailTotal.increment();
+    }
+
+    public void recordShadowRun() {
+        shadowRunsTotal.increment();
+    }
+
+    public void recordShadowRunCompleted() {
+        shadowRunsCompletedTotal.increment();
+    }
+
+    public void recordShadowRunFailed() {
+        shadowRunsFailedTotal.increment();
+    }
+
+    public void recordBehaviorDiffRegression(String scenarioId) {
+        behaviorDiffRegressionsTotal.increment();
     }
 }

@@ -1,0 +1,232 @@
+# ============================================================================
+# Distributed Tracing — Atlasia AI Pipeline
+# ============================================================================
+# Instruments the full chain of events from user prompt to final output.
+# Visualizes the agent "thought process," not just the output. Enables
+# pinpointing exactly where the "telephone game" broke down.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Trace Architecture
+# ---------------------------------------------------------------------------
+architecture:
+  description: >
+    Every workflow execution produces a distributed trace: a tree of spans
+    representing the full execution path. Spans are nested hierarchically
+    (workflow → step → tool_call → llm_call) and annotated with timing,
+    token usage, cost, and outcome.
+
+  span_hierarchy:
+    workflow_span:
+      description: "Root span covering the entire workflow execution"
+      attributes: [run_id, correlation_id, repo, issue_number, total_duration_ms, total_tokens, outcome]
+      children:
+        step_span:
+          description: "One span per agent step execution"
+          attributes: [agent_name, step_phase, duration_ms, tokens_used, artifact_produced, loop_iteration]
+          children:
+            llm_span:
+              description: "One span per LLM API call within the step"
+              attributes: [model, prompt_tokens, completion_tokens, latency_ms, temperature, finish_reason]
+            tool_span:
+              description: "One span per MCP tool call within the step"
+              attributes: [server, tool_name, duration_ms, success, interrupt_triggered]
+            blackboard_span:
+              description: "One span per blackboard read/write"
+              attributes: [entry_key, operation, version, access_granted]
+        judge_span:
+          description: "One span per Judge evaluation"
+          attributes: [checkpoint, rubric, score, verdict, confidence, voter_count]
+        interrupt_span:
+          description: "One span per dynamic interrupt evaluation"
+          attributes: [tier, rule_name, action, human_response, response_time_ms]
+
+  schema: "ai/schemas/trace_span.schema.json"
+
+# ---------------------------------------------------------------------------
+# Trace Exporters
+# ---------------------------------------------------------------------------
+exporters:
+  primary:
+    type: "otlp"
+    description: "OpenTelemetry Protocol export to Jaeger/Tempo"
+    endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+    protocol: "grpc"
+    headers:
+      authorization: "Bearer ${OTEL_AUTH_TOKEN}"
+
+  secondary:
+    type: "database"
+    description: "Persist full traces to trace_event table for internal query"
+    table: "trace_event"
+    retention_days: 90
+
+  dashboard:
+    type: "sse"
+    description: "Real-time trace streaming to frontend dashboard"
+    endpoint: "/api/v1/traces/{runId}/stream"
+
+# ---------------------------------------------------------------------------
+# Instrumentation Points
+# ---------------------------------------------------------------------------
+instrumentation:
+
+  workflow_engine:
+    class: "WorkflowEngine"
+    spans:
+      - method: "executeWorkflow"
+        span_name: "workflow.execute"
+        attributes: [run_id, correlation_id]
+      - method: "executePmStep"
+        span_name: "step.pm"
+        parent: "workflow.execute"
+      - method: "executeQualifierStep"
+        span_name: "step.qualifier"
+        parent: "workflow.execute"
+      - method: "executeArchitectStep"
+        span_name: "step.architect"
+        parent: "workflow.execute"
+      - method: "executeDeveloperStep"
+        span_name: "step.developer"
+        parent: "workflow.execute"
+      - method: "executePersonaReview"
+        span_name: "step.review"
+        parent: "workflow.execute"
+      - method: "executeTesterStep"
+        span_name: "step.tester"
+        parent: "workflow.execute"
+      - method: "executeWriterStep"
+        span_name: "step.writer"
+        parent: "workflow.execute"
+
+  llm_service:
+    class: "LlmService"
+    spans:
+      - method: "callLlm"
+        span_name: "llm.call"
+        attributes: [model, prompt_tokens, completion_tokens, latency_ms]
+
+  blackboard_service:
+    class: "BlackboardService"
+    spans:
+      - method: "write"
+        span_name: "blackboard.write"
+        attributes: [entry_key, agent_name, version]
+      - method: "read"
+        span_name: "blackboard.read"
+        attributes: [entry_key, agent_name]
+
+  interrupt_service:
+    class: "DynamicInterruptService"
+    spans:
+      - method: "evaluate"
+        span_name: "interrupt.evaluate"
+        attributes: [agent_name, server, tool_name, action, tier]
+
+  judge_service:
+    class: "JudgeService"
+    spans:
+      - method: "evaluate"
+        span_name: "judge.evaluate"
+        attributes: [checkpoint, rubric, verdict, score]
+      - method: "evaluateWithMajorityVoting"
+        span_name: "judge.vote"
+        attributes: [checkpoint, voter_count, agreement_rate]
+
+# ---------------------------------------------------------------------------
+# Cost & Latency Monitoring
+# ---------------------------------------------------------------------------
+cost_monitoring:
+  description: >
+    Track cost per task and per step. Alert when costs spike (indicating
+    doom loops or context bloat). Dashboard shows cost breakdown by agent.
+
+  metrics:
+    - name: "orchestrator.cost.per.workflow"
+      type: "distribution_summary"
+      unit: "USD"
+      description: "Total cost per workflow execution"
+
+    - name: "orchestrator.cost.per.step"
+      type: "distribution_summary"
+      unit: "USD"
+      tags: [agent_name]
+      description: "Cost per agent step"
+
+    - name: "orchestrator.tokens.per.workflow"
+      type: "distribution_summary"
+      description: "Total tokens per workflow"
+
+    - name: "orchestrator.step.count.per.workflow"
+      type: "distribution_summary"
+      description: "Number of steps (including loop-backs) per workflow"
+
+  doom_loop_detection:
+    description: >
+      A sudden spike in step count or tokens often indicates an agent is
+      stuck in a "doom loop" retrying the same failed operation.
+    rules:
+      - condition: "step_count > (TOTAL_STEPS * 2)"
+        severity: "warning"
+        action: "Log doom loop warning, flag for investigation"
+      - condition: "tokens_used > (budget * 1.5)"
+        severity: "critical"
+        action: "Force-terminate workflow, escalate"
+      - condition: "same_error_repeated >= 3"
+        severity: "critical"
+        action: "Break the loop, escalate with error pattern analysis"
+
+# ---------------------------------------------------------------------------
+# Behavior Diffing
+# ---------------------------------------------------------------------------
+behavior_diffing:
+  description: >
+    Before shipping an update, compare traces between Version N and Version
+    N+1 on the same eval suite scenarios. Detect whether the update improved
+    relevance but hurt compliance (or vice versa).
+
+  protocol:
+    - step: "baseline"
+      description: "Run eval suite on current version, store traces as baseline"
+      storage: "eval_results/{version}/baseline/"
+    - step: "candidate"
+      description: "Run eval suite on candidate version, store traces"
+      storage: "eval_results/{version}/candidate/"
+    - step: "diff"
+      description: "Compare traces across all scenarios"
+      comparisons:
+        - metric: "pass_at_1_rate"
+          comparison: "candidate >= baseline - 0.05"
+          description: "Pass@1 must not drop by more than 5%"
+        - metric: "avg_groundedness"
+          comparison: "candidate >= baseline - 0.05"
+          description: "Groundedness must not drop"
+        - metric: "avg_correctness"
+          comparison: "candidate >= baseline - 0.05"
+          description: "Correctness must not drop"
+        - metric: "avg_protocol_adherence"
+          comparison: "candidate >= baseline - 0.03"
+          description: "Protocol adherence must not drop (stricter)"
+        - metric: "avg_cost_per_workflow"
+          comparison: "candidate <= baseline * 1.20"
+          description: "Cost must not increase by more than 20%"
+        - metric: "avg_duration_per_workflow"
+          comparison: "candidate <= baseline * 1.30"
+          description: "Duration must not increase by more than 30%"
+        - metric: "escalation_rate"
+          comparison: "candidate <= baseline + 0.10"
+          description: "Escalation rate must not increase by more than 10%"
+    - step: "report"
+      description: "Generate behavior diff report with per-scenario breakdowns"
+      format: "markdown + json"
+    - step: "gate"
+      description: "Block deployment if any comparison fails"
+
+  visualization:
+    description: >
+      Frontend renders a side-by-side comparison:
+      - Per-scenario pass/fail delta (green = improved, red = regressed)
+      - Aggregate metric sparklines (trend over last 10 versions)
+      - Trace flamegraph comparison for regressed scenarios
