@@ -46,6 +46,17 @@ public class OrchestratorMetrics {
     private final DistributionSummary tokenUsagePerBolt;
     private final DistributionSummary costPerBolt;
 
+    private final Counter judgeEvaluationsTotal;
+    private final Counter judgeVetoTotal;
+    private final Counter judgePassTotal;
+    private final Counter interruptTriggeredTotal;
+    private final Counter interruptApprovedTotal;
+    private final Counter interruptDeniedTotal;
+    private final Counter blackboardWritesTotal;
+    private final Counter blackboardReadsTotal;
+    private final Counter a2aDiscoveriesTotal;
+    private final Counter votingExecutionsTotal;
+
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
 
@@ -152,6 +163,46 @@ public class OrchestratorMetrics {
         this.costPerBolt = DistributionSummary.builder("orchestrator.cost.per.bolt")
                 .description("Estimated cost in USD per bolt execution")
                 .baseUnit("USD")
+                .register(meterRegistry);
+
+        this.judgeEvaluationsTotal = Counter.builder("orchestrator.judge.evaluations.total")
+                .description("Total number of Judge evaluations executed")
+                .register(meterRegistry);
+
+        this.judgeVetoTotal = Counter.builder("orchestrator.judge.veto.total")
+                .description("Total number of Judge vetoes issued")
+                .register(meterRegistry);
+
+        this.judgePassTotal = Counter.builder("orchestrator.judge.pass.total")
+                .description("Total number of Judge pass verdicts")
+                .register(meterRegistry);
+
+        this.interruptTriggeredTotal = Counter.builder("orchestrator.interrupt.triggered.total")
+                .description("Total number of dynamic interrupts triggered")
+                .register(meterRegistry);
+
+        this.interruptApprovedTotal = Counter.builder("orchestrator.interrupt.approved.total")
+                .description("Total number of dynamic interrupts approved by human")
+                .register(meterRegistry);
+
+        this.interruptDeniedTotal = Counter.builder("orchestrator.interrupt.denied.total")
+                .description("Total number of dynamic interrupts denied by human")
+                .register(meterRegistry);
+
+        this.blackboardWritesTotal = Counter.builder("orchestrator.blackboard.writes.total")
+                .description("Total number of blackboard write operations")
+                .register(meterRegistry);
+
+        this.blackboardReadsTotal = Counter.builder("orchestrator.blackboard.reads.total")
+                .description("Total number of blackboard read operations")
+                .register(meterRegistry);
+
+        this.a2aDiscoveriesTotal = Counter.builder("orchestrator.a2a.discoveries.total")
+                .description("Total number of A2A agent discovery queries")
+                .register(meterRegistry);
+
+        this.votingExecutionsTotal = Counter.builder("orchestrator.voting.executions.total")
+                .description("Total number of majority voting executions")
                 .register(meterRegistry);
     }
 
@@ -292,5 +343,42 @@ public class OrchestratorMetrics {
 
     public void recordCostPerBolt(double costUsd) {
         costPerBolt.record(costUsd);
+    }
+
+    public void recordJudgeEvaluation(String verdict) {
+        judgeEvaluationsTotal.increment();
+        if ("veto".equals(verdict)) {
+            judgeVetoTotal.increment();
+        } else if ("pass".equals(verdict)) {
+            judgePassTotal.increment();
+        }
+    }
+
+    public void recordInterruptTriggered(String tier, String ruleName) {
+        interruptTriggeredTotal.increment();
+    }
+
+    public void recordInterruptApproved(String ruleName) {
+        interruptApprovedTotal.increment();
+    }
+
+    public void recordInterruptDenied(String ruleName) {
+        interruptDeniedTotal.increment();
+    }
+
+    public void recordBlackboardWrite(String entryKey, String agentName) {
+        blackboardWritesTotal.increment();
+    }
+
+    public void recordBlackboardRead(String entryKey, String agentName) {
+        blackboardReadsTotal.increment();
+    }
+
+    public void recordA2ADiscovery(String role) {
+        a2aDiscoveriesTotal.increment();
+    }
+
+    public void recordVotingExecution(String checkpoint) {
+        votingExecutionsTotal.increment();
     }
 }

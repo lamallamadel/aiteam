@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "progress_ledger.schema.json",
+  "title": "Progress Ledger",
+  "description": "Schema for the Magentic-pattern Progress Ledger. Tracks goals, subgoals, completed work, blockers, and a chronological timeline. Enables agents to pause, hand off, and resume without losing the big picture.",
+  "type": "object",
+  "required": ["run_id", "correlation_id", "status", "goals", "timeline", "created_at", "updated_at"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planning", "executing", "waiting_gate", "waiting_interrupt", "completed", "escalated", "aborted"]
+    },
+    "goals": {
+      "type": "array",
+      "description": "High-level goals derived from the ticket plan",
+      "items": {
+        "type": "object",
+        "required": ["goal_id", "description", "status"],
+        "properties": {
+          "goal_id": { "type": "string" },
+          "description": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "blocked", "skipped"]
+          },
+          "assigned_agent": { "type": "string" },
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Goal IDs this goal depends on"
+          },
+          "subgoals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["subgoal_id", "description", "status"],
+              "properties": {
+                "subgoal_id": { "type": "string" },
+                "description": { "type": "string" },
+                "status": {
+                  "type": "string",
+                  "enum": ["pending", "in_progress", "completed", "blocked", "skipped"]
+                },
+                "agent": { "type": "string" },
+                "artifact_key": { "type": "string" },
+                "completed_at": { "type": "string", "format": "date-time" },
+                "duration_ms": { "type": "integer" },
+                "tokens_used": { "type": "integer" },
+                "outcome": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Active blockers preventing progress",
+      "items": {
+        "type": "object",
+        "required": ["blocker_id", "description", "blocking_goal", "severity"],
+        "properties": {
+          "blocker_id": { "type": "string" },
+          "description": { "type": "string" },
+          "blocking_goal": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "resolution_options": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "resolved_at": { "type": "string", "format": "date-time" },
+          "resolution": { "type": "string" }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "description": "Chronological log of all progress events",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "event_type", "description"],
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "goal_started", "goal_completed", "goal_blocked",
+              "subgoal_started", "subgoal_completed",
+              "agent_dispatched", "agent_completed",
+              "loop_back", "gate_paused", "gate_resumed",
+              "interrupt_triggered", "interrupt_resolved",
+              "escalation_raised", "blocker_added", "blocker_resolved",
+              "artifact_produced", "verdict_issued"
+            ]
+          },
+          "agent": { "type": "string" },
+          "description": { "type": "string" },
+          "artifact_ref": { "type": "string" },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Computed summary statistics",
+      "properties": {
+        "total_goals": { "type": "integer" },
+        "completed_goals": { "type": "integer" },
+        "blocked_goals": { "type": "integer" },
+        "total_tokens_used": { "type": "integer" },
+        "total_duration_ms": { "type": "integer" },
+        "loop_back_count": { "type": "integer" },
+        "interrupt_count": { "type": "integer" },
+        "estimated_cost_usd": { "type": "number" }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
