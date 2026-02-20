@@ -100,7 +100,7 @@ public class JudgeService {
             String evaluationPrompt = buildEvaluationPrompt(checkpoint, artifact);
 
             // Call LLM for evaluation
-            String llmResponse = llmService.callLlm(evaluationPrompt, "judge-evaluation");
+            String llmResponse = llmService.generateCompletion(null, evaluationPrompt);
 
             // Parse the LLM response into criterion scores
             Map<String, CriterionScore> criterionScores = parseCriterionScores(llmResponse);
@@ -177,7 +177,7 @@ public class JudgeService {
                 }
 
                 String prompt = buildVotingPrompt(checkpoint, artifact, emphases[i]);
-                String response = llmService.callLlm(prompt, "judge-voter-" + i);
+                String response = llmService.generateCompletion(null, prompt);
                 Map<String, CriterionScore> scores = parseCriterionScores(response);
                 double overallScore = computeWeightedScore(scores);
                 double confidence = computeConfidence(scores);
@@ -220,7 +220,7 @@ public class JudgeService {
 
         try {
             String prompt = buildArbitrationPrompt(position1, position2, evidence1, evidence2);
-            String response = llmService.callLlm(prompt, "judge-arbitration");
+            String response = llmService.generateCompletion(null, prompt);
 
             Map<String, CriterionScore> scores = parseCriterionScores(response);
             double overallScore = computeWeightedScore(scores);
@@ -279,10 +279,11 @@ public class JudgeService {
         }
 
         // Compute aggregated score and confidence
+        String finalVerdict = aggregatedVerdict;
         double avgScore = votes.stream().mapToDouble(v -> v.overallScore).average().orElse(0);
         double avgConfidence = votes.stream().mapToDouble(v -> v.confidence).average().orElse(0);
         double agreementRate = (double) votes.stream()
-                .filter(v -> v.verdict.equals(aggregatedVerdict)).count() / votes.size();
+                .filter(v -> v.verdict.equals(finalVerdict)).count() / votes.size();
 
         VotingMetadata votingMetadata = new VotingMetadata(
                 votes.size(), votes.size() >= VOTING_QUORUM,
@@ -296,7 +297,7 @@ public class JudgeService {
         return new JudgeVerdict(
                 runId, checkpoint, artifactKey, "code_quality",
                 avgScore, aggregatedVerdict, avgConfidence,
-                votes.getFirst().criterionScores,
+                votes.get(0).criterionScores,
                 List.of(), determineRecommendation(aggregatedVerdict, avgScore),
                 votingMetadata, Instant.now());
     }

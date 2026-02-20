@@ -1,9 +1,25 @@
 FROM node:22-alpine
+
 WORKDIR /app
+
+# Copy only package files for better layer caching
 COPY package*.json ./
-RUN npm install
+
+# Install dependencies (with npm ci for reproducible builds in dev)
+RUN npm ci
+
+# Copy the rest (except node_modules which is mounted as volume)
 COPY . .
-# Expose port 4200
+
+# Expose dev server port
 EXPOSE 4200
-# Run ng serve with polling for hot-reload in Docker/Windows
-CMD ["npm", "run", "start", "--", "--host", "0.0.0.0", "--poll", "2000"]
+
+# Health check for dev server
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD wget -qO- http://localhost:4200/ || exit 1
+
+# Run ng serve with polling for hot-reload and open browser flag
+# --poll enables file watching in Docker environments
+# --host 0.0.0.0 makes it accessible from host machine
+# --disable-host-check allows access via container name
+CMD ["npm", "run", "start", "--", "--host", "0.0.0.0", "--poll", "2000", "--disable-host-check"]

@@ -171,7 +171,7 @@ public class EvalSuiteService {
                     Respond with ONLY a JSON object: {"score": 0.X, "evidence": "..."}
                     """, scenario.title, scenario.description);
 
-            String response = llmService.callLlm(prompt, "eval-groundedness");
+            String response = llmService.generateCompletion(null, prompt);
             return parseScore(response);
         } catch (Exception e) {
             log.warn("Groundedness grading failed for scenario {}: {}", scenario.id, e.getMessage());
@@ -195,7 +195,7 @@ public class EvalSuiteService {
                     Respond with ONLY a JSON object: {"score": 0.X, "compile": true/false, "tests_pass": true/false}
                     """, scenario.title, scenario.description, scenario.expectedOutcome);
 
-            String response = llmService.callLlm(prompt, "eval-correctness");
+            String response = llmService.generateCompletion(null, prompt);
             return parseScore(response);
         } catch (Exception e) {
             log.warn("Correctness grading failed for scenario {}: {}", scenario.id, e.getMessage());
@@ -219,7 +219,7 @@ public class EvalSuiteService {
                     Respond with ONLY a JSON object: {"score": 0.X, "checks_passed": N, "checks_total": N}
                     """, scenario.title, scenario.description);
 
-            String response = llmService.callLlm(prompt, "eval-protocol");
+            String response = llmService.generateCompletion(null, prompt);
             return parseScore(response);
         } catch (Exception e) {
             log.warn("Protocol adherence grading failed for scenario {}: {}", scenario.id, e.getMessage());

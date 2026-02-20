@@ -113,7 +113,7 @@ public class A2ADiscoveryService {
         List<AgentCard> matches = discover(requiredCapabilities);
 
         if (!matches.isEmpty()) {
-            AgentCard best = matches.getFirst();
+            AgentCard best = matches.get(0);
             log.info("A2A DISCOVER: role={}, bestMatch={}, score={}",
                     role, best.name, computeMatchScore(best, requiredCapabilities));
             return best;
