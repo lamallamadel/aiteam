@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent_card.schema.json",
+  "title": "A2A Agent Card",
+  "description": "Schema for Agent-to-Agent (A2A) protocol Agent Cards. Each agent publishes a card describing its identity, capabilities, schemas, and constraints for discovery and task delegation.",
+  "type": "object",
+  "required": ["name", "version", "role", "vendor", "capabilities", "output_artifact_key", "status"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique agent identifier (e.g., 'developer-v2')",
+      "pattern": "^[a-z][a-z0-9-]*-v\\d+$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the agent",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "role": {
+      "type": "string",
+      "description": "Human-readable role description"
+    },
+    "vendor": {
+      "type": "string",
+      "description": "Provider of this agent",
+      "enum": ["atlasia", "anthropic", "openai", "google", "custom"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the agent's purpose"
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "List of capability tags for discovery matching",
+      "items": {
+        "type": "string",
+        "enum": [
+          "requirement_analysis",
+          "user_story_generation",
+          "acceptance_criteria",
+          "risk_identification",
+          "requirement_refinement",
+          "feasibility_analysis",
+          "task_decomposition",
+          "scope_validation",
+          "architecture_design",
+          "schema_validation",
+          "dependency_analysis",
+          "adr_compliance",
+          "code_generation",
+          "tdd_implementation",
+          "git_operations",
+          "pr_creation",
+          "security_verification",
+          "code_review",
+          "multi_perspective_review",
+          "conflict_resolution",
+          "verdict_synthesis",
+          "security_analysis",
+          "owasp_review",
+          "dependency_scanning",
+          "secret_detection",
+          "threat_modeling",
+          "code_quality_review",
+          "architecture_compliance",
+          "performance_analysis",
+          "test_coverage_review",
+          "infrastructure_review",
+          "container_security",
+          "database_review",
+          "observability_review",
+          "frontend_review",
+          "accessibility_review",
+          "ux_standards",
+          "component_design_review",
+          "test_execution",
+          "ci_management",
+          "e2e_testing",
+          "test_report_generation",
+          "autonomous_fix",
+          "documentation",
+          "changelog_generation",
+          "api_docs",
+          "readme_updates",
+          "quality_arbitration",
+          "rubric_evaluation",
+          "majority_voting",
+          "conflict_arbitration",
+          "regression_detection"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "input_schema": {
+      "type": "object",
+      "description": "JSON Schema defining the agent's expected input"
+    },
+    "output_schema": {
+      "type": "object",
+      "description": "JSON Schema or $ref defining the agent's guaranteed output"
+    },
+    "output_artifact_key": {
+      "type": "string",
+      "description": "Blackboard key where the output artifact will be stored"
+    },
+    "mcp_servers": {
+      "type": "array",
+      "description": "MCP servers this agent requires access to",
+      "items": {
+        "type": "string"
+      }
+    },
+    "delegates": {
+      "type": "array",
+      "description": "Sub-agents this agent can delegate to (supervisor pattern)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "parent": {
+      "type": "string",
+      "description": "Parent supervisor agent (for hierarchical delegation)"
+    },
+    "constraints": {
+      "type": "object",
+      "description": "Operational limits for this agent",
+      "properties": {
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum total tokens (input + output)"
+        },
+        "max_duration_ms": {
+          "type": "integer",
+          "description": "Maximum execution time in milliseconds"
+        },
+        "cost_budget_usd": {
+          "type": "number",
+          "description": "Maximum cost in USD per task"
+        }
+      }
+    },
+    "transport": {
+      "type": "string",
+      "description": "How the orchestrator communicates with this agent",
+      "enum": ["in-process", "http", "sse", "message-queue"]
+    },
+    "health_endpoint": {
+      "type": ["string", "null"],
+      "description": "Health check URL (null for in-process agents)"
+    },
+    "status": {
+      "type": "string",
+      "description": "Current agent status",
+      "enum": ["active", "inactive", "degraded", "maintenance"]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,357 @@
+# ============================================================================
+# Dynamic Interrupts — Secure-by-Design Guardrails
+# ============================================================================
+# Implements dynamic, context-aware interrupts that pause agent execution
+# when high-risk operations are detected. Treats agents like junior employees
+# with admin access — dangerous if unsupervised.
+#
+# Key principle: Don't just gate at the end. Interrupt IN-FLIGHT when an
+# agent attempts something dangerous. Enforce least privilege at runtime.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Overview
+# ---------------------------------------------------------------------------
+overview:
+  description: >
+    Dynamic Interrupts are runtime guardrails that monitor agent actions in
+    real-time and pause execution when a high-risk operation is detected.
+    Unlike static gates (which pause at predefined pipeline points), dynamic
+    interrupts can fire at ANY point during agent execution.
+
+    The system evaluates every MCP tool call, LLM output, and state mutation
+    against a set of interrupt rules. If a rule matches, execution pauses,
+    a human is notified, and the workflow resumes only after human approval.
+
+  design_principles:
+    - "Fail closed: if the interrupt system itself fails, block the action"
+    - "Least privilege: restrict agent access to the minimum needed"
+    - "Defense in depth: multiple independent checks per operation"
+    - "Auditability: every interrupt (triggered or suppressed) is logged"
+    - "Low false-positive rate: interrupts should be rare and meaningful"
+
+# ---------------------------------------------------------------------------
+# Interrupt Rules
+# ---------------------------------------------------------------------------
+rules:
+
+  # === Tier 1: CRITICAL — Always block, require explicit human approval ===
+
+  destructive_git_operations:
+    tier: "critical"
+    description: "Block destructive git operations that could lose work"
+    trigger:
+      tool_server: "git"
+      tool_names: ["git_push"]
+      conditions:
+        - "target_branch matches 'main' OR 'master' OR 'production' OR 'release/*'"
+        - "force_push is true"
+        - "git_reset with --hard flag"
+    action: "pause_and_notify"
+    notification:
+      channel: "sse + slack"
+      urgency: "critical"
+      message: >
+        CRITICAL INTERRUPT: Agent '{agent_name}' is attempting {tool_name}
+        to branch '{target_branch}'. This is a destructive operation that
+        requires explicit human approval.
+    timeout_ms: 3600000
+    on_timeout: "deny"
+
+  database_schema_mutations:
+    tier: "critical"
+    description: "Block DDL operations that modify database schema"
+    trigger:
+      tool_server: "postgres"
+      tool_names: ["run_query"]
+      conditions:
+        - "query contains 'DROP TABLE' OR 'DROP COLUMN' OR 'TRUNCATE'"
+        - "query contains 'ALTER TABLE' AND affects > 2 tables"
+        - "query contains 'DELETE FROM' without WHERE clause"
+    action: "pause_and_notify"
+    notification:
+      channel: "sse + slack"
+      urgency: "critical"
+      message: >
+        CRITICAL INTERRUPT: Agent '{agent_name}' is attempting a destructive
+        database operation: {query_summary}. Review and approve before proceeding.
+    timeout_ms: 3600000
+    on_timeout: "deny"
+
+  secret_exposure:
+    tier: "critical"
+    description: "Block any action that would expose secrets or credentials"
+    trigger:
+      tool_server: "any"
+      tool_names: ["write_file", "git_commit", "create_pull_request"]
+      conditions:
+        - "output contains pattern matching: API_KEY|SECRET|PASSWORD|TOKEN|PRIVATE_KEY"
+        - "output contains pattern matching: -----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"
+        - "file path matches: **/.env* OR **/secrets/** OR **/*credentials*"
+    action: "block"
+    notification:
+      channel: "sse + slack"
+      urgency: "critical"
+      message: >
+        BLOCKED: Agent '{agent_name}' attempted to expose secrets via {tool_name}.
+        Content has been scrubbed. Review the agent's output for potential leaks.
+    auto_remediation:
+      action: "scrub_secrets_from_output"
+      description: "Automatically remove detected secrets from the output before any persistence"
+
+  # === Tier 2: HIGH — Block by default, auto-approve for known-safe patterns ===
+
+  file_writes_outside_scope:
+    tier: "high"
+    description: "Block file writes outside the agent's allowed paths"
+    trigger:
+      tool_server: "filesystem"
+      tool_names: ["write_file", "move_file", "create_directory"]
+      conditions:
+        - "file_path is NOT within agent's allowed_paths (from mcp/permissions.yaml)"
+        - "file_path matches: .github/workflows/** OR Dockerfile* OR docker-compose*"
+    action: "pause_and_notify"
+    notification:
+      channel: "sse"
+      urgency: "high"
+      message: >
+        HIGH INTERRUPT: Agent '{agent_name}' is attempting to write to
+        '{file_path}' which is outside its authorized scope. Approve or deny.
+    timeout_ms: 1800000
+    on_timeout: "deny"
+
+  large_code_changes:
+    tier: "high"
+    description: "Interrupt when code changes exceed size thresholds"
+    trigger:
+      tool_server: "git"
+      tool_names: ["git_commit"]
+      conditions:
+        - "files_changed > 20"
+        - "lines_added > 1000"
+        - "lines_deleted > 500"
+    action: "pause_and_notify"
+    notification:
+      channel: "sse"
+      urgency: "high"
+      message: >
+        HIGH INTERRUPT: Agent '{agent_name}' is committing a large change
+        ({files_changed} files, +{lines_added}/-{lines_deleted} lines).
+        Large changes increase review risk. Approve to proceed.
+    timeout_ms: 1800000
+    on_timeout: "deny"
+
+  dependency_introduction:
+    tier: "high"
+    description: "Interrupt when new dependencies are added"
+    trigger:
+      tool_server: "filesystem"
+      tool_names: ["write_file"]
+      conditions:
+        - "file_path matches: **/pom.xml OR **/package.json OR **/build.gradle"
+        - "content diff introduces new dependency NOT in approved_dependencies list"
+    action: "pause_and_notify"
+    notification:
+      channel: "sse"
+      urgency: "high"
+      message: >
+        HIGH INTERRUPT: Agent '{agent_name}' is introducing new dependency
+        '{dependency_name}'. New dependencies require approval for license
+        compliance and supply chain security.
+    timeout_ms: 1800000
+    on_timeout: "deny"
+
+  # === Tier 3: MEDIUM — Log and notify, auto-approve after delay ===
+
+  pr_creation:
+    tier: "medium"
+    description: "Notify when a PR is about to be created"
+    trigger:
+      tool_server: "github"
+      tool_names: ["create_pull_request"]
+      conditions:
+        - "always"
+    action: "notify_and_delay"
+    delay_ms: 5000
+    notification:
+      channel: "sse"
+      urgency: "medium"
+      message: >
+        NOTICE: Agent '{agent_name}' is creating PR: '{pr_title}'.
+        Auto-approving in 5 seconds. Cancel to review first.
+    on_cancel: "pause_and_notify"
+
+  external_api_calls:
+    tier: "medium"
+    description: "Log calls to external APIs for audit trail"
+    trigger:
+      tool_server: "any"
+      conditions:
+        - "tool call targets an external URL (not localhost or internal)"
+    action: "log_and_proceed"
+    notification:
+      channel: "trace_log"
+      urgency: "medium"
+      message: "Agent '{agent_name}' called external API: {url}"
+
+  # === Tier 4: LOW — Log only ===
+
+  high_token_usage:
+    tier: "low"
+    description: "Log when an agent's token usage exceeds budget threshold"
+    trigger:
+      conditions:
+        - "agent_tokens_used > (agent_constraint.max_tokens * 0.8)"
+    action: "log_and_warn"
+    notification:
+      channel: "trace_log"
+      urgency: "low"
+      message: >
+        WARNING: Agent '{agent_name}' has used {tokens_used}/{max_tokens}
+        tokens (80% of budget). Consider optimizing prompts.
+
+  long_running_step:
+    tier: "low"
+    description: "Log when an agent step exceeds expected duration"
+    trigger:
+      conditions:
+        - "step_duration_ms > (agent_constraint.max_duration_ms * 0.8)"
+    action: "log_and_warn"
+    notification:
+      channel: "trace_log"
+      urgency: "low"
+      message: >
+        WARNING: Agent '{agent_name}' step has been running for
+        {duration_ms}ms (80% of {max_duration_ms}ms budget).
+
+# ---------------------------------------------------------------------------
+# MCP Least Privilege Enforcement (Roots)
+# ---------------------------------------------------------------------------
+mcp_roots:
+  description: >
+    Uses the MCP 'Roots' feature to restrict each agent's filesystem access
+    to ONLY the specific project directory. Prevents agents from reading the
+    entire filesystem, accessing environment variables, or exfiltrating data.
+
+  enforcement:
+    developer:
+      roots:
+        - "${WORKSPACE_ROOT}/ai-orchestrator/src"
+        - "${WORKSPACE_ROOT}/frontend/src"
+        - "${WORKSPACE_ROOT}/docs"
+        - "${WORKSPACE_ROOT}/infra"
+        - "${WORKSPACE_ROOT}/ai"
+      denied:
+        - "${HOME}/.ssh"
+        - "${HOME}/.aws"
+        - "${HOME}/.config"
+        - "/etc/passwd"
+        - "/etc/shadow"
+        - "**/.env*"
+        - "**/secrets/**"
+
+    tester:
+      roots:
+        - "${WORKSPACE_ROOT}/ai-orchestrator/src"
+        - "${WORKSPACE_ROOT}/frontend/src"
+      denied:
+        - "${WORKSPACE_ROOT}/.git/config"
+        - "**/.env*"
+        - "**/secrets/**"
+
+    writer:
+      roots:
+        - "${WORKSPACE_ROOT}/docs"
+        - "${WORKSPACE_ROOT}/README.md"
+        - "${WORKSPACE_ROOT}/AGENTS.md"
+      denied:
+        - "${WORKSPACE_ROOT}/ai-orchestrator/src/main/java"
+        - "**/.env*"
+
+    review:
+      roots:
+        - "${WORKSPACE_ROOT}"
+      denied:
+        - "**/.env*"
+        - "**/secrets/**"
+        - "${HOME}/**"
+
+# ---------------------------------------------------------------------------
+# Conflict Resolution via Judge
+# ---------------------------------------------------------------------------
+conflict_resolution:
+  description: >
+    When agents disagree (e.g., Security Agent flags a vulnerability but
+    Performance Agent says the fix would cause unacceptable latency), the
+    Dynamic Interrupt system routes the conflict to the Judge agent for
+    arbitration instead of letting agents loop endlessly.
+
+  triggers:
+    - "Two or more review personas produce contradictory findings with severity >= high"
+    - "Developer's fix for a review finding introduces a new finding from a different persona"
+    - "Tester and Review disagree on whether a change is safe"
+
+  resolution_protocol:
+    - step: "detect"
+      description: "Identify contradictory findings across persona reviews"
+    - step: "package"
+      description: "Bundle conflicting positions with evidence into a conflict_resolution request"
+    - step: "arbitrate"
+      description: "Route to Judge agent for confidence-weighted synthesis"
+    - step: "decide"
+      description: "Judge produces a binding verdict with rationale"
+    - step: "record"
+      description: "Persist resolution to blackboard as conflict_resolution artifact"
+
+  escalation_to_human:
+    conditions:
+      - "Judge confidence < 0.6"
+      - "Conflict involves security vs. functionality trade-off"
+      - "Conflict has persisted across 2+ loop iterations"
+    action: "Pause workflow, present both positions to human with Judge's recommendation"
+
+# ---------------------------------------------------------------------------
+# Interrupt Processing Pipeline
+# ---------------------------------------------------------------------------
+processing:
+  description: >
+    Every MCP tool call passes through the interrupt processing pipeline
+    before execution. The pipeline evaluates rules in tier order (critical
+    first) and applies the first matching rule.
+
+  pipeline:
+    - stage: "pre_check"
+      description: "Validate agent identity and MCP permissions"
+    - stage: "rule_evaluation"
+      description: "Evaluate interrupt rules against the pending action"
+      order: "critical → high → medium → low"
+      short_circuit: true
+    - stage: "action_execution"
+      description: "Execute the interrupt action (block, pause, log, proceed)"
+    - stage: "audit_logging"
+      description: "Log the evaluation result regardless of outcome"
+    - stage: "metric_recording"
+      description: "Increment relevant Micrometer counters"
+
+  performance:
+    target_latency_ms: 5
+    description: >
+      The interrupt pipeline must add < 5ms to tool call latency.
+      Rules are pre-compiled at startup and evaluated via a decision tree,
+      not sequential scanning.
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+metrics:
+  counters:
+    - "orchestrator.interrupt.triggered.total (tags: tier, rule_name, agent_name)"
+    - "orchestrator.interrupt.approved.total (tags: tier, rule_name)"
+    - "orchestrator.interrupt.denied.total (tags: tier, rule_name)"
+    - "orchestrator.interrupt.auto_approved.total (tags: tier, rule_name)"
+    - "orchestrator.interrupt.timeout.total (tags: tier, rule_name)"
+  timers:
+    - "orchestrator.interrupt.evaluation.duration (pipeline latency)"
+    - "orchestrator.interrupt.human_response.duration (time to human decision)"

@@ -1,0 +1,396 @@
+# ============================================================================
+# A2A Agent Registry — Atlasia AI Pipeline
+# ============================================================================
+# Central registry of all agents and their Agent Cards. The Orchestrator
+# queries this registry for capability-based agent discovery and selection.
+#
+# Each entry is an Agent Card conforming to ai/schemas/agent_card.schema.json.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Registry Configuration
+# ---------------------------------------------------------------------------
+registry:
+  storage: "in-memory + database persistence (ai_agent_registry table)"
+  refresh_interval_seconds: 60
+  health_check_interval_seconds: 30
+  deregister_after_failures: 3
+
+# ---------------------------------------------------------------------------
+# Registered Agents
+# ---------------------------------------------------------------------------
+agents:
+
+  # --- Product Manager Agent ---
+  pm-v1:
+    name: "pm-v1"
+    version: "1.0.0"
+    role: "Product Manager"
+    vendor: "atlasia"
+    description: "Analyzes GitHub issues and produces structured ticket plans with acceptance criteria."
+    capabilities:
+      - "requirement_analysis"
+      - "user_story_generation"
+      - "acceptance_criteria"
+      - "risk_identification"
+    input_schema:
+      type: "object"
+      properties:
+        github_issue: { type: "object", description: "GitHub issue payload" }
+        domain_glossary: { type: "string", description: "Domain glossary markdown" }
+    output_schema:
+      ref: "ai/schemas/ticket_plan.schema.json"
+    output_artifact_key: "ticket_plan"
+    mcp_servers: ["github", "docs"]
+    constraints:
+      max_tokens: 12000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.10
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Qualifier Agent ---
+  qualifier-v1:
+    name: "qualifier-v1"
+    version: "1.0.0"
+    role: "Qualifier"
+    vendor: "atlasia"
+    description: "Refines requirements into actionable work plans with task breakdown and feasibility analysis."
+    capabilities:
+      - "requirement_refinement"
+      - "feasibility_analysis"
+      - "task_decomposition"
+      - "scope_validation"
+    input_schema:
+      type: "object"
+      properties:
+        ticket_plan: { ref: "ai/schemas/ticket_plan.schema.json" }
+    output_schema:
+      ref: "ai/schemas/work_plan.schema.json"
+    output_artifact_key: "work_plan"
+    mcp_servers: ["github", "filesystem", "docs"]
+    constraints:
+      max_tokens: 23000
+      max_duration_ms: 180000
+      cost_budget_usd: 0.15
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Architect Agent ---
+  architect-v1:
+    name: "architect-v1"
+    version: "1.0.0"
+    role: "Architect"
+    vendor: "atlasia"
+    description: "Produces architecture notes, validates designs against ADRs, and reviews DB schemas."
+    capabilities:
+      - "architecture_design"
+      - "schema_validation"
+      - "dependency_analysis"
+      - "adr_compliance"
+    input_schema:
+      type: "object"
+      properties:
+        work_plan: { ref: "ai/schemas/work_plan.schema.json" }
+    output_schema:
+      type: "string"
+      description: "Architecture notes in Markdown format"
+    output_artifact_key: "architecture_notes"
+    mcp_servers: ["filesystem", "vector_store", "postgres", "docs"]
+    constraints:
+      max_tokens: 32000
+      max_duration_ms: 240000
+      cost_budget_usd: 0.25
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Developer Agent ---
+  developer-v1:
+    name: "developer-v1"
+    version: "1.0.0"
+    role: "Developer"
+    vendor: "atlasia"
+    description: "Implements features TDD-first, creates PRs, and applies security verification."
+    capabilities:
+      - "code_generation"
+      - "tdd_implementation"
+      - "git_operations"
+      - "pr_creation"
+      - "security_verification"
+    input_schema:
+      type: "object"
+      properties:
+        work_plan: { ref: "ai/schemas/work_plan.schema.json" }
+        architecture_notes: { type: "string" }
+        review_findings: { type: "array", description: "Optional loop-back findings" }
+    output_schema:
+      type: "object"
+      properties:
+        pr_url: { type: "string" }
+        implementation_report: { type: "string" }
+    output_artifact_key: "implementation_report"
+    mcp_servers: ["filesystem", "git", "postgres", "github"]
+    constraints:
+      max_tokens: 55000
+      max_duration_ms: 300000
+      cost_budget_usd: 0.50
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Review Supervisor Agent ---
+  review-v1:
+    name: "review-v1"
+    version: "1.0.0"
+    role: "Review Supervisor"
+    vendor: "atlasia"
+    description: "Coordinates multi-persona code review with conflict resolution and verdict synthesis."
+    capabilities:
+      - "code_review"
+      - "multi_perspective_review"
+      - "conflict_resolution"
+      - "verdict_synthesis"
+    input_schema:
+      type: "object"
+      properties:
+        pr_url: { type: "string" }
+        implementation_report: { type: "string" }
+    output_schema:
+      ref: "ai/schemas/persona_review.schema.json"
+    output_artifact_key: "persona_review"
+    mcp_servers: ["github", "filesystem", "git"]
+    delegates:
+      - "security-engineer-v1"
+      - "code-quality-engineer-v1"
+      - "sre-engineer-v1"
+      - "frontend-ux-engineer-v1"
+    constraints:
+      max_tokens: 40000
+      max_duration_ms: 300000
+      cost_budget_usd: 0.40
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Review Personas ---
+  security-engineer-v1:
+    name: "security-engineer-v1"
+    version: "1.0.0"
+    role: "Security Engineer"
+    vendor: "atlasia"
+    description: "OWASP/STRIDE threat modeling, dependency scanning, secret detection."
+    capabilities:
+      - "security_analysis"
+      - "owasp_review"
+      - "dependency_scanning"
+      - "secret_detection"
+      - "threat_modeling"
+    input_schema:
+      type: "object"
+      properties:
+        pr_diff: { type: "string" }
+        review_checklist: { type: "array" }
+    output_schema:
+      type: "object"
+      properties:
+        findings: { type: "array" }
+        verdict: { type: "string" }
+    output_artifact_key: "security_review"
+    mcp_servers: ["github", "filesystem"]
+    constraints:
+      max_tokens: 15000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.10
+    transport: "in-process"
+    parent: "review-v1"
+    status: "active"
+
+  code-quality-engineer-v1:
+    name: "code-quality-engineer-v1"
+    version: "1.0.0"
+    role: "Code Quality Engineer"
+    vendor: "atlasia"
+    description: "Architecture compliance, performance analysis, test coverage verification."
+    capabilities:
+      - "code_quality_review"
+      - "architecture_compliance"
+      - "performance_analysis"
+      - "test_coverage_review"
+    input_schema:
+      type: "object"
+      properties:
+        pr_diff: { type: "string" }
+        review_checklist: { type: "array" }
+    output_schema:
+      type: "object"
+      properties:
+        findings: { type: "array" }
+        verdict: { type: "string" }
+    output_artifact_key: "quality_review"
+    mcp_servers: ["github", "filesystem"]
+    constraints:
+      max_tokens: 15000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.10
+    transport: "in-process"
+    parent: "review-v1"
+    status: "active"
+
+  sre-engineer-v1:
+    name: "sre-engineer-v1"
+    version: "1.0.0"
+    role: "SRE Engineer"
+    vendor: "atlasia"
+    description: "Container security, k8s/Docker configs, database schemas, observability review."
+    capabilities:
+      - "infrastructure_review"
+      - "container_security"
+      - "database_review"
+      - "observability_review"
+    input_schema:
+      type: "object"
+      properties:
+        pr_diff: { type: "string" }
+        review_checklist: { type: "array" }
+    output_schema:
+      type: "object"
+      properties:
+        findings: { type: "array" }
+        verdict: { type: "string" }
+    output_artifact_key: "infra_review"
+    mcp_servers: ["github", "filesystem", "postgres"]
+    constraints:
+      max_tokens: 15000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.10
+    transport: "in-process"
+    parent: "review-v1"
+    status: "active"
+
+  frontend-ux-engineer-v1:
+    name: "frontend-ux-engineer-v1"
+    version: "1.0.0"
+    role: "Frontend UX Engineer"
+    vendor: "atlasia"
+    description: "Angular component review, accessibility, performance, UX standards."
+    capabilities:
+      - "frontend_review"
+      - "accessibility_review"
+      - "ux_standards"
+      - "component_design_review"
+    input_schema:
+      type: "object"
+      properties:
+        pr_diff: { type: "string" }
+        review_checklist: { type: "array" }
+    output_schema:
+      type: "object"
+      properties:
+        findings: { type: "array" }
+        verdict: { type: "string" }
+    output_artifact_key: "frontend_review"
+    mcp_servers: ["github", "filesystem", "browser"]
+    constraints:
+      max_tokens: 15000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.10
+    transport: "in-process"
+    parent: "review-v1"
+    status: "active"
+
+  # --- Tester Agent ---
+  tester-v1:
+    name: "tester-v1"
+    version: "1.0.0"
+    role: "Tester"
+    vendor: "atlasia"
+    description: "CI execution, E2E testing, fix loop management, and test report generation."
+    capabilities:
+      - "test_execution"
+      - "ci_management"
+      - "e2e_testing"
+      - "test_report_generation"
+      - "autonomous_fix"
+    input_schema:
+      type: "object"
+      properties:
+        pr_url: { type: "string" }
+        persona_review: { ref: "ai/schemas/persona_review.schema.json" }
+    output_schema:
+      ref: "ai/schemas/test_report.schema.json"
+    output_artifact_key: "test_report"
+    mcp_servers: ["filesystem", "browser", "logs", "ci", "git"]
+    constraints:
+      max_tokens: 30000
+      max_duration_ms: 300000
+      cost_budget_usd: 0.30
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Writer Agent ---
+  writer-v1:
+    name: "writer-v1"
+    version: "1.0.0"
+    role: "Writer"
+    vendor: "atlasia"
+    description: "Documentation generation and updates for completed features."
+    capabilities:
+      - "documentation"
+      - "changelog_generation"
+      - "api_docs"
+      - "readme_updates"
+    input_schema:
+      type: "object"
+      properties:
+        pr_url: { type: "string" }
+        implementation_report: { type: "string" }
+        test_report: { ref: "ai/schemas/test_report.schema.json" }
+    output_schema:
+      type: "string"
+      description: "Documentation patch content"
+    output_artifact_key: "docs_patch"
+    mcp_servers: ["filesystem", "github", "git", "docs"]
+    constraints:
+      max_tokens: 23000
+      max_duration_ms: 180000
+      cost_budget_usd: 0.15
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"
+
+  # --- Judge Agent (NEW — LLM-as-a-Judge) ---
+  judge-v1:
+    name: "judge-v1"
+    version: "1.0.0"
+    role: "Judge"
+    vendor: "atlasia"
+    description: "Independent quality arbiter with veto power. Evaluates artifacts against rubrics using LLM-as-a-Judge pattern."
+    capabilities:
+      - "quality_arbitration"
+      - "rubric_evaluation"
+      - "majority_voting"
+      - "conflict_arbitration"
+      - "regression_detection"
+    input_schema:
+      type: "object"
+      properties:
+        artifact: { type: "string", description: "The artifact to judge" }
+        rubric: { type: "object", description: "Evaluation rubric" }
+        prior_verdicts: { type: "array", description: "Other agents' verdicts for majority voting" }
+    output_schema:
+      ref: "ai/schemas/judge_verdict.schema.json"
+    output_artifact_key: "judge_verdict"
+    mcp_servers: ["filesystem", "github"]
+    constraints:
+      max_tokens: 20000
+      max_duration_ms: 120000
+      cost_budget_usd: 0.15
+    transport: "in-process"
+    health_endpoint: null
+    status: "active"

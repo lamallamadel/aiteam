@@ -1,0 +1,211 @@
+# ============================================================================
+# Majority Voting Protocol — Atlasia AI Pipeline
+# ============================================================================
+# Implements the Majority Voting pattern for critical quality decisions.
+# Instead of relying on a single agent's judgment, run N independent
+# evaluations and select the consensus answer.
+#
+# Research finding: Majority Voting often outperforms complex "Debate"
+# architectures for factual accuracy and is cheaper/faster.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Overview
+# ---------------------------------------------------------------------------
+overview:
+  description: >
+    Majority Voting runs multiple independent evaluations of the same
+    artifact and selects the consensus verdict. This reduces the impact
+    of any single LLM's hallucination or bias and produces more reliable
+    quality decisions.
+
+    Use Majority Voting for high-stakes decisions where the cost of a
+    wrong verdict exceeds the cost of running multiple evaluations.
+
+  when_to_use:
+    - "Pre-merge quality gate (the final decision before code ships)"
+    - "Security verdicts (false negatives are very expensive)"
+    - "Conflict arbitration (when agents disagree)"
+    - "Regression detection (when historical trends are ambiguous)"
+
+  when_NOT_to_use:
+    - "Low-stakes intermediate steps (e.g., PM → Qualifier handoff)"
+    - "When cost budget is tight (voting multiplies LLM costs by N)"
+    - "When speed is critical (voting adds latency)"
+
+# ---------------------------------------------------------------------------
+# Voting Configuration
+# ---------------------------------------------------------------------------
+voting:
+  # Number of independent evaluations to run
+  voter_count: 3
+  description: >
+    Run 3 independent evaluations in parallel. Each voter receives the same
+    artifact and rubric but uses a different prompt variation (temperature,
+    instruction phrasing) to ensure diversity of evaluation.
+
+  # How to select the final verdict
+  aggregation:
+    method: "weighted_majority"
+    description: >
+      Each voter produces a verdict (pass/conditional_pass/veto) with a
+      confidence score. The final verdict is the one with the highest
+      total confidence-weighted votes.
+    formula: >
+      For each verdict V in {pass, conditional_pass, veto}:
+        weight(V) = sum(confidence_i for voter_i where verdict_i == V)
+      final_verdict = argmax(weight(V))
+    tie_breaking: >
+      If two verdicts have equal weight, prefer the more conservative one:
+      veto > conditional_pass > pass. Safety takes precedence.
+
+  # Voter diversity strategy
+  diversity:
+    description: >
+      Voters must be independent to avoid correlated errors. We achieve
+      diversity through prompt variation, not model variation (all voters
+      use the same model to control for capability differences).
+    strategies:
+      - name: "temperature_variation"
+        description: "Each voter uses a different temperature (0.2, 0.5, 0.8)"
+        temperatures: [0.2, 0.5, 0.8]
+      - name: "instruction_variation"
+        description: "Each voter receives a slightly different evaluation prompt"
+        variations:
+          - "Evaluate strictly — assume the worst interpretation of ambiguous code"
+          - "Evaluate fairly — give the benefit of the doubt on edge cases"
+          - "Evaluate pragmatically — focus on production readiness over perfection"
+      - name: "rubric_emphasis"
+        description: "Each voter emphasizes a different rubric dimension"
+        emphasis:
+          - "Focus on correctness and security"
+          - "Focus on maintainability and test coverage"
+          - "Focus on performance and scalability"
+
+  # Voter isolation
+  isolation:
+    description: >
+      Voters MUST NOT see each other's evaluations. Each voter operates
+      independently in an isolated context. Their verdicts are collected
+      by the Orchestrator and aggregated only after all voters complete.
+    rules:
+      - "Each voter runs in its own LLM session"
+      - "Voters do not share context or intermediate results"
+      - "Aggregation happens only after all voters complete"
+      - "If a voter fails, the remaining voters' results are still valid (quorum: 2/3)"
+
+# ---------------------------------------------------------------------------
+# Checkpoints Where Voting is Applied
+# ---------------------------------------------------------------------------
+checkpoints:
+
+  pre_merge_gate:
+    description: "Final quality gate before code is merged"
+    trigger: "After Tester passes, before Writer step"
+    voter_count: 3
+    rubric: "code_quality"
+    artifact: "implementation_report + test_report + persona_review"
+    veto_threshold: "Any voter vetoes AND aggregated score < 0.50"
+    on_veto: "Escalate to human with all 3 voter reports"
+    on_pass: "Proceed to Writer"
+    cost_budget_usd: 0.45
+
+  security_verdict:
+    description: "Independent security assessment for high-risk changes"
+    trigger: "When security-engineer persona flags critical/high findings"
+    voter_count: 3
+    rubric: "code_quality (security criterion only, weight=1.0)"
+    artifact: "PR diff + security-engineer findings"
+    veto_threshold: "2/3 voters agree on critical vulnerability"
+    on_veto: "Block merge, escalate to human + security team"
+    on_pass: "Accept security-engineer's finding resolution"
+    cost_budget_usd: 0.30
+
+  conflict_arbitration:
+    description: "Resolve conflicts between review personas"
+    trigger: "When conflict_resolution is needed (contradictory findings)"
+    voter_count: 3
+    rubric: "Custom rubric based on conflicting positions"
+    artifact: "Both positions + evidence"
+    aggregation: "confidence_weighted_synthesis"
+    description_of_synthesis: >
+      Instead of simple majority voting, each voter produces a recommended
+      resolution with confidence scores per position. The final resolution
+      weights each position by aggregated confidence.
+    on_low_confidence: "Escalate to human if all voters have confidence < 0.6"
+    cost_budget_usd: 0.30
+
+# ---------------------------------------------------------------------------
+# Voting Results Schema
+# ---------------------------------------------------------------------------
+results:
+  schema: "ai/schemas/judge_verdict.schema.json"
+  additional_fields:
+    voting_metadata:
+      voter_count: "Number of voters that participated"
+      quorum_met: "Whether minimum voter count was reached"
+      individual_verdicts:
+        description: "Array of each voter's verdict for transparency"
+        fields: [voter_id, verdict, confidence, score, temperature, emphasis]
+      aggregated_verdict: "Final verdict after aggregation"
+      aggregated_confidence: "Confidence of the aggregated verdict"
+      agreement_rate: "Percentage of voters that agreed with the final verdict"
+      dissenting_opinions:
+        description: "Voters that disagreed with the majority, with rationale"
+        fields: [voter_id, verdict, rationale]
+
+# ---------------------------------------------------------------------------
+# Performance & Cost
+# ---------------------------------------------------------------------------
+performance:
+  parallelism: "All voters run in parallel to minimize latency overhead"
+  expected_latency: "Max single-voter latency + 500ms aggregation"
+  cost_multiplier: "3x the cost of a single evaluation"
+  optimization: >
+    For non-critical checkpoints, use a single Judge evaluation instead of
+    voting. Reserve voting for high-stakes decisions where the cost of a
+    wrong verdict justifies the 3x cost.
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+metrics:
+  counters:
+    - "orchestrator.voting.executions.total (tags: checkpoint)"
+    - "orchestrator.voting.unanimous.total (tags: checkpoint, verdict)"
+    - "orchestrator.voting.split.total (tags: checkpoint)"
+    - "orchestrator.voting.quorum_failures.total (tags: checkpoint)"
+  gauges:
+    - "orchestrator.voting.agreement_rate (tags: checkpoint)"
+    - "orchestrator.voting.avg_confidence (tags: checkpoint)"
+  timers:
+    - "orchestrator.voting.duration (tags: checkpoint)"
+
+# ---------------------------------------------------------------------------
+# Pass@1 Benchmark Tracking
+# ---------------------------------------------------------------------------
+pass_at_1:
+  description: >
+    Track Pass@1 on internal benchmarks to measure whether agents are
+    actually improving or generating "slop" (technical debt). Pass@1 is
+    the percentage of tasks that pass the Judge's quality gate on the
+    FIRST attempt (no loop-backs needed).
+
+  metric: "orchestrator.pass_at_1 (gauge, 7-day rolling)"
+  formula: >
+    pass_at_1 = (workflows_with_zero_loop_backs / total_completed_workflows)
+
+  thresholds:
+    excellent: ">= 0.80 — 80%+ of tasks pass on first attempt"
+    good: ">= 0.60 — Acceptable but room for improvement"
+    concerning: ">= 0.40 — Agents need prompt/rubric tuning"
+    failing: "< 0.40 — Significant quality issues, investigate immediately"
+
+  trend_alerting:
+    window: "7-day rolling average"
+    alert_on_decline: 0.10
+    description: >
+      Alert if Pass@1 drops by more than 10 percentage points over
+      7 days. This indicates a regression in agent output quality.

@@ -1,0 +1,266 @@
+# ============================================================================
+# Blackboard Architecture — Atlasia AI Pipeline
+# ============================================================================
+# The Blackboard is the shared memory substrate for the multi-agent pipeline.
+# Agents post findings and read updates asynchronously through the blackboard
+# instead of speaking directly, reducing noise and token costs.
+#
+# Implements both the Blackboard Pattern (shared data store) and the Magentic
+# Task Ledger / Progress Ledger pattern for persistent execution planning.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Architecture Overview
+# ---------------------------------------------------------------------------
+overview:
+  description: >
+    The Blackboard is a versioned, access-controlled shared memory store where
+    agents post structured artifacts and read updates from other agents. The
+    Orchestrator manages access control, schema validation, and versioning.
+
+    Agents NEVER communicate directly. All inter-agent state flows through
+    the Blackboard. This eliminates context pollution, enables async workflows,
+    and makes the entire pipeline auditable.
+
+  principles:
+    - "Agents write artifacts; they do not send messages to other agents."
+    - "Every write is schema-validated before commitment."
+    - "Every entry is versioned — updates create new versions, never overwrite."
+    - "Access is scoped — agents can only read entries they are authorized to consume."
+    - "The Orchestrator is the sole writer of coordination entries (task_ledger, progress_ledger)."
+
+# ---------------------------------------------------------------------------
+# Storage Backend
+# ---------------------------------------------------------------------------
+storage:
+  primary:
+    type: "postgresql"
+    table: "ai_run_artifact"
+    description: >
+      Artifacts are stored as JSONB in the ai_run_artifact table, keyed by
+      (run_id, agent_name, artifact_type). Each write creates a new row,
+      providing full version history.
+
+  cache:
+    type: "redis"
+    purpose: "Hot cache for active workflow blackboard state"
+    key_pattern: "blackboard:{run_id}:{artifact_key}"
+    ttl_seconds: 3600
+    description: >
+      Redis provides low-latency reads for agents during active workflow
+      execution. Cache is populated on write and invalidated on workflow
+      completion.
+
+  vector_index:
+    type: "vector_store"
+    purpose: "Semantic search over historical blackboard entries"
+    collection: "blackboard_history"
+    description: >
+      Completed workflow artifacts are indexed in the vector store for
+      semantic retrieval. This enables agents to find relevant prior
+      decisions, patterns, and solutions across historical runs.
+
+# ---------------------------------------------------------------------------
+# Blackboard Entries
+# ---------------------------------------------------------------------------
+entries:
+
+  # === Coordination Entries (Orchestrator-owned) ===
+
+  task_ledger:
+    description: >
+      The master execution plan. Lists every intended step, gate, artifact,
+      and loop budget. Updated at every state transition. The "shared brain"
+      of the team.
+    producer: orchestrator
+    consumers: [pm, qualifier, architect, developer, review, tester, writer, judge]
+    schema: "ai/schemas/task_ledger.schema.json"
+    access: "read-only for all agents; write by orchestrator only"
+    versioned: true
+
+  progress_ledger:
+    description: >
+      Real-time progress tracker. Records what has been accomplished, what
+      is in progress, and what remains. Enables agents to resume after
+      interrupts without losing the "big picture."
+    producer: orchestrator
+    consumers: [pm, qualifier, architect, developer, review, tester, writer, judge]
+    schema: "ai/schemas/progress_ledger.schema.json"
+    access: "read-only for all agents; write by orchestrator only"
+    versioned: true
+    structure:
+      goals:
+        description: "High-level goals derived from the ticket plan"
+        fields: [goal_id, description, status, assigned_agent, dependencies]
+      subgoals:
+        description: "Decomposed sub-tasks for each goal"
+        fields: [subgoal_id, parent_goal_id, description, status, agent, artifact_key]
+      completed:
+        description: "Completed goals/subgoals with timestamps and outcomes"
+        fields: [id, completed_at, duration_ms, tokens_used, outcome]
+      blockers:
+        description: "Active blockers preventing progress"
+        fields: [blocker_id, description, blocking_goal, severity, resolution_options]
+      timeline:
+        description: "Chronological log of all progress events"
+        fields: [timestamp, event_type, agent, description, artifact_ref]
+
+  # === Agent-Produced Entries ===
+
+  ticket_plan:
+    description: "Structured requirements from PM analysis"
+    producer: pm
+    consumers: [qualifier]
+    schema: "ai/schemas/ticket_plan.schema.json"
+    versioned: true
+
+  work_plan:
+    description: "Refined, actionable work plan with task breakdown"
+    producer: qualifier
+    consumers: [architect, developer]
+    schema: "ai/schemas/work_plan.schema.json"
+    versioned: true
+
+  architecture_notes:
+    description: "Design decisions, schema changes, dependency analysis"
+    producer: architect
+    consumers: [developer]
+    schema: null
+    versioned: true
+
+  implementation_report:
+    description: "Developer's implementation summary and code change manifest"
+    producer: developer
+    consumers: [review, writer]
+    schema: null
+    versioned: true
+
+  pr_url:
+    description: "GitHub Pull Request URL for the implementation"
+    producer: developer
+    consumers: [review, tester, writer]
+    schema: null
+    versioned: false
+
+  persona_review:
+    description: "Consolidated multi-persona review with findings and verdict"
+    producer: review
+    consumers: [tester, developer, judge]
+    schema: "ai/schemas/persona_review.schema.json"
+    versioned: true
+
+  conflict_resolution:
+    description: "Record of how reviewer conflicts were resolved"
+    producer: review
+    consumers: [orchestrator, judge]
+    schema: "ai/schemas/conflict_resolution.schema.json"
+    versioned: true
+
+  test_report:
+    description: "CI/E2E test results with diagnostics"
+    producer: tester
+    consumers: [writer, developer, judge]
+    schema: "ai/schemas/test_report.schema.json"
+    versioned: true
+
+  judge_verdict:
+    description: "Independent quality verdict from the Judge agent"
+    producer: judge
+    consumers: [orchestrator, review]
+    schema: "ai/schemas/judge_verdict.schema.json"
+    versioned: true
+
+  escalation:
+    description: "Escalation request when autonomous resolution fails"
+    producer: any
+    consumers: [orchestrator]
+    schema: "ai/schemas/escalation.schema.json"
+    versioned: false
+
+  quality_report:
+    description: "Per-run quality metrics summary"
+    producer: orchestrator
+    consumers: []
+    schema: "ai/schemas/quality_report.schema.json"
+    versioned: false
+
+  docs_patch:
+    description: "Documentation updates generated by the Writer"
+    producer: writer
+    consumers: []
+    schema: null
+    versioned: false
+
+# ---------------------------------------------------------------------------
+# Access Control
+# ---------------------------------------------------------------------------
+access_control:
+  description: >
+    Enforces strict read/write boundaries. An agent attempting to read an
+    entry not in its consumers list or write to an entry it does not produce
+    will receive an access denied error.
+
+  enforcement:
+    on_unauthorized_read: "Return error with message: 'Agent {name} is not authorized to read {entry_key}'"
+    on_unauthorized_write: "Return error with message: 'Agent {name} is not authorized to write {entry_key}'"
+    on_schema_violation: "Reject write, log violation, increment guardrail_violations_total metric"
+
+  audit:
+    log_all_reads: true
+    log_all_writes: true
+    log_format: >
+      BLACKBOARD {operation}: run_id={run_id}, agent={agent_name},
+      entry={entry_key}, version={version}, correlation_id={correlation_id}
+
+# ---------------------------------------------------------------------------
+# Versioning Protocol
+# ---------------------------------------------------------------------------
+versioning:
+  description: >
+    Versioned entries maintain full history. Each write creates a new version
+    rather than overwriting. Agents always read the latest version unless
+    explicitly requesting a prior version (for diff/comparison).
+
+  strategy: "append-only"
+  version_format: "monotonic integer (1, 2, 3, ...)"
+  retention: "All versions retained for the lifetime of the workflow run"
+  post_workflow_retention: "Latest version archived; history purged after 30 days"
+
+  read_semantics:
+    default: "latest version"
+    specific: "read(entry_key, version=N) returns version N"
+    diff: "diff(entry_key, v1, v2) returns structural diff between versions"
+
+# ---------------------------------------------------------------------------
+# Subscription / Notification
+# ---------------------------------------------------------------------------
+subscriptions:
+  description: >
+    Agents can subscribe to blackboard entry changes. When a subscribed
+    entry is updated, the agent receives a notification (useful for async
+    workflows and the Progress Ledger pattern).
+
+  mechanism: "WorkflowEventBus SSE + in-process callback"
+  events:
+    - "blackboard.entry.created: {run_id, entry_key, producer, version}"
+    - "blackboard.entry.updated: {run_id, entry_key, producer, version, previous_version}"
+    - "blackboard.entry.read: {run_id, entry_key, consumer}"
+
+# ---------------------------------------------------------------------------
+# Garbage Collection
+# ---------------------------------------------------------------------------
+garbage_collection:
+  description: "Cleanup policy for blackboard state after workflow completion"
+  on_workflow_complete:
+    - "Flush Redis cache for the run_id"
+    - "Archive latest version of all entries to cold storage"
+    - "Index key artifacts in vector store for future retrieval"
+  on_workflow_failed:
+    - "Retain all versions for post-mortem analysis"
+    - "Flag entries for manual review"
+  ttl_days:
+    active_run: null
+    completed_run: 90
+    failed_run: 180

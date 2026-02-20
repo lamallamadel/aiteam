@@ -43,6 +43,10 @@ public class WorkflowEngine {
     private final OrchestratorMetrics metrics;
     private final WorkflowEventBus eventBus;
     private final TraceEventService traceEventService;
+    private final BlackboardService blackboardService;
+    private final DynamicInterruptService interruptService;
+    private final JudgeService judgeService;
+    private final A2ADiscoveryService a2aDiscoveryService;
 
     @Autowired
     @Lazy
@@ -60,7 +64,11 @@ public class WorkflowEngine {
             WriterStep writerStep,
             OrchestratorMetrics metrics,
             WorkflowEventBus eventBus,
-            TraceEventService traceEventService) {
+            TraceEventService traceEventService,
+            BlackboardService blackboardService,
+            DynamicInterruptService interruptService,
+            JudgeService judgeService,
+            A2ADiscoveryService a2aDiscoveryService) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
         this.pmStep = pmStep;
@@ -73,6 +81,10 @@ public class WorkflowEngine {
         this.metrics = metrics;
         this.eventBus = eventBus;
         this.traceEventService = traceEventService;
+        this.blackboardService = blackboardService;
+        this.interruptService = interruptService;
+        this.judgeService = judgeService;
+        this.a2aDiscoveryService = a2aDiscoveryService;
     }
 
     @Async("workflowExecutor")
@@ -142,6 +154,7 @@ public class WorkflowEngine {
                 } else {
                     // Review rejected — loop back to developer
                     reviewDeveloperLoops++;
+                    metrics.recordReviewDeveloperLoopBack();
                     logTransition(runId, "REVIEW", "DEVELOPER", "loop_back",
                             "Review verdict: " + reviewVerdict + " (iteration " + reviewDeveloperLoops + "/"
                                     + MAX_REVIEW_DEVELOPER_LOOPS + ")");
@@ -177,6 +190,7 @@ public class WorkflowEngine {
                 } else {
                     // Tests failed — loop back to developer
                     testerDeveloperLoops++;
+                    metrics.recordTesterDeveloperLoopBack();
                     logTransition(runId, "TESTER", "DEVELOPER", "loop_back",
                             "CI status: " + ciStatus + " (iteration " + testerDeveloperLoops + "/"
                                     + MAX_TESTER_DEVELOPER_LOOPS + ")");
@@ -213,6 +227,23 @@ public class WorkflowEngine {
                 }
             }
 
+            // --- Pre-Merge Quality Gate: Judge (LLM-as-a-Judge) ---
+            log.info("Pre-merge Judge evaluation: runId={}, correlationId={}",
+                    runId, CorrelationIdHolder.getCorrelationId());
+            JudgeService.JudgeVerdict preMergeVerdict = judgeService.evaluate(
+                    runEntity, "pre_merge", "persona_review_report");
+            metrics.recordJudgeEvaluation(preMergeVerdict.verdict());
+
+            if (preMergeVerdict.isVeto()) {
+                log.warn("Judge VETO at pre-merge gate: score={}, runId={}, correlationId={}",
+                        preMergeVerdict.overallScore(), runId, CorrelationIdHolder.getCorrelationId());
+                throw new EscalationException(buildLoopEscalation(
+                        "Judge vetoed at pre-merge quality gate (score=" +
+                                String.format("%.2f", preMergeVerdict.overallScore()) + ")",
+                        "Quality score below threshold: " + preMergeVerdict.recommendation(),
+                        preMergeVerdict.verdict()));
+            }
+
             // --- Terminal: Writer ---
             emitStatus(runId, "IN_PROGRESS", "WRITER", progressPercent(6));
             executeWriterStep(context);
@@ -226,6 +257,7 @@ public class WorkflowEngine {
             metrics.recordWorkflowSuccess(duration);
 
             emitStatus(runId, "DONE", null, 100.0);
+            blackboardService.cleanup(runId);
             traceEventService.cleanup(runId);
             eventBus.completeEmitters(runId);
 

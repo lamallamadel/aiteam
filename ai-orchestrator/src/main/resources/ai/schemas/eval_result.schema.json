@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eval_result.schema.json",
+  "title": "Evaluation Result",
+  "description": "Schema for individual evaluation scenario results. Captures outcome, metrics, grading, and comparison data for the eval suite.",
+  "type": "object",
+  "required": ["scenario_id", "run_id", "timestamp", "outcome", "metrics", "grading", "pass"],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "description": "Evaluation scenario identifier (e.g., 'eval-001')"
+    },
+    "run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Workflow run UUID for this evaluation"
+    },
+    "suite_run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the overall eval suite execution"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scenario": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "expected_outcome": { "type": "string", "enum": ["completed", "escalated", "failed"] }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["actual_status", "outcome_match"],
+      "properties": {
+        "actual_status": {
+          "type": "string",
+          "enum": ["completed", "escalated", "failed", "aborted", "timeout"]
+        },
+        "outcome_match": {
+          "type": "boolean",
+          "description": "Whether actual outcome matches expected outcome"
+        },
+        "escalation_agent": { "type": "string" },
+        "escalation_reason": { "type": "string" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["duration_ms", "total_tokens", "total_cost_usd", "loop_back_count", "step_count"],
+      "properties": {
+        "duration_ms": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "total_cost_usd": { "type": "number" },
+        "loop_back_count": { "type": "integer" },
+        "step_count": { "type": "integer" },
+        "pass_at_1": {
+          "type": "boolean",
+          "description": "True if completed with 0 loop-backs"
+        },
+        "pass_at_2": {
+          "type": "boolean",
+          "description": "True if completed with ≤ 1 loop-back"
+        },
+        "guardrail_violations": { "type": "integer" },
+        "interrupt_triggers": { "type": "integer" },
+        "judge_verdict": { "type": "string" },
+        "judge_score": { "type": "number" }
+      }
+    },
+    "grading": {
+      "type": "object",
+      "description": "Scores for each applicable evaluation metric",
+      "properties": {
+        "groundedness": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "evidence": { "type": "string" },
+            "pass": { "type": "boolean" }
+          }
+        },
+        "correctness": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "compile_success": { "type": "boolean" },
+            "tests_pass": { "type": "boolean" },
+            "pass": { "type": "boolean" }
+          }
+        },
+        "protocol_adherence": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+            "automated_checks_passed": { "type": "integer" },
+            "automated_checks_total": { "type": "integer" },
+            "evidence": { "type": "string" },
+            "pass": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "pass": {
+      "type": "boolean",
+      "description": "Overall pass/fail for this scenario"
+    },
+    "artifacts_produced": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of blackboard entry keys produced during the run"
+    },
+    "trace_id": {
+      "type": "string",
+      "description": "Distributed trace ID for debugging"
+    },
+    "behavior_diff": {
+      "type": "object",
+      "description": "Comparison against baseline (present only in diff runs)",
+      "properties": {
+        "baseline_pass": { "type": "boolean" },
+        "score_delta": { "type": "number" },
+        "duration_delta_ms": { "type": "integer" },
+        "cost_delta_usd": { "type": "number" },
+        "regression": { "type": "boolean" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

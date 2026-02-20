@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "trace_span.schema.json",
+  "title": "Distributed Trace Span",
+  "description": "Schema for a single span in the distributed tracing system. Spans form a tree: workflow → step → tool_call/llm_call/blackboard_op.",
+  "type": "object",
+  "required": ["span_id", "trace_id", "name", "start_time", "status"],
+  "properties": {
+    "span_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique span identifier"
+    },
+    "trace_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Root trace identifier (= correlation_id)"
+    },
+    "parent_span_id": {
+      "type": ["string", "null"],
+      "description": "Parent span ID (null for root workflow span)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Span name (e.g., 'workflow.execute', 'step.developer', 'llm.call')"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["workflow", "step", "llm_call", "tool_call", "blackboard_op", "judge_eval", "interrupt_eval", "voting"],
+      "description": "Type of operation this span represents"
+    },
+    "start_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_time": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": ["integer", "null"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["in_progress", "ok", "error", "timeout", "blocked", "vetoed"]
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Span-specific attributes (varies by kind)",
+      "properties": {
+        "run_id": { "type": "string" },
+        "correlation_id": { "type": "string" },
+        "agent_name": { "type": "string" },
+        "step_phase": { "type": "string" },
+        "model": { "type": "string" },
+        "prompt_tokens": { "type": "integer" },
+        "completion_tokens": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "server": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "entry_key": { "type": "string" },
+        "operation": { "type": "string", "enum": ["read", "write"] },
+        "version": { "type": "integer" },
+        "checkpoint": { "type": "string" },
+        "rubric": { "type": "string" },
+        "verdict": { "type": "string" },
+        "score": { "type": "number" },
+        "confidence": { "type": "number" },
+        "tier": { "type": "string" },
+        "rule_name": { "type": "string" },
+        "action": { "type": "string" },
+        "artifact_produced": { "type": "string" },
+        "loop_iteration": { "type": "integer" },
+        "cost_usd": { "type": "number" },
+        "voter_count": { "type": "integer" },
+        "agreement_rate": { "type": "number" }
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "Timestamped events within this span",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "name"],
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "name": { "type": "string" },
+          "attributes": { "type": "object" }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "description": "Error details if status is 'error'",
+      "properties": {
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "stack_trace": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,174 @@
+# ============================================================================
+# Context Engineering & Prompt Caching — Atlasia AI Pipeline
+# ============================================================================
+# Speed wins on Product Hunt. Multi-agent systems are slow due to context
+# bloat and repeated prompt overhead. This config defines progressive
+# disclosure, just-in-time context loading, and prompt caching strategies.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Progressive Disclosure
+# ---------------------------------------------------------------------------
+progressive_disclosure:
+  description: >
+    Don't stuff the whole conversation into the context window. Agents
+    should only load the specific files, artifacts, or memory blocks they
+    need for the current step. This reduces token costs and hallucination.
+
+  rules:
+    - rule: "Artifact-Only Handoff"
+      description: >
+        Agents receive ONLY their declared input artifacts from the blackboard.
+        No full conversation history, no chain-of-thought from prior agents.
+      implementation: "BlackboardService.read() with access control"
+      token_savings: "60-80% reduction vs full context forwarding"
+
+    - rule: "Just-In-Time MCP Loading"
+      description: >
+        Agents connect to MCP servers on demand, not at session start.
+        File contents are fetched only when the agent needs them, not
+        pre-loaded into the context window.
+      implementation: "MCP tool calls are lazy — data fetched on first use"
+      token_savings: "40-60% reduction in initial context size"
+
+    - rule: "Scoped File Reading"
+      description: >
+        When an agent reads source files, limit to the specific files
+        relevant to the current task. Use work_plan.json file list to
+        scope filesystem reads.
+      implementation: "Developer receives file_list from work_plan, reads only those"
+      token_savings: "70% reduction vs reading entire project"
+
+    - rule: "Summarized Loop-Back Context"
+      description: >
+        When looping back from review/tester to developer, pass only the
+        findings summary (not the full review trace). Developer receives
+        a focused list of what to fix, not the reviewer's reasoning.
+      implementation: "Handoff protocol strips chain-of-thought on loop-back"
+      token_savings: "50% reduction in loop-back context"
+
+    - rule: "Truncated Error Traces"
+      description: >
+        CI/E2E error traces are summarized before passing to agents.
+        Full stack traces are available via MCP logs server if needed.
+      implementation: "TesterStep summarizes failures before handoff"
+      token_savings: "80% reduction for verbose CI outputs"
+
+  context_budgets:
+    description: >
+      Each agent has a context budget defined in its Agent Card constraints.
+      The orchestrator enforces this budget by truncating inputs if necessary.
+    strategy:
+      - "Priority 1: System prompt (always included, never truncated)"
+      - "Priority 2: Current task artifact (truncated from end if oversized)"
+      - "Priority 3: Handoff notes (truncated to summary if oversized)"
+      - "Priority 4: Reference artifacts (omitted if budget exceeded)"
+
+# ---------------------------------------------------------------------------
+# Prompt Caching
+# ---------------------------------------------------------------------------
+prompt_caching:
+  description: >
+    Cache heavy system prompts and tool definitions to reduce latency and
+    input token costs by up to 90% for repetitive tasks. System prompts
+    rarely change, so they can be cached across multiple workflow executions.
+
+  strategy:
+    system_prompt_caching:
+      description: >
+        Agent system prompts (persona, mission, rules, MCP connections) are
+        cached at the LLM provider level using prompt caching APIs. This
+        avoids re-processing the same 2-5K token prompts on every call.
+      implementation:
+        anthropic: "Use cache_control: {type: 'ephemeral'} on system message blocks"
+        openai: "Use cached_tokens via automatic prefix matching"
+      cache_key: "Hash of (agent_name + prompt_version + mcp_server_list)"
+      ttl_minutes: 60
+      estimated_savings: "90% reduction in system prompt processing cost"
+
+    tool_definition_caching:
+      description: >
+        MCP tool schemas and descriptions are stable across calls. Cache
+        the tool definition block to avoid re-processing.
+      implementation: "Include tool definitions in the cached system prompt block"
+      estimated_savings: "85% reduction in tool definition processing cost"
+
+    rubric_caching:
+      description: >
+        Judge evaluation rubrics are static. Cache them in the system prompt
+        for repeated evaluations.
+      implementation: "Judge system prompt includes rubric as cached prefix"
+      estimated_savings: "80% reduction for repeated Judge evaluations"
+
+  invalidation:
+    triggers:
+      - "Prompt version change (any agent YAML modification)"
+      - "MCP server list change"
+      - "Tool schema change"
+      - "Rubric update"
+    strategy: "Cache-bust by updating the cache_key hash"
+
+  monitoring:
+    metrics:
+      - "orchestrator.cache.hit.rate (gauge, tagged by agent_name)"
+      - "orchestrator.cache.savings.tokens (counter)"
+      - "orchestrator.cache.savings.usd (counter)"
+
+# ---------------------------------------------------------------------------
+# Response Streaming
+# ---------------------------------------------------------------------------
+response_streaming:
+  description: >
+    Stream agent responses token-by-token to the frontend for perceived
+    performance improvement. Users see progress immediately instead of
+    waiting for the full response.
+
+  implementation:
+    agent_to_orchestrator: "LLM streaming API (SSE from provider)"
+    orchestrator_to_frontend: "WorkflowEventBus SSE stream"
+    intermediate_artifacts: "Stream partial artifacts for live preview"
+
+  optimization:
+    early_exit: >
+      If the first 100 tokens of a Judge evaluation already indicate
+      a clear 'pass' verdict, skip the remaining criteria for speed.
+    parallel_streaming: >
+      Stream review persona results as they complete (don't wait for
+      all 4 personas to finish before showing first results).
+
+# ---------------------------------------------------------------------------
+# Memory Optimization
+# ---------------------------------------------------------------------------
+memory:
+  short_term:
+    description: "Current workflow execution context (RunContext + Blackboard)"
+    storage: "In-memory + Redis"
+    ttl: "Workflow lifetime"
+    optimization: "Evict completed step artifacts from memory (read from DB if needed)"
+
+  medium_term:
+    description: "Recent workflow results for trend analysis"
+    storage: "PostgreSQL (ai_run_artifact table)"
+    ttl: "90 days"
+    optimization: "Compress old artifacts, index key fields for query"
+
+  long_term:
+    description: "Historical patterns and decisions for semantic retrieval"
+    storage: "Vector store (embeddings of architecture decisions, review patterns)"
+    ttl: "Indefinite"
+    optimization: >
+      Index completed workflows by: issue type, agent that escalated,
+      review findings category, and code patterns. Enables the Architect
+      to learn from past decisions without re-reading full histories.
+
+  retrieval_augmented_generation:
+    description: >
+      Before the Architect step, query the vector store for similar past
+      architecture decisions. Inject top-3 relevant ADRs into the context
+      to improve design consistency.
+    trigger: "architect step start"
+    query: "Semantic similarity to current work_plan description"
+    top_k: 3
+    token_budget: 2000

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "judge_verdict.schema.json",
+  "title": "Judge Verdict",
+  "description": "Schema for the Judge agent's quality evaluation verdict. Supports single evaluations and majority voting results.",
+  "type": "object",
+  "required": ["run_id", "checkpoint", "artifact_key", "rubric_name", "overall_score", "verdict", "confidence", "per_criterion", "timestamp"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUID of the workflow run"
+    },
+    "checkpoint": {
+      "type": "string",
+      "enum": ["post_developer", "post_review", "post_architect", "pre_merge", "conflict_arbitration", "security_verdict"],
+      "description": "Which checkpoint triggered this evaluation"
+    },
+    "artifact_key": {
+      "type": "string",
+      "description": "Blackboard entry key of the evaluated artifact"
+    },
+    "rubric_name": {
+      "type": "string",
+      "description": "Which rubric was applied"
+    },
+    "overall_score": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Weighted average score across all criteria"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["pass", "conditional_pass", "veto"],
+      "description": "The final quality verdict"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Judge's confidence in the verdict"
+    },
+    "per_criterion": {
+      "type": "array",
+      "description": "Score and evidence for each rubric criterion",
+      "items": {
+        "type": "object",
+        "required": ["criterion", "weight", "score", "level", "evidence"],
+        "properties": {
+          "criterion": { "type": "string" },
+          "weight": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "level": { "type": "string", "enum": ["excellent", "good", "acceptable", "failing"] },
+          "evidence": { "type": "string", "description": "Specific evidence from the artifact" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Specific issues that influenced the verdict",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "description": { "type": "string" },
+          "location": { "type": "string" },
+          "suggested_fix": { "type": "string" }
+        }
+      }
+    },
+    "recommendation": {
+      "type": "string",
+      "description": "What should happen next based on the verdict"
+    },
+    "voting_metadata": {
+      "type": "object",
+      "description": "Present only when majority voting was used",
+      "properties": {
+        "voter_count": { "type": "integer", "minimum": 1 },
+        "quorum_met": { "type": "boolean" },
+        "individual_verdicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "voter_id": { "type": "string" },
+              "verdict": { "type": "string" },
+              "confidence": { "type": "number" },
+              "score": { "type": "number" },
+              "temperature": { "type": "number" },
+              "emphasis": { "type": "string" }
+            }
+          }
+        },
+        "aggregated_verdict": { "type": "string" },
+        "aggregated_confidence": { "type": "number" },
+        "agreement_rate": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "dissenting_opinions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "voter_id": { "type": "string" },
+              "verdict": { "type": "string" },
+              "rationale": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the evaluation"
+    }
+  },
+  "additionalProperties": false
+}

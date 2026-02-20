@@ -36,9 +36,35 @@ public class OrchestratorMetrics {
     private final Counter ciFixAttemptsTotal;
     private final Counter e2eFixAttemptsTotal;
 
+    private final Counter reviewDeveloperLoopBacks;
+    private final Counter testerDeveloperLoopBacks;
+    private final Counter guardrailViolationsTotal;
+    private final Counter conflictResolutionsTotal;
+
     private final Timer llmSemanticLatency;
     private final Counter tokenBudgetExceeded;
     private final DistributionSummary tokenUsagePerBolt;
+    private final DistributionSummary costPerBolt;
+
+    private final Counter judgeEvaluationsTotal;
+    private final Counter judgeVetoTotal;
+    private final Counter judgePassTotal;
+    private final Counter interruptTriggeredTotal;
+    private final Counter interruptApprovedTotal;
+    private final Counter interruptDeniedTotal;
+    private final Counter blackboardWritesTotal;
+    private final Counter blackboardReadsTotal;
+    private final Counter a2aDiscoveriesTotal;
+    private final Counter votingExecutionsTotal;
+
+    private final Counter evalSuiteRunsTotal;
+    private final Counter evalScenarioPassTotal;
+    private final Counter evalScenarioFailTotal;
+    private final Counter shadowRunsTotal;
+    private final Counter shadowRunsCompletedTotal;
+    private final Counter shadowRunsFailedTotal;
+    private final Counter behaviorDiffRegressionsTotal;
+    private final DistributionSummary evalPassAt1Rate;
 
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -125,6 +151,99 @@ public class OrchestratorMetrics {
 
         this.tokenUsagePerBolt = DistributionSummary.builder("orchestrator.token.usage.per.bolt")
                 .description("Token usage distribution per bolt execution")
+                .register(meterRegistry);
+
+        this.reviewDeveloperLoopBacks = Counter.builder("orchestrator.loop.review.developer.total")
+                .description("Total number of review-to-developer loop-backs")
+                .register(meterRegistry);
+
+        this.testerDeveloperLoopBacks = Counter.builder("orchestrator.loop.tester.developer.total")
+                .description("Total number of tester-to-developer loop-backs")
+                .register(meterRegistry);
+
+        this.guardrailViolationsTotal = Counter.builder("orchestrator.guardrail.violations.total")
+                .description("Total number of security guardrail violations detected")
+                .register(meterRegistry);
+
+        this.conflictResolutionsTotal = Counter.builder("orchestrator.conflict.resolutions.total")
+                .description("Total number of reviewer conflict resolutions")
+                .register(meterRegistry);
+
+        this.costPerBolt = DistributionSummary.builder("orchestrator.cost.per.bolt")
+                .description("Estimated cost in USD per bolt execution")
+                .baseUnit("USD")
+                .register(meterRegistry);
+
+        this.judgeEvaluationsTotal = Counter.builder("orchestrator.judge.evaluations.total")
+                .description("Total number of Judge evaluations executed")
+                .register(meterRegistry);
+
+        this.judgeVetoTotal = Counter.builder("orchestrator.judge.veto.total")
+                .description("Total number of Judge vetoes issued")
+                .register(meterRegistry);
+
+        this.judgePassTotal = Counter.builder("orchestrator.judge.pass.total")
+                .description("Total number of Judge pass verdicts")
+                .register(meterRegistry);
+
+        this.interruptTriggeredTotal = Counter.builder("orchestrator.interrupt.triggered.total")
+                .description("Total number of dynamic interrupts triggered")
+                .register(meterRegistry);
+
+        this.interruptApprovedTotal = Counter.builder("orchestrator.interrupt.approved.total")
+                .description("Total number of dynamic interrupts approved by human")
+                .register(meterRegistry);
+
+        this.interruptDeniedTotal = Counter.builder("orchestrator.interrupt.denied.total")
+                .description("Total number of dynamic interrupts denied by human")
+                .register(meterRegistry);
+
+        this.blackboardWritesTotal = Counter.builder("orchestrator.blackboard.writes.total")
+                .description("Total number of blackboard write operations")
+                .register(meterRegistry);
+
+        this.blackboardReadsTotal = Counter.builder("orchestrator.blackboard.reads.total")
+                .description("Total number of blackboard read operations")
+                .register(meterRegistry);
+
+        this.a2aDiscoveriesTotal = Counter.builder("orchestrator.a2a.discoveries.total")
+                .description("Total number of A2A agent discovery queries")
+                .register(meterRegistry);
+
+        this.votingExecutionsTotal = Counter.builder("orchestrator.voting.executions.total")
+                .description("Total number of majority voting executions")
+                .register(meterRegistry);
+
+        this.evalSuiteRunsTotal = Counter.builder("orchestrator.eval.suite.runs.total")
+                .description("Total number of evaluation suite executions")
+                .register(meterRegistry);
+
+        this.evalScenarioPassTotal = Counter.builder("orchestrator.eval.scenario.pass.total")
+                .description("Total number of evaluation scenarios that passed")
+                .register(meterRegistry);
+
+        this.evalScenarioFailTotal = Counter.builder("orchestrator.eval.scenario.fail.total")
+                .description("Total number of evaluation scenarios that failed")
+                .register(meterRegistry);
+
+        this.shadowRunsTotal = Counter.builder("orchestrator.shadow.runs.total")
+                .description("Total number of shadow mode workflow executions")
+                .register(meterRegistry);
+
+        this.shadowRunsCompletedTotal = Counter.builder("orchestrator.shadow.runs.completed.total")
+                .description("Total number of shadow mode runs that completed successfully")
+                .register(meterRegistry);
+
+        this.shadowRunsFailedTotal = Counter.builder("orchestrator.shadow.runs.failed.total")
+                .description("Total number of shadow mode runs that failed")
+                .register(meterRegistry);
+
+        this.behaviorDiffRegressionsTotal = Counter.builder("orchestrator.behavior.diff.regressions.total")
+                .description("Total number of regressions detected by behavior diffing")
+                .register(meterRegistry);
+
+        this.evalPassAt1Rate = DistributionSummary.builder("orchestrator.eval.pass.at.1.rate")
+                .description("Pass@1 rate distribution across eval suite runs")
                 .register(meterRegistry);
     }
 
@@ -245,5 +364,91 @@ public class OrchestratorMetrics {
 
     public void recordTokenUsagePerBolt(double totalTokens) {
         tokenUsagePerBolt.record(totalTokens);
+    }
+
+    public void recordReviewDeveloperLoopBack() {
+        reviewDeveloperLoopBacks.increment();
+    }
+
+    public void recordTesterDeveloperLoopBack() {
+        testerDeveloperLoopBacks.increment();
+    }
+
+    public void recordGuardrailViolation(String guardrailName, String agentName) {
+        guardrailViolationsTotal.increment();
+    }
+
+    public void recordConflictResolution(String resolutionMethod) {
+        conflictResolutionsTotal.increment();
+    }
+
+    public void recordCostPerBolt(double costUsd) {
+        costPerBolt.record(costUsd);
+    }
+
+    public void recordJudgeEvaluation(String verdict) {
+        judgeEvaluationsTotal.increment();
+        if ("veto".equals(verdict)) {
+            judgeVetoTotal.increment();
+        } else if ("pass".equals(verdict)) {
+            judgePassTotal.increment();
+        }
+    }
+
+    public void recordInterruptTriggered(String tier, String ruleName) {
+        interruptTriggeredTotal.increment();
+    }
+
+    public void recordInterruptApproved(String ruleName) {
+        interruptApprovedTotal.increment();
+    }
+
+    public void recordInterruptDenied(String ruleName) {
+        interruptDeniedTotal.increment();
+    }
+
+    public void recordBlackboardWrite(String entryKey, String agentName) {
+        blackboardWritesTotal.increment();
+    }
+
+    public void recordBlackboardRead(String entryKey, String agentName) {
+        blackboardReadsTotal.increment();
+    }
+
+    public void recordA2ADiscovery(String role) {
+        a2aDiscoveriesTotal.increment();
+    }
+
+    public void recordVotingExecution(String checkpoint) {
+        votingExecutionsTotal.increment();
+    }
+
+    public void recordEvalSuiteRun(double passAt1Rate) {
+        evalSuiteRunsTotal.increment();
+        evalPassAt1Rate.record(passAt1Rate);
+    }
+
+    public void recordEvalScenarioPass() {
+        evalScenarioPassTotal.increment();
+    }
+
+    public void recordEvalScenarioFail() {
+        evalScenarioFailTotal.increment();
+    }
+
+    public void recordShadowRun() {
+        shadowRunsTotal.increment();
+    }
+
+    public void recordShadowRunCompleted() {
+        shadowRunsCompletedTotal.increment();
+    }
+
+    public void recordShadowRunFailed() {
+        shadowRunsFailedTotal.increment();
+    }
+
+    public void recordBehaviorDiffRegression(String scenarioId) {
+        behaviorDiffRegressionsTotal.increment();
     }
 }

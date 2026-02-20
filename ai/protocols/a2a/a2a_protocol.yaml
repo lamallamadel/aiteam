@@ -1,0 +1,267 @@
+# ============================================================================
+# Agent-to-Agent (A2A) Protocol — Atlasia AI Pipeline
+# ============================================================================
+# Implements the A2A open standard for agent discovery, authentication, and
+# inter-agent communication. Replaces hardcoded agent-to-agent routing with
+# capability-based discovery, enabling dynamic team composition.
+#
+# Based on the A2A specification (Google, Salesforce, et al.) adapted for
+# the Atlasia multi-agent software engineering pipeline.
+#
+# Key principle: Instead of "Developer Agent talks to QA Agent," the Developer
+# Agent discovers any available agent matching the required capabilities.
+# ============================================================================
+
+version: "1.0"
+
+# ---------------------------------------------------------------------------
+# Protocol Overview
+# ---------------------------------------------------------------------------
+protocol:
+  name: "Agent-to-Agent (A2A)"
+  description: >
+    A2A enables agents to discover, authenticate, and communicate with other
+    agents through standardized Agent Cards, capability-based routing, and
+    structured task delegation. This decouples the orchestration topology
+    from agent identities, allowing hot-swapping, scaling, and multi-vendor
+    agent teams.
+
+  transport:
+    primary: "JSON-RPC 2.0 over HTTP/SSE"
+    internal: "In-process method calls (Spring beans) for co-located agents"
+    fallback: "Message queue (Redis Streams) for async delegation"
+
+  authentication:
+    method: "mutual_tls + bearer_token"
+    description: >
+      Agents authenticate via mutual TLS for transport security and a
+      short-lived bearer token for identity. The Orchestrator issues tokens
+      with scoped claims (agent_name, allowed_capabilities, ttl).
+    token_format: "JWT"
+    token_ttl_seconds: 300
+    issuer: "orchestrator"
+    claims:
+      - "sub: agent_name"
+      - "cap: [list of allowed capabilities]"
+      - "run_id: current workflow run"
+      - "correlation_id: trace identifier"
+
+# ---------------------------------------------------------------------------
+# Agent Cards — Discovery Mechanism
+# ---------------------------------------------------------------------------
+agent_cards:
+  description: >
+    Every agent in the pipeline publishes an Agent Card — a structured
+    manifest describing its identity, capabilities, input/output schemas,
+    MCP connections, and operational constraints. The Orchestrator uses
+    Agent Cards to match tasks to the best available agent.
+
+  schema: "ai/schemas/agent_card.schema.json"
+  registry: "ai/protocols/a2a/agent_registry.yaml"
+
+  card_structure:
+    identity:
+      - "name: Unique agent identifier (e.g., 'developer-v2')"
+      - "version: Semantic version of the agent"
+      - "role: Human-readable role description"
+      - "vendor: Provider (e.g., 'atlasia', 'third-party')"
+    capabilities:
+      description: >
+        A list of capability tags that describe what the agent can do.
+        The orchestrator matches requested capabilities against available
+        agent cards to find the best fit.
+      examples:
+        - "code_generation"
+        - "code_review"
+        - "security_analysis"
+        - "test_execution"
+        - "documentation"
+        - "requirement_analysis"
+        - "architecture_design"
+    input_schema:
+      description: "JSON Schema defining the agent's expected input"
+    output_schema:
+      description: "JSON Schema defining the agent's guaranteed output"
+    mcp_servers:
+      description: "List of MCP servers the agent requires"
+    constraints:
+      description: "Operational limits: max_tokens, max_duration, cost_budget"
+    health:
+      description: "Health check endpoint and liveness probe"
+      endpoint: "/.well-known/agent-card"
+      liveness: "/health"
+
+  discovery_protocol:
+    description: >
+      Agents register their Agent Cards with the Orchestrator's A2A Registry
+      at startup. The Orchestrator queries the registry when dispatching tasks.
+    flow:
+      - step: "register"
+        description: "Agent publishes its card to the registry on startup"
+        endpoint: "POST /a2a/agents/register"
+      - step: "discover"
+        description: "Orchestrator queries registry for agents matching capabilities"
+        endpoint: "GET /a2a/agents?capabilities=code_review,security_analysis"
+      - step: "negotiate"
+        description: "Orchestrator validates the agent can handle the current task (schema compatibility, budget)"
+      - step: "delegate"
+        description: "Orchestrator sends a Task object to the selected agent"
+        endpoint: "POST /a2a/tasks"
+      - step: "monitor"
+        description: "Orchestrator monitors task progress via SSE stream"
+        endpoint: "GET /a2a/tasks/{id}/stream"
+
+# ---------------------------------------------------------------------------
+# Task Delegation Protocol
+# ---------------------------------------------------------------------------
+task_delegation:
+  description: >
+    The A2A Task is the unit of work delegated between agents. It carries
+    the input artifacts, expected output schema, constraints, and callback
+    information. Tasks support streaming progress updates.
+
+  task_structure:
+    id: "UUID — unique task identifier"
+    type: "agent_step | review | test | documentation"
+    requester: "Agent or Orchestrator that created the task"
+    assignee: "Agent selected via capability matching"
+    input:
+      artifacts: "List of blackboard artifact keys the agent can read"
+      context: "Filtered context (handoff notes, prior findings)"
+    expected_output:
+      schema: "JSON Schema ref for the expected artifact"
+      artifact_key: "Blackboard key where the result will be stored"
+    constraints:
+      max_tokens: "Token budget for this task"
+      max_duration_ms: "Time budget"
+      cost_budget_usd: "Maximum cost"
+    status: "pending | in_progress | completed | failed | cancelled"
+    progress:
+      percent: "0-100"
+      message: "Human-readable progress update"
+
+  lifecycle:
+    - state: "pending"
+      description: "Task created but not yet accepted by assignee"
+    - state: "in_progress"
+      description: "Assignee has accepted and is working on the task"
+    - state: "completed"
+      description: "Assignee has produced the expected output artifact"
+    - state: "failed"
+      description: "Assignee could not complete the task (escalation triggered)"
+    - state: "cancelled"
+      description: "Requester cancelled the task (e.g., workflow abort)"
+
+  streaming:
+    description: >
+      Agents stream progress updates as SSE events during task execution.
+      The Orchestrator consumes these to update the Task Ledger and emit
+      frontend SSE events.
+    events:
+      - "task.progress: {percent, message}"
+      - "task.artifact: {partial artifact for streaming output}"
+      - "task.tool_call: {tool_name, server, duration}"
+      - "task.completed: {artifact_key, duration_ms, tokens_used}"
+      - "task.failed: {error_code, message, recoverable}"
+
+# ---------------------------------------------------------------------------
+# Capability Matching Algorithm
+# ---------------------------------------------------------------------------
+capability_matching:
+  description: >
+    When the Orchestrator needs to dispatch a task, it queries the A2A
+    Registry for agents matching the required capabilities. If multiple
+    agents match, a scoring algorithm selects the best candidate.
+
+  scoring:
+    factors:
+      - name: "capability_coverage"
+        weight: 0.4
+        description: "Percentage of required capabilities the agent supports"
+      - name: "historical_effectiveness"
+        weight: 0.3
+        description: "Agent's effectiveness score from evaluation framework"
+      - name: "current_load"
+        weight: 0.15
+        description: "Agent's current task queue depth (lower is better)"
+      - name: "cost_efficiency"
+        weight: 0.15
+        description: "Cost per successful task completion (lower is better)"
+
+    formula: >
+      score = (capability_coverage * 0.4) +
+              (historical_effectiveness * 0.3) +
+              ((1 - normalized_load) * 0.15) +
+              ((1 - normalized_cost) * 0.15)
+
+    tie_breaking: "Prefer the agent with the highest capability_coverage"
+
+  fallback:
+    description: >
+      If no agent matches all required capabilities, the Orchestrator can:
+      1. Compose a multi-agent chain (split task across agents)
+      2. Escalate to human with capability gap analysis
+      3. Use a general-purpose agent with degraded quality warning
+    strategy: "escalate_on_critical_gap, degrade_on_minor_gap"
+
+# ---------------------------------------------------------------------------
+# Multi-Vendor Agent Support
+# ---------------------------------------------------------------------------
+multi_vendor:
+  description: >
+    A2A enables mixing agents from different vendors (Anthropic, OpenAI,
+    Google, custom). Each vendor's agent implements the A2A protocol and
+    publishes an Agent Card. The Orchestrator is vendor-agnostic.
+
+  vendor_adapters:
+    - vendor: "anthropic"
+      transport: "Native (in-process Spring beans)"
+      description: "Default agents implemented as local Spring services"
+    - vendor: "openai"
+      transport: "HTTP/SSE via A2A endpoint"
+      description: "OpenAI-based agents accessed via REST API"
+    - vendor: "google"
+      transport: "HTTP/SSE via A2A endpoint"
+      description: "Google Gemini-based agents via Vertex AI"
+    - vendor: "custom"
+      transport: "HTTP/SSE or Message Queue"
+      description: "Custom agents implementing the A2A protocol"
+
+  compatibility:
+    requirements:
+      - "Agent MUST publish a valid Agent Card at /.well-known/agent-card"
+      - "Agent MUST accept A2A Task objects as input"
+      - "Agent MUST produce output conforming to the declared output_schema"
+      - "Agent MUST support SSE progress streaming"
+      - "Agent MUST respect constraint budgets (tokens, duration, cost)"
+    validation: "The Orchestrator validates Agent Cards against agent_card.schema.json at registration"
+
+# ---------------------------------------------------------------------------
+# Integration with Existing Architecture
+# ---------------------------------------------------------------------------
+integration:
+  description: >
+    A2A augments (not replaces) the existing hybrid orchestration architecture.
+    The sequential pipeline backbone remains; A2A adds dynamic discovery and
+    capability-based routing within each step.
+
+  orchestrator_role:
+    - "Maintains the A2A Agent Registry"
+    - "Issues authentication tokens for task delegation"
+    - "Performs capability matching for each pipeline step"
+    - "Falls back to default agents when discovery yields no better match"
+    - "Records agent selection rationale in the Task Ledger"
+
+  mcp_interplay:
+    description: >
+      A2A handles agent-to-agent communication (who does the work).
+      MCP handles agent-to-tool communication (how the work accesses data).
+      They are complementary protocols on different axes.
+    a2a_scope: "Agent discovery, task delegation, progress monitoring"
+    mcp_scope: "Tool invocation, data access, resource management"
+
+  backward_compatibility:
+    description: >
+      Existing agents continue to work as local Spring beans. A2A is opt-in:
+      agents that publish Agent Cards can be discovered and selected over
+      defaults. Agents without cards are treated as the default for their role.

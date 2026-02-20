@@ -8,12 +8,12 @@
 # right coordination model at each stage of the workflow.
 # ============================================================================
 
-version: "2.0"
+version: "3.0"
 
 # ---------------------------------------------------------------------------
 # Pattern Selection Rationale
 # ---------------------------------------------------------------------------
-# The Atlasia pipeline uses FIVE orchestration patterns in concert:
+# The Atlasia pipeline uses NINE orchestration patterns in concert:
 #
 # 1. SEQUENTIAL (Pipeline) — The backbone. Deterministic flow from PM to Writer.
 #    Easiest to debug, trace, and reason about. Each step produces a structured
@@ -36,17 +36,35 @@ version: "2.0"
 #    orchestrator generates a plan (task_ledger.json) listing every intended
 #    step. This ledger is the "shared brain" of the team.
 #
+#
+# 6. A2A PROTOCOL (Agent Discovery) — Capability-based agent discovery
+#    replacing hardcoded routing. Agents publish Agent Cards; the orchestrator
+#    matches tasks to the best available agent dynamically.
+#
+# 7. BLACKBOARD (Shared Memory) — Versioned, access-controlled shared memory
+#    store where agents post artifacts and read updates asynchronously. Includes
+#    the Progress Ledger for goal/subgoal tracking.
+#
+# 8. DYNAMIC INTERRUPTS (Runtime Guardrails) — Real-time monitoring of agent
+#    actions with tiered interrupt rules (critical/high/medium/low). Blocks
+#    destructive operations before they execute.
+#
+# 9. LLM-AS-A-JUDGE (Quality Arbitration) — Independent Judge agent with veto
+#    power, majority voting for high-stakes decisions, and Pass@1 tracking.
+#
 # This hybrid avoids the chaos of a pure network topology while allowing
 # the flexibility needed for real software engineering workflows.
 
 architecture:
-  name: "Hybrid Sequential-Graph-Hierarchical-Critic-Ledger"
+  name: "Hybrid Sequential-Graph-Hierarchical-Critic-Ledger-A2A-Blackboard-Interrupt-Judge"
   description: >
-    A five-layer orchestration architecture combining the predictability of a
-    linear pipeline, the resilience of graph-based retry loops, the depth of
-    hierarchical multi-perspective review, the reliability of dual-agent
-    critic loops with conflict resolution, and the transparency of a shared
-    task ledger for execution planning and observability.
+    A nine-layer production-grade orchestration architecture combining:
+    (1) sequential pipeline predictability, (2) graph-based retry resilience,
+    (3) hierarchical multi-perspective review, (4) dual-agent critic loops,
+    (5) shared task ledger transparency, (6) A2A protocol for dynamic agent
+    discovery, (7) blackboard shared memory for async artifact exchange,
+    (8) dynamic interrupts for runtime guardrails, and (9) LLM-as-a-Judge
+    quality arbitration with majority voting.
 
   # -------------------------------------------------------------------------
   # Layer 1: Sequential Pipeline (The Backbone)
@@ -248,6 +266,94 @@ architecture:
       producer: orchestrator
       consumers: ["all agents (read-only)"]
       access: "Only the orchestrator can write; all agents can read"
+
+  # -------------------------------------------------------------------------
+  # Layer 6: A2A Protocol (Agent Discovery & Capability Matching)
+  # -------------------------------------------------------------------------
+  a2a_protocol:
+    description: >
+      Implements the Agent-to-Agent (A2A) open standard for dynamic agent
+      discovery, replacing hardcoded agent routing. Each agent publishes an
+      Agent Card describing capabilities, schemas, and constraints. The
+      orchestrator queries the A2A Registry to find the best agent for each
+      task based on capability coverage, historical effectiveness, current
+      load, and cost efficiency.
+    protocol: "ai/protocols/a2a/a2a_protocol.yaml"
+    registry: "ai/protocols/a2a/agent_registry.yaml"
+    schema: "ai/schemas/agent_card.schema.json"
+    key_features:
+      - "Capability-based routing (not identity-based)"
+      - "Multi-vendor agent support (Anthropic, OpenAI, Google, custom)"
+      - "Hot-swapping of agents without pipeline changes"
+      - "Scored discovery with tie-breaking"
+      - "Backward-compatible: existing Spring beans work without cards"
+
+  # -------------------------------------------------------------------------
+  # Layer 7: Blackboard (Shared Memory & Progress Ledger)
+  # -------------------------------------------------------------------------
+  blackboard:
+    description: >
+      A versioned, access-controlled shared memory store implementing both
+      the Blackboard Pattern (async artifact exchange) and the Magentic
+      Progress Ledger (goal/subgoal tracking). Agents post findings and
+      read updates without speaking directly — reducing noise and token costs.
+    protocol: "ai/orchestration/blackboard.yaml"
+    schemas:
+      - "ai/schemas/blackboard_entry.schema.json"
+      - "ai/schemas/progress_ledger.schema.json"
+    key_features:
+      - "Strict producer/consumer access control per entry"
+      - "Append-only versioning (full history for audit)"
+      - "Schema validation on every write"
+      - "Redis hot cache for active workflows"
+      - "Vector store indexing for historical retrieval"
+      - "Progress Ledger with goals, subgoals, blockers, and timeline"
+
+  # -------------------------------------------------------------------------
+  # Layer 8: Dynamic Interrupts (Runtime Guardrails)
+  # -------------------------------------------------------------------------
+  dynamic_interrupts:
+    description: >
+      Real-time monitoring of every agent tool call against tiered interrupt
+      rules. High-risk operations are blocked BEFORE execution. Implements
+      least privilege via MCP Roots, secret detection, destructive operation
+      prevention, and file scope enforcement.
+    protocol: "ai/orchestration/dynamic_interrupts.yaml"
+    tiers:
+      critical: "Always block — destructive git/SQL, secret exposure"
+      high: "Block by default — out-of-scope writes, large changes, new deps"
+      medium: "Notify and delay — PR creation, external API calls"
+      low: "Log only — token budget warnings, long-running steps"
+    key_features:
+      - "Pre-execution evaluation of every MCP tool call"
+      - "Pattern-based secret detection (API keys, tokens, private keys)"
+      - "Protected branch enforcement"
+      - "Destructive SQL prevention"
+      - "Conflict routing to Judge agent for arbitration"
+
+  # -------------------------------------------------------------------------
+  # Layer 9: LLM-as-a-Judge (Quality Arbitration)
+  # -------------------------------------------------------------------------
+  judge:
+    description: >
+      Independent quality arbiter with VETO POWER. Evaluates artifacts against
+      structured rubrics at defined checkpoints. For high-stakes decisions,
+      uses Majority Voting (3 independent evaluations) instead of single-agent
+      judgment. Tracks Pass@1 to measure pipeline quality over time.
+    agent: "ai/agents/judge.yaml"
+    voting_protocol: "ai/orchestration/majority_voting.yaml"
+    schema: "ai/schemas/judge_verdict.schema.json"
+    checkpoints:
+      post_developer: "Advisory evaluation of implementation quality"
+      post_review: "Evaluate review quality (actionability, accuracy)"
+      pre_merge: "Binding quality gate with veto power"
+      conflict_arbitration: "Resolve inter-agent disagreements"
+    key_features:
+      - "Structured rubric-based evaluation (not subjective)"
+      - "Veto power at pre-merge gate"
+      - "Majority Voting (3 voters) for high-stakes decisions"
+      - "Confidence-weighted synthesis for conflict arbitration"
+      - "Pass@1 tracking for regression detection"
 
 # ---------------------------------------------------------------------------
 # Anti-Patterns — Explicitly Forbidden

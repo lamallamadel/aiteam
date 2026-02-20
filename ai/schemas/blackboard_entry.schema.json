@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "blackboard_entry.schema.json",
+  "title": "Blackboard Entry Envelope",
+  "description": "Schema for the Blackboard entry envelope that wraps every artifact stored in the shared memory. Provides versioning, access control metadata, and traceability.",
+  "type": "object",
+  "required": ["run_id", "entry_key", "producer", "version", "payload_type", "payload", "correlation_id", "created_at"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Workflow run this entry belongs to"
+    },
+    "entry_key": {
+      "type": "string",
+      "description": "Artifact key (e.g., 'ticket_plan', 'persona_review')",
+      "enum": [
+        "task_ledger", "progress_ledger",
+        "ticket_plan", "work_plan", "architecture_notes",
+        "implementation_report", "pr_url",
+        "persona_review", "conflict_resolution",
+        "test_report", "judge_verdict",
+        "escalation", "quality_report", "docs_patch"
+      ]
+    },
+    "producer": {
+      "type": "string",
+      "description": "Agent that produced this entry"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing version number"
+    },
+    "previous_version": {
+      "type": ["integer", "null"],
+      "description": "Version this entry supersedes (null for first version)"
+    },
+    "payload_type": {
+      "type": "string",
+      "enum": ["json", "markdown", "text", "url"],
+      "description": "Content type of the payload"
+    },
+    "payload": {
+      "description": "The actual artifact content"
+    },
+    "payload_schema": {
+      "type": ["string", "null"],
+      "description": "JSON Schema reference for payload validation (null if unstructured)"
+    },
+    "consumers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of agents authorized to read this entry"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Trace correlation identifier"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metadata (tokens_used, duration_ms, etc.)",
+      "properties": {
+        "tokens_used": { "type": "integer" },
+        "duration_ms": { "type": "integer" },
+        "cost_usd": { "type": "number" },
+        "checkpoint": { "type": "string" }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
