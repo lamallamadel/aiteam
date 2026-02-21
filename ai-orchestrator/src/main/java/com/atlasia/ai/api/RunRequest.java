@@ -7,5 +7,6 @@ import jakarta.validation.constraints.NotNull;
 public record RunRequest(
         @NotBlank String repo,
         @NotNull @Min(1) Integer issueNumber,
-        @NotBlank String mode
+        @NotBlank String mode,
+        String autonomy   // optional: "autonomous" (default), "confirm", "observe"
 ) {}

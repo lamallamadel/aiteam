@@ -75,6 +75,9 @@ public class RunController {
                 request.mode(),
                 RunStatus.RECEIVED,
                 Instant.now());
+        if (request.autonomy() != null && !request.autonomy().isBlank()) {
+            entity.setAutonomy(request.autonomy());
+        }
         runRepository.save(entity);
 
         workflowEngine.executeWorkflowAsync(id, token);
@@ -173,6 +176,7 @@ public class RunController {
         return runRepository.findById(id)
                 .map(run -> {
                     run.setStatus(RunStatus.RECEIVED);
+                    run.setAutonomyDevGatePassed(true); // human has reviewed; bypass the autonomy gate
                     runRepository.save(run);
                     workflowEngine.executeWorkflowAsync(id, token);
                     return ResponseEntity.accepted().<RunResponse>body(toRunResponse(run));

@@ -37,7 +37,28 @@ body {
     transition: background 0.2s;
     color: #94a3b8;
     text-decoration: none;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.nav-badge {
+    background: rgba(234, 179, 8, 0.25);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(234, 179, 8, 0); }
 }
 
 .nav-item:hover {

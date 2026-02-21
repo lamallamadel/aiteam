@@ -2,6 +2,7 @@ export interface RunRequest {
     repo: string;
     issueNumber: number;
     mode: string;
+    autonomy?: string; // "autonomous" (default) | "confirm" | "observe"
 }
 
 export interface RunResponse {

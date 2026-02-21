@@ -44,6 +44,12 @@ public class RunEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "autonomy")
+    private String autonomy = "autonomous";
+
+    @Column(name = "autonomy_dev_gate_passed")
+    private boolean autonomyDevGatePassed = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "environment_lifecycle")
     private EnvironmentLifecycle environmentLifecycle = EnvironmentLifecycle.ACTIVE;
@@ -78,8 +84,16 @@ public class RunEntity {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public List<RunArtifactEntity> getArtifacts() { return artifacts; }
+    public String getAutonomy() { return autonomy != null ? autonomy : "autonomous"; }
+    public boolean isAutonomyDevGatePassed() { return autonomyDevGatePassed; }
     public EnvironmentLifecycle getEnvironmentLifecycle() { return environmentLifecycle; }
     public String getEnvironmentCheckpoint() { return environmentCheckpoint; }
+
+    public void setAutonomy(String autonomy) { this.autonomy = autonomy; }
+    public void setAutonomyDevGatePassed(boolean passed) {
+        this.autonomyDevGatePassed = passed;
+        this.updatedAt = Instant.now();
+    }
 
     public void setEnvironmentLifecycle(EnvironmentLifecycle environmentLifecycle) {
         this.environmentLifecycle = environmentLifecycle;

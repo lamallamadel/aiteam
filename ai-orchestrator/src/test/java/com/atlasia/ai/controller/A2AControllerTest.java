@@ -267,7 +267,7 @@ class A2AControllerTest {
 
     @Test
     void submitTask_withGitHubToken_returnsAccepted() throws Exception {
-        RunRequest request = new RunRequest("owner/repo", 42, "full");
+        RunRequest request = new RunRequest("owner/repo", 42, "full", null);
         when(runRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         doNothing().when(workflowEngine).executeWorkflowAsync(any(), eq(GITHUB_TOKEN));
 
@@ -287,7 +287,7 @@ class A2AControllerTest {
     @Test
     void submitTask_withAdminTokenOnly_returnsUnauthorized() throws Exception {
         // Admin token is not a GitHub token → task submission should reject it
-        RunRequest request = new RunRequest("owner/repo", 42, "full");
+        RunRequest request = new RunRequest("owner/repo", 42, "full", null);
 
         mockMvc.perform(post("/api/a2a/tasks")
                         .header("Authorization", "Bearer " + ADMIN_TOKEN)
@@ -301,7 +301,7 @@ class A2AControllerTest {
 
     @Test
     void submitTask_withoutToken_returnsUnauthorized() throws Exception {
-        RunRequest request = new RunRequest("owner/repo", 42, "full");
+        RunRequest request = new RunRequest("owner/repo", 42, "full", null);
 
         mockMvc.perform(post("/api/a2a/tasks")
                         .contentType(MediaType.APPLICATION_JSON)

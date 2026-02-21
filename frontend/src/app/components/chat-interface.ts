@@ -408,7 +408,9 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
 
   startRun(confirmation?: IntentConfirmation) {
     this.showPreview = false;
-    const request = confirmation ? confirmation.request : this.newRequest;
+    const request: RunRequest = confirmation
+      ? { ...confirmation.request, autonomy: confirmation.autonomy }
+      : this.newRequest;
     this.orchestratorService.createRun(request).subscribe({
       next: (run: RunResponse) => {
         this.selectedRun = run;

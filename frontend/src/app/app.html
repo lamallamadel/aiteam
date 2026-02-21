@@ -7,7 +7,12 @@
         <a routerLink="/chat" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-item">New Bolt</a>
         <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">Overview</a>
         <a routerLink="/runs" routerLinkActive="active" class="nav-item">History</a>
-        <a routerLink="/oversight" routerLinkActive="active" class="nav-item">Oversight</a>
+        <a routerLink="/oversight" routerLinkActive="active" class="nav-item oversight-item">
+          Oversight
+          <span *ngIf="escalationService.escalationCount() > 0" class="nav-badge">
+            {{ escalationService.escalationCount() }}
+          </span>
+        </a>
       </div>
 
       <div class="nav-section">

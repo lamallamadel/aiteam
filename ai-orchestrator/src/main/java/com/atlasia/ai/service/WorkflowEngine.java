@@ -130,6 +130,18 @@ public class WorkflowEngine {
             emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
             executeArchitectStep(context);
 
+            // --- Autonomy Gate: pause before code generation if confirm/observe ---
+            if (!runEntity.isAutonomyDevGatePassed() &&
+                    ("confirm".equals(runEntity.getAutonomy()) ||
+                     "observe".equals(runEntity.getAutonomy()))) {
+                log.info("Autonomy gate triggered (autonomy={}): runId={}", runEntity.getAutonomy(), runId);
+                snapshotEnvironment(context);
+                throw new EscalationException(buildLoopEscalation(
+                        "pre_developer_autonomy_gate",
+                        "Architecture plan is complete. Human approval required before code generation begins.",
+                        runEntity.getAutonomy()));
+            }
+
             // --- Graph-Based Loop: Developer ↔ Review ↔ Tester ---
             // Loop-back routing: review or tester can route back to developer
             // bounded by max_iterations to prevent infinite cycles.
