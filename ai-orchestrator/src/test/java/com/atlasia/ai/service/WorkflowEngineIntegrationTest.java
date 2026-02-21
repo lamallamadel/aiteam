@@ -68,6 +68,18 @@ class WorkflowEngineIntegrationTest {
         @MockBean
         private TraceEventService traceEventService;
 
+        @MockBean
+        private BlackboardService blackboardService;
+
+        @MockBean
+        private DynamicInterruptService interruptService;
+
+        @MockBean
+        private JudgeService judgeService;
+
+        @MockBean
+        private A2ADiscoveryService a2aDiscoveryService;
+
         @Autowired
         private WorkflowEngine workflowEngine;
 
@@ -106,6 +118,13 @@ class WorkflowEngineIntegrationTest {
                 lenient().when(report.getFindings()).thenReturn(java.util.List.of());
                 lenient().when(report.getMergedRecommendations()).thenReturn(java.util.List.of());
                 lenient().when(personaReviewService.reviewCodeChanges(any(), any())).thenReturn(report);
+
+                JudgeService.JudgeVerdict passingVerdict = new JudgeService.JudgeVerdict(
+                                java.util.UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                0.85, "pass", 0.9, java.util.Map.of(),
+                                java.util.List.of(), "Artifact meets quality bar. Proceed to next step.",
+                                null, java.time.Instant.now());
+                lenient().when(judgeService.evaluate(any(), any(), any())).thenReturn(passingVerdict);
         }
 
         @Test

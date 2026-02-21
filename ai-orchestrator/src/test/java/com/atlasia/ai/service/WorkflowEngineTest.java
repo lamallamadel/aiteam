@@ -7,6 +7,8 @@ import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.atlasia.ai.service.trace.TraceEventService;
 import io.micrometer.core.instrument.Timer;
+import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +65,18 @@ class WorkflowEngineTest {
         @Mock
         private TraceEventService traceEventService;
 
+        @Mock
+        private BlackboardService blackboardService;
+
+        @Mock
+        private DynamicInterruptService interruptService;
+
+        @Mock
+        private JudgeService judgeService;
+
+        @Mock
+        private A2ADiscoveryService a2aDiscoveryService;
+
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
 
@@ -80,7 +94,11 @@ class WorkflowEngineTest {
                                 writerStep,
                                 metrics,
                                 eventBus,
-                                traceEventService);
+                                traceEventService,
+                                blackboardService,
+                                interruptService,
+                                judgeService,
+                                a2aDiscoveryService);
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
 
                 runEntity = new RunEntity(
@@ -101,6 +119,16 @@ class WorkflowEngineTest {
                 lenient().when(metrics.getAgentStepDuration()).thenReturn(mockTimer);
 
                 setupPersonaReviewMock();
+                setupJudgeMock();
+        }
+
+        private void setupJudgeMock() {
+                JudgeService.JudgeVerdict passingVerdict = new JudgeService.JudgeVerdict(
+                                UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                0.85, "pass", 0.9, Map.of(),
+                                List.of(), "Artifact meets quality bar. Proceed to next step.",
+                                null, Instant.now());
+                lenient().when(judgeService.evaluate(any(), anyString(), anyString())).thenReturn(passingVerdict);
         }
 
         private void setupPersonaReviewMock() {
@@ -333,11 +361,11 @@ class WorkflowEngineTest {
                         return "{\"issueId\":456}";
                 });
 
-                when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
-                when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                lenient().when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                lenient().when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
                 setupDeveloperStepMocks();
-                when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
-                when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
+                lenient().when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+                lenient().when(writerStep.execute(any(RunContext.class))).thenReturn("Docs updated");
 
                 workflowEngine.executeWorkflow(runEntity.getId());
 

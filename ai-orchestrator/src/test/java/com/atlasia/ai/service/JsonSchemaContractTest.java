@@ -39,6 +39,7 @@ class JsonSchemaContractTest {
                     "acceptanceCriteria": ["Criterion 1", "Criterion 2", "Criterion 3"],
                     "outOfScope": ["Not included"],
                     "risks": ["Risk 1"],
+                    "priority": "P1",
                     "labelsToApply": ["bug", "high-priority"]
                 }
                 """;
@@ -81,7 +82,7 @@ class JsonSchemaContractTest {
     void workPlanSchema_validJson_passes() throws IOException {
         String validWorkPlan = """
                 {
-                    "branchName": "ai/issue-123",
+                    "branchName": "ai/issue-123-test-feature",
                     "tasks": [
                         {
                             "id": "task-1",
@@ -122,7 +123,7 @@ class JsonSchemaContractTest {
     void workPlanSchema_lessThanThreeTasks_fails() {
         String invalidWorkPlan = """
                 {
-                    "branchName": "ai/issue-123",
+                    "branchName": "ai/issue-123-test-feature",
                     "tasks": [
                         {
                             "id": "task-1",
@@ -145,7 +146,7 @@ class JsonSchemaContractTest {
     void workPlanSchema_invalidArea_fails() {
         String invalidWorkPlan = """
                 {
-                    "branchName": "ai/issue-123",
+                    "branchName": "ai/issue-123-test-feature",
                     "tasks": [
                         {
                             "id": "task-1",
@@ -223,7 +224,7 @@ class JsonSchemaContractTest {
                     "context": "Testing phase for issue #123",
                     "blocker": "CI tests failed after 3 attempts",
                     "prUrl": "https://github.com/owner/repo/pull/1",
-                    "branchName": "ai/issue-123",
+                    "branchName": "ai/issue-123-test-feature",
                     "ciFixAttempts": 3,
                     "e2eFixAttempts": 0,
                     "evidence": ["Test failure logs", "Error messages"],
@@ -306,7 +307,7 @@ class JsonSchemaContractTest {
     void workPlanSchema_taskWithoutRequiredFields_fails() {
         String invalidWorkPlan = """
                 {
-                    "branchName": "ai/issue-123",
+                    "branchName": "ai/issue-123-test-feature",
                     "tasks": [
                         {
                             "id": "task-1",
