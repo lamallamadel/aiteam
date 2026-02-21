@@ -2,6 +2,7 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,84 @@ public class A2ADiscoveryService {
 
     public A2ADiscoveryService(OrchestratorMetrics metrics) {
         this.metrics = metrics;
+    }
+
+    /**
+     * Pre-populate the registry at startup with cards for every pipeline agent
+     * and the orchestrator itself.
+     */
+    @PostConstruct
+    public void registerDefaultAgents() {
+        AgentConstraints defaultConstraints = new AgentConstraints(8192, 300_000, 0.10);
+
+        register(new AgentCard(
+                "pm-v1", "1.0", "PM", "atlasia",
+                "Product Manager agent: analyzes tickets and extracts requirements",
+                Set.of("ticket_analysis", "requirement_extraction", "issue_decomposition", "acceptance_criteria"),
+                "ticket_plan", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "qualifier-v1", "1.0", "QUALIFIER", "atlasia",
+                "Qualifier agent: estimates work, decomposes tasks, and scores scope",
+                Set.of("work_estimation", "task_decomposition", "priority_scoring", "scope_analysis"),
+                "work_plan", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "architect-v1", "1.0", "ARCHITECT", "atlasia",
+                "Architect agent: designs system architecture and plans implementation",
+                Set.of("system_design", "architecture_planning", "tech_selection", "dependency_analysis"),
+                "architecture_notes", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "developer-v1", "1.0", "DEVELOPER", "atlasia",
+                "Developer agent: generates code, runs security review, and commits changes",
+                Set.of("code_generation", "security_review", "code_quality", "multi_file_commit"),
+                "code_changes", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "reviewer-v1", "1.0", "REVIEW", "atlasia",
+                "Reviewer agent: performs multi-persona code review and security audit",
+                Set.of("code_review", "security_audit", "persona_review", "risk_assessment"),
+                "persona_review_report", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "tester-v1", "1.0", "TESTER", "atlasia",
+                "Tester agent: validates CI, generates tests, and applies fixes",
+                Set.of("ci_validation", "test_generation", "e2e_validation", "fix_generation"),
+                "test_report", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "writer-v1", "1.0", "WRITER", "atlasia",
+                "Writer agent: produces documentation, changelogs, and inline comments",
+                Set.of("documentation", "changelog", "api_docs", "inline_comments"),
+                "docs_update", List.of(), defaultConstraints, "local", null, "active"));
+
+        register(new AgentCard(
+                "judge-v1", "1.0", "JUDGE", "atlasia",
+                "Judge agent: arbitrates quality decisions using majority voting",
+                Set.of("quality_arbitration", "majority_voting", "veto", "criterion_scoring"),
+                "judge_verdict", List.of(), defaultConstraints, "local", null, "active"));
+
+        log.info("A2A registry pre-populated with {} default agents", registry.size());
+    }
+
+    /**
+     * Returns the orchestrator's own AgentCard for A2A discovery (/.well-known/agent.json).
+     */
+    public AgentCard getOrchestratorCard() {
+        AgentConstraints constraints = new AgentConstraints(32768, 1_800_000, 1.00);
+        return new AgentCard(
+                "atlasia-orchestrator", "1.0", "ORCHESTRATOR", "atlasia",
+                "Atlasia AI Orchestrator: full PM→Qualifier→Architect→Developer→Review→Tester→Writer pipeline",
+                Set.of("ticket_analysis", "requirement_extraction", "system_design", "code_generation",
+                        "code_review", "ci_validation", "documentation", "quality_arbitration",
+                        "majority_voting", "multi_agent_pipeline"),
+                "pipeline_result",
+                List.of(),
+                constraints,
+                "http",
+                "/actuator/health",
+                "active");
     }
 
     /**

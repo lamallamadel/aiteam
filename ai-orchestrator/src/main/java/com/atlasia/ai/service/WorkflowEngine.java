@@ -1,9 +1,13 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.model.EnvironmentLifecycle;
+import com.atlasia.ai.model.EnvironmentSnapshot;
 import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
+import com.atlasia.ai.service.AgentBindingService.AgentBinding;
 import com.atlasia.ai.service.event.WorkflowEvent;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.exception.OrchestratorException;
@@ -11,6 +15,7 @@ import com.atlasia.ai.service.exception.WorkflowException;
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.atlasia.ai.service.trace.TraceEventService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -34,20 +40,17 @@ public class WorkflowEngine {
 
     private final RunRepository runRepository;
     private final JsonSchemaValidator schemaValidator;
-    private final PmStep pmStep;
-    private final QualifierStep qualifierStep;
-    private final ArchitectStep architectStep;
     private final DeveloperStep developerStep;
     private final PersonaReviewService personaReviewService;
-    private final TesterStep testerStep;
-    private final WriterStep writerStep;
     private final OrchestratorMetrics metrics;
     private final WorkflowEventBus eventBus;
     private final TraceEventService traceEventService;
     private final BlackboardService blackboardService;
     private final DynamicInterruptService interruptService;
     private final JudgeService judgeService;
-    private final A2ADiscoveryService a2aDiscoveryService;
+    private final AgentStepFactory agentStepFactory;
+    private final AgentBindingService agentBindingService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
     @Lazy
@@ -56,36 +59,30 @@ public class WorkflowEngine {
     public WorkflowEngine(
             RunRepository runRepository,
             JsonSchemaValidator schemaValidator,
-            PmStep pmStep,
-            QualifierStep qualifierStep,
-            ArchitectStep architectStep,
             DeveloperStep developerStep,
             PersonaReviewService personaReviewService,
-            TesterStep testerStep,
-            WriterStep writerStep,
             OrchestratorMetrics metrics,
             WorkflowEventBus eventBus,
             TraceEventService traceEventService,
             BlackboardService blackboardService,
             DynamicInterruptService interruptService,
             JudgeService judgeService,
-            A2ADiscoveryService a2aDiscoveryService) {
+            AgentStepFactory agentStepFactory,
+            AgentBindingService agentBindingService,
+            ObjectMapper objectMapper) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
-        this.pmStep = pmStep;
-        this.qualifierStep = qualifierStep;
-        this.architectStep = architectStep;
         this.developerStep = developerStep;
         this.personaReviewService = personaReviewService;
-        this.testerStep = testerStep;
-        this.writerStep = writerStep;
         this.metrics = metrics;
         this.eventBus = eventBus;
         this.traceEventService = traceEventService;
         this.blackboardService = blackboardService;
         this.interruptService = interruptService;
         this.judgeService = judgeService;
-        this.a2aDiscoveryService = a2aDiscoveryService;
+        this.agentStepFactory = agentStepFactory;
+        this.agentBindingService = agentBindingService;
+        this.objectMapper = objectMapper;
     }
 
     @Async("workflowExecutor")
@@ -262,6 +259,7 @@ public class WorkflowEngine {
 
             runEntity.setStatus(RunStatus.DONE);
             runEntity.setCurrentAgent(null);
+            runEntity.setEnvironmentLifecycle(EnvironmentLifecycle.COMPLETED);
             runRepository.save(runEntity);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -308,13 +306,19 @@ public class WorkflowEngine {
     }
 
     private void executePmStep(RunContext context) throws Exception {
-        String agentName = "PM";
+        String role = "PM";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(agentName);
+        CorrelationIdHolder.setAgentName(role);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+
+        Set<String> caps = Set.of("ticket_analysis", "requirement_extraction");
+        AgentCard card = agentStepFactory.getActiveCard(role);
+        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+        AgentBinding binding = card != null
+                ? agentBindingService.negotiate(card, caps, runId) : null;
 
         try {
             log.info("Executing PM step: runId={}, correlationId={}",
@@ -322,30 +326,33 @@ public class WorkflowEngine {
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.PM);
-            runEntity.setCurrentAgent(agentName);
+            runEntity.setCurrentAgent(role);
             runRepository.save(runEntity);
 
-            String artifact = pmStep.execute(context);
+            String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
             schemaValidator.validate(artifact, "ticket_plan.schema.json");
             emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
-                    runId, Instant.now(), agentName, "ticket_plan.schema.json", true));
+                    runId, Instant.now(), role, "ticket_plan.schema.json", true));
 
             context.setTicketPlan(artifact);
-            persistArtifact(runEntity, agentName, "ticket_plan.json", artifact);
+            persistArtifact(runEntity, role, "ticket_plan.json", artifact);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(role, "execute", duration);
 
             emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), agentName, duration, "ticket_plan.json"));
+                    runId, Instant.now(), role, duration, "ticket_plan.json"));
+
+            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
             log.info("PM step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(role, "execute");
 
             log.error("PM step failed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -356,13 +363,19 @@ public class WorkflowEngine {
     }
 
     private void executeQualifierStep(RunContext context) throws Exception {
-        String agentName = "QUALIFIER";
+        String role = "QUALIFIER";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(agentName);
+        CorrelationIdHolder.setAgentName(role);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+
+        Set<String> caps = Set.of("work_estimation", "task_decomposition");
+        AgentCard card = agentStepFactory.getActiveCard(role);
+        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+        AgentBinding binding = card != null
+                ? agentBindingService.negotiate(card, caps, runId) : null;
 
         try {
             log.info("Executing Qualifier step: runId={}, correlationId={}",
@@ -370,30 +383,33 @@ public class WorkflowEngine {
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.QUALIFIER);
-            runEntity.setCurrentAgent(agentName);
+            runEntity.setCurrentAgent(role);
             runRepository.save(runEntity);
 
-            String artifact = qualifierStep.execute(context);
+            String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
             schemaValidator.validate(artifact, "work_plan.schema.json");
             emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
-                    runId, Instant.now(), agentName, "work_plan.schema.json", true));
+                    runId, Instant.now(), role, "work_plan.schema.json", true));
 
             context.setWorkPlan(artifact);
-            persistArtifact(runEntity, agentName, "work_plan.json", artifact);
+            persistArtifact(runEntity, role, "work_plan.json", artifact);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(role, "execute", duration);
 
             emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), agentName, duration, "work_plan.json"));
+                    runId, Instant.now(), role, duration, "work_plan.json"));
+
+            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
             log.info("Qualifier step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(role, "execute");
 
             log.error("Qualifier step failed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -404,13 +420,19 @@ public class WorkflowEngine {
     }
 
     private void executeArchitectStep(RunContext context) throws Exception {
-        String agentName = "ARCHITECT";
+        String role = "ARCHITECT";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(agentName);
+        CorrelationIdHolder.setAgentName(role);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+
+        Set<String> caps = Set.of("system_design", "architecture_planning");
+        AgentCard card = agentStepFactory.getActiveCard(role);
+        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+        AgentBinding binding = card != null
+                ? agentBindingService.negotiate(card, caps, runId) : null;
 
         try {
             log.info("Executing Architect step: runId={}, correlationId={}",
@@ -418,25 +440,29 @@ public class WorkflowEngine {
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.ARCHITECT);
-            runEntity.setCurrentAgent(agentName);
+            runEntity.setCurrentAgent(role);
             runRepository.save(runEntity);
 
-            String artifact = architectStep.execute(context);
-            persistArtifact(runEntity, agentName, "architecture_notes.md", artifact);
+            String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
+            context.setArchitectureNotes(artifact);
+            persistArtifact(runEntity, role, "architecture_notes.md", artifact);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(role, "execute", duration);
 
             emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), agentName, duration, "architecture_notes.md"));
+                    runId, Instant.now(), role, duration, "architecture_notes.md"));
+
+            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
             log.info("Architect step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(role, "execute");
 
             log.error("Architect step failed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -468,6 +494,7 @@ public class WorkflowEngine {
             checkInterrupt(agentName, "generate", runId);
 
             developerStep.generateCode(context);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
@@ -557,13 +584,19 @@ public class WorkflowEngine {
     }
 
     private void executeTesterStep(RunContext context) throws Exception {
-        String agentName = "TESTER";
+        String role = "TESTER";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(agentName);
+        CorrelationIdHolder.setAgentName(role);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+
+        Set<String> caps = Set.of("ci_validation", "test_generation");
+        AgentCard card = agentStepFactory.getActiveCard(role);
+        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+        AgentBinding binding = card != null
+                ? agentBindingService.negotiate(card, caps, runId) : null;
 
         try {
             log.info("Executing Tester step: runId={}, correlationId={}",
@@ -571,22 +604,25 @@ public class WorkflowEngine {
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.TESTER);
-            runEntity.setCurrentAgent(agentName);
+            runEntity.setCurrentAgent(role);
             runRepository.save(runEntity);
 
-            String artifact = testerStep.execute(context);
+            String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
             schemaValidator.validate(artifact, "test_report.schema.json");
             emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
-                    runId, Instant.now(), agentName, "test_report.schema.json", true));
+                    runId, Instant.now(), role, "test_report.schema.json", true));
 
-            persistArtifact(runEntity, agentName, "test_report.json", artifact);
+            persistArtifact(runEntity, role, "test_report.json", artifact);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(role, "execute", duration);
 
             emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), agentName, duration, "test_report.json"));
+                    runId, Instant.now(), role, duration, "test_report.json"));
+
+            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
             log.info("Tester step completed: runId={}, duration={}ms, ciFixCount={}, e2eFixCount={}, correlationId={}",
                     context.getRunEntity().getId(), duration, runEntity.getCiFixCount(),
@@ -594,7 +630,7 @@ public class WorkflowEngine {
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(role, "execute");
 
             log.error("Tester step failed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -605,13 +641,19 @@ public class WorkflowEngine {
     }
 
     private void executeWriterStep(RunContext context) throws Exception {
-        String agentName = "WRITER";
+        String role = "WRITER";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(agentName);
+        CorrelationIdHolder.setAgentName(role);
         Timer.Sample stepTimer = metrics.startAgentStepTimer();
         long startTime = System.currentTimeMillis();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), agentName, "execute"));
+        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+
+        Set<String> caps = Set.of("documentation", "changelog");
+        AgentCard card = agentStepFactory.getActiveCard(role);
+        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+        AgentBinding binding = card != null
+                ? agentBindingService.negotiate(card, caps, runId) : null;
 
         try {
             log.info("Executing Writer step: runId={}, correlationId={}",
@@ -619,28 +661,31 @@ public class WorkflowEngine {
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.WRITER);
-            runEntity.setCurrentAgent(agentName);
+            runEntity.setCurrentAgent(role);
             runRepository.save(runEntity);
 
             // Dynamic interrupt check before writer execution
-            checkInterrupt(agentName, "execute", runId);
+            checkInterrupt(role, "execute", runId);
 
-            String artifact = writerStep.execute(context);
-            persistArtifact(runEntity, agentName, "docs_update", artifact);
+            String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
+            persistArtifact(runEntity, role, "docs_update", artifact);
+            snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(agentName, "execute", duration);
+            metrics.recordAgentStepExecution(role, "execute", duration);
 
             emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), agentName, duration, "docs_update"));
+                    runId, Instant.now(), role, duration, "docs_update"));
+
+            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
             log.info("Writer step completed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(agentName, "execute");
+            metrics.recordAgentStepError(role, "execute");
 
             log.error("Writer step failed: runId={}, duration={}ms, correlationId={}",
                     context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
@@ -867,6 +912,7 @@ public class WorkflowEngine {
         }
 
         runEntity.setStatus(RunStatus.ESCALATED);
+        runEntity.setEnvironmentLifecycle(EnvironmentLifecycle.PAUSED);
         runRepository.save(runEntity);
     }
 
@@ -877,6 +923,7 @@ public class WorkflowEngine {
                 CorrelationIdHolder.getCorrelationId(), e);
 
         runEntity.setStatus(RunStatus.FAILED);
+        runEntity.setEnvironmentLifecycle(EnvironmentLifecycle.PAUSED);
         runRepository.save(runEntity);
 
         persistErrorArtifact(runEntity, e);
@@ -887,9 +934,63 @@ public class WorkflowEngine {
                 runEntity.getId(), runEntity.getCurrentAgent(), CorrelationIdHolder.getCorrelationId(), e);
 
         runEntity.setStatus(RunStatus.FAILED);
+        runEntity.setEnvironmentLifecycle(EnvironmentLifecycle.PAUSED);
         runRepository.save(runEntity);
 
         persistErrorArtifact(runEntity, e);
+    }
+
+    // -------------------------------------------------------------------------
+    // TEA Environment Snapshot / Restore
+    // -------------------------------------------------------------------------
+
+    /**
+     * Serialize the current RunContext state into the RunEntity's environmentCheckpoint.
+     * Called after each successful step so the environment is always recoverable.
+     */
+    private void snapshotEnvironment(RunContext context) {
+        try {
+            EnvironmentSnapshot snapshot = EnvironmentSnapshot.of(context);
+            String json = objectMapper.writeValueAsString(snapshot);
+            RunEntity runEntity = context.getRunEntity();
+            runEntity.setEnvironmentCheckpoint(json);
+            runEntity.setEnvironmentLifecycle(EnvironmentLifecycle.ACTIVE);
+            runRepository.save(runEntity);
+            log.debug("TEA SNAPSHOT: runId={}, capturedAt={}", runEntity.getId(), snapshot.capturedAt());
+        } catch (Exception e) {
+            log.error("TEA SNAPSHOT failed: runId={}", context.getRunEntity().getId(), e);
+        }
+    }
+
+    /**
+     * Restore a RunContext from the persisted environment checkpoint.
+     * Used by the resume endpoint to reconstruct state without re-executing steps.
+     *
+     * @param runId the run to restore
+     * @return a RunContext populated from the latest checkpoint, or null if no checkpoint
+     */
+    public RunContext restoreEnvironment(UUID runId) {
+        RunEntity entity = runRepository.findById(runId).orElse(null);
+        if (entity == null) {
+            log.warn("TEA RESTORE: run not found: {}", runId);
+            return null;
+        }
+        String checkpoint = entity.getEnvironmentCheckpoint();
+        if (checkpoint == null || checkpoint.isBlank()) {
+            log.warn("TEA RESTORE: no checkpoint for runId={}", runId);
+            String[] repoParts = entity.getRepo().split("/");
+            return new RunContext(entity, repoParts[0], repoParts[1]);
+        }
+        try {
+            EnvironmentSnapshot snapshot = objectMapper.readValue(checkpoint, EnvironmentSnapshot.class);
+            RunContext ctx = snapshot.restore(entity);
+            log.info("TEA RESTORE: runId={}, capturedAt={}", runId, snapshot.capturedAt());
+            return ctx;
+        } catch (Exception e) {
+            log.error("TEA RESTORE failed: runId={}", runId, e);
+            String[] repoParts = entity.getRepo().split("/");
+            return new RunContext(entity, repoParts[0], repoParts[1]);
+        }
     }
 
     private void persistErrorArtifact(RunEntity runEntity, Exception e) {

@@ -139,6 +139,47 @@ public class RunController {
                 });
     }
 
+    /** Returns the serialized environment checkpoint for a run. */
+    @GetMapping("/{id}/environment")
+    public ResponseEntity<String> getEnvironment(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runRepository.findById(id)
+                .map(run -> {
+                    String checkpoint = run.getEnvironmentCheckpoint();
+                    if (checkpoint == null || checkpoint.isBlank()) {
+                        return ResponseEntity.noContent().<String>build();
+                    }
+                    return ResponseEntity.ok(checkpoint);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Resume a run from its environment checkpoint.
+     * Re-executes the workflow; WorkflowEngine will load checkpoint context.
+     */
+    @PostMapping("/{id}/resume")
+    public ResponseEntity<RunResponse> resume(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id) {
+        String token = getValidatedToken(authorization);
+        if (token == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runRepository.findById(id)
+                .map(run -> {
+                    run.setStatus(RunStatus.RECEIVED);
+                    runRepository.save(run);
+                    workflowEngine.executeWorkflowAsync(id, token);
+                    return ResponseEntity.accepted().<RunResponse>body(toRunResponse(run));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/{id}/escalation-decision")
     public ResponseEntity<Void> handleEscalationDecision(
             @RequestHeader(value = "Authorization", required = false) String authorization,

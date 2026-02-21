@@ -1,6 +1,8 @@
 package com.atlasia.ai.model;
 
+import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.Type;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +44,14 @@ public class RunEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "environment_lifecycle")
+    private EnvironmentLifecycle environmentLifecycle = EnvironmentLifecycle.ACTIVE;
+
+    @Type(JsonBinaryType.class)
+    @Column(name = "environment_checkpoint", columnDefinition = "jsonb")
+    private String environmentCheckpoint;
+
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RunArtifactEntity> artifacts = new ArrayList<>();
 
@@ -68,8 +78,20 @@ public class RunEntity {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public List<RunArtifactEntity> getArtifacts() { return artifacts; }
+    public EnvironmentLifecycle getEnvironmentLifecycle() { return environmentLifecycle; }
+    public String getEnvironmentCheckpoint() { return environmentCheckpoint; }
 
-    public void setStatus(RunStatus status) { 
+    public void setEnvironmentLifecycle(EnvironmentLifecycle environmentLifecycle) {
+        this.environmentLifecycle = environmentLifecycle;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setEnvironmentCheckpoint(String environmentCheckpoint) {
+        this.environmentCheckpoint = environmentCheckpoint;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setStatus(RunStatus status) {
         this.status = status;
         this.updatedAt = Instant.now();
     }

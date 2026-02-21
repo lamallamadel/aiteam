@@ -6,6 +6,7 @@ import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.atlasia.ai.service.trace.TraceEventService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
 import java.time.Instant;
 import java.util.Map;
@@ -19,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -74,7 +76,10 @@ class WorkflowEngineTest {
         private JudgeService judgeService;
 
         @Mock
-        private A2ADiscoveryService a2aDiscoveryService;
+        private AgentStepFactory agentStepFactory;
+
+        @Mock
+        private AgentBindingService agentBindingService;
 
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
@@ -84,21 +89,25 @@ class WorkflowEngineTest {
                 workflowEngine = new WorkflowEngine(
                                 runRepository,
                                 schemaValidator,
-                                pmStep,
-                                qualifierStep,
-                                architectStep,
                                 developerStep,
                                 personaReviewService,
-                                testerStep,
-                                writerStep,
                                 metrics,
                                 eventBus,
                                 traceEventService,
                                 blackboardService,
                                 interruptService,
                                 judgeService,
-                                a2aDiscoveryService);
+                                agentStepFactory,
+                                agentBindingService,
+                                new ObjectMapper());
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
+
+                // Wire the factory to return the appropriate step mocks
+                lenient().when(agentStepFactory.resolveForRole(eq("PM"), any(Set.class))).thenReturn(pmStep);
+                lenient().when(agentStepFactory.resolveForRole(eq("QUALIFIER"), any(Set.class))).thenReturn(qualifierStep);
+                lenient().when(agentStepFactory.resolveForRole(eq("ARCHITECT"), any(Set.class))).thenReturn(architectStep);
+                lenient().when(agentStepFactory.resolveForRole(eq("TESTER"), any(Set.class))).thenReturn(testerStep);
+                lenient().when(agentStepFactory.resolveForRole(eq("WRITER"), any(Set.class))).thenReturn(writerStep);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
