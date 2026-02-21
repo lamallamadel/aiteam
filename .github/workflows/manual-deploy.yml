@@ -1,0 +1,117 @@
+name: Manual Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
+
+jobs:
+  manual-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate environment
+        run: |
+          if [ "${{ github.event.inputs.environment }}" != "production" ] && [ "${{ github.event.inputs.environment }}" != "staging" ]; then
+            echo "❌ Invalid environment"
+            exit 1
+          fi
+          echo "✅ Environment: ${{ github.event.inputs.environment }}"
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy via SSH
+        run: |
+          echo "🚀 Deploying aiteam to ${{ github.event.inputs.environment }}..."
+          
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" << 'EOF'
+          set -e
+          cd "${{ secrets.DEPLOY_DIR }}"
+          
+          echo "📍 Connected to ${{ secrets.DEPLOY_HOST }}"
+          echo "🔄 Pulling latest code from GitHub..."
+          git pull origin main --quiet
+          
+          echo "🐳 Pulling latest images from GHCR..."
+          docker-compose -f docker-compose.prod.yml pull
+          
+          echo "💾 Running deployment script..."
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            ./scripts/deploy.sh prod
+          else
+            ./scripts/deploy.sh staging
+          fi
+          
+          echo "✅ Deployment complete"
+          echo "📊 Service status:"
+          docker-compose -f docker-compose.prod.yml ps
+          EOF
+
+      - name: Notify Slack on success
+        if: success()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ aiteam deployed manually",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*GitHub Manual Deploy Success*\nEnvironment: `${{ github.event.inputs.environment }}`\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.event.after }}`"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ aiteam manual deploy failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*GitHub Manual Deploy Failed*\nEnvironment: `${{ github.event.inputs.environment }}`\nDetails: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+        continue-on-error: true
