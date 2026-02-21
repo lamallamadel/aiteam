@@ -3,6 +3,19 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding } from '../models/orchestrator.model';
 
+export interface OversightInterruptRule {
+  ruleName: string;
+  tier: string;
+  enabled: boolean;
+}
+
+export interface OversightConfigPayload {
+  autonomyLevel: string;
+  interruptRules: OversightInterruptRule[];
+  autoApproveMedianTier: boolean;
+  maxConcurrentRuns: number;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -82,5 +95,14 @@ export class OrchestratorService {
 
     addGraft(runId: string, after: string, agentName: string): Observable<void> {
         return this.http.post<void>(`${this.apiUrl}/${runId}/grafts`, { after, agentName });
+    }
+
+    // Oversight config
+    getOversightConfig(): Observable<OversightConfigPayload> {
+        return this.http.get<OversightConfigPayload>('/api/oversight/config');
+    }
+
+    saveOversightConfig(config: OversightConfigPayload): Observable<OversightConfigPayload> {
+        return this.http.post<OversightConfigPayload>('/api/oversight/config', config);
     }
 }

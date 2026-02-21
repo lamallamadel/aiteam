@@ -99,6 +99,7 @@ class WorkflowEngineTest {
                                 judgeService,
                                 agentStepFactory,
                                 agentBindingService,
+                                new com.atlasia.ai.service.InterruptDecisionStore(),
                                 new ObjectMapper());
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
 

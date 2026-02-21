@@ -29,6 +29,10 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class WorkflowEngine {
@@ -50,6 +54,7 @@ public class WorkflowEngine {
     private final JudgeService judgeService;
     private final AgentStepFactory agentStepFactory;
     private final AgentBindingService agentBindingService;
+    private final InterruptDecisionStore interruptDecisionStore;
     private final ObjectMapper objectMapper;
 
     @Autowired
@@ -69,6 +74,7 @@ public class WorkflowEngine {
             JudgeService judgeService,
             AgentStepFactory agentStepFactory,
             AgentBindingService agentBindingService,
+            InterruptDecisionStore interruptDecisionStore,
             ObjectMapper objectMapper) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
@@ -82,6 +88,7 @@ public class WorkflowEngine {
         this.judgeService = judgeService;
         this.agentStepFactory = agentStepFactory;
         this.agentBindingService = agentBindingService;
+        this.interruptDecisionStore = interruptDecisionStore;
         this.objectMapper = objectMapper;
     }
 
@@ -1087,10 +1094,39 @@ public class WorkflowEngine {
         if (decision.requiresHumanApproval()) {
             log.warn("Interrupt requires human approval: agent={}, action={}, rule={}, tier={}, runId={}",
                     agentName, action, decision.getRuleName(), decision.getTier(), runId);
+
+            // Park a future in the shared store; OversightController.resolveInterrupt() will
+            // complete it when the human submits their decision via POST /api/oversight/runs/{id}/interrupt-decision
+            CompletableFuture<String> approvalFuture = interruptDecisionStore.park(
+                    runId, agentName, decision.getRuleName(), decision.getTier(), decision.getMessage());
+
             emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
                     runId, Instant.now(),
                     "INTERRUPT_APPROVAL_NEEDED: " + decision.getMessage(),
                     agentName, -1));
+
+            try {
+                String humanDecision = approvalFuture.get(15, TimeUnit.MINUTES);
+                if ("deny".equalsIgnoreCase(humanDecision)) {
+                    throw new EscalationException(buildLoopEscalation(
+                            "interrupt_denied",
+                            "Human denied action '" + action + "': rule=" + decision.getRuleName(),
+                            "DENIED"));
+                }
+                log.info("Interrupt APPROVED by human: agent={}, action={}, runId={}", agentName, action, runId);
+            } catch (TimeoutException e) {
+                interruptDecisionStore.cancel(runId);
+                throw new EscalationException(buildLoopEscalation(
+                        "interrupt_timeout",
+                        "No human decision received within 15 minutes for action: " + action,
+                        "TIMEOUT"));
+            } catch (ExecutionException e) {
+                interruptDecisionStore.cancel(runId);
+                log.error("Interrupt future failed: runId={}", runId, e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                interruptDecisionStore.cancel(runId);
+            }
         }
     }
 

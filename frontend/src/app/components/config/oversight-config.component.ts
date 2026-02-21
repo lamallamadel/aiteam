@@ -1,6 +1,7 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { OrchestratorService } from '../../services/orchestrator.service';
 
 interface OversightRule {
   id: string;
@@ -62,10 +63,12 @@ interface OversightRule {
       </div>
 
       <div class="save-section">
-        <button class="btn-save" (click)="saveConfig()">
-          Save Configuration
+        <button class="btn-save" (click)="saveConfig()" [disabled]="saving()">
+          {{ saving() ? 'Saving…' : 'Save Configuration' }}
         </button>
-        <span class="save-hint">Changes take effect on the next bolt execution</span>
+        <span *ngIf="savedOk()" class="save-feedback ok">✓ Saved</span>
+        <span *ngIf="saveError()" class="save-feedback err">✗ {{ saveError() }}</span>
+        <span *ngIf="!savedOk() && !saveError()" class="save-hint">Changes take effect on the next bolt execution</span>
       </div>
     </div>
   `,
@@ -187,99 +190,99 @@ interface OversightRule {
     }
     .btn-save:hover { opacity: 0.85; }
     .save-hint { color: rgba(255,255,255,0.35); font-size: 0.8rem; }
+    .save-feedback { font-size: 0.82rem; font-weight: 600; }
+    .save-feedback.ok  { color: #22c55e; }
+    .save-feedback.err { color: #ef4444; }
   `]
 })
+// Default rule catalogue (descriptions live only in the frontend)
+const DEFAULT_RULES: OversightRule[] = [
+  { id: 'pre-commit',      name: 'Pre-Commit Review',        description: 'Require human approval before developer commits code',          enabled: true,  level: 'supervised' },
+  { id: 'security-scan',   name: 'Security Scan Gate',       description: 'Escalate if static analysis detects vulnerabilities',           enabled: true,  level: 'full_auto'  },
+  { id: 'test-failure',    name: 'Test Failure Escalation',   description: 'Escalate after fix loop limit is exceeded',                    enabled: true,  level: 'supervised' },
+  { id: 'pr-merge',        name: 'PR Merge Approval',        description: 'Require human approval before merging pull requests',           enabled: true,  level: 'manual'     },
+  { id: 'schema-mismatch', name: 'Schema Validation Failure', description: 'Escalate when agent output does not match expected schema',    enabled: false, level: 'supervised' },
+  { id: 'token-overrun',   name: 'Token Budget Exceeded',    description: 'Escalate when an agent exceeds its token budget',               enabled: true,  level: 'supervised' },
+];
+
 export class OversightConfigComponent implements OnInit {
+  private orchestratorService = inject(OrchestratorService);
+
   selectedAutonomy = signal<string>('supervised');
-  rules = signal<OversightRule[]>([]);
+  rules            = signal<OversightRule[]>([]);
+  saving           = signal(false);
+  savedOk          = signal(false);
+  saveError        = signal<string | null>(null);
 
   autonomyLevels = [
-    {
-      value: 'full_auto',
-      name: 'Full Auto',
-      icon: '⚡',
-      description: 'Agents execute without human checkpoints'
-    },
-    {
-      value: 'supervised',
-      name: 'Supervised',
-      icon: '👁',
-      description: 'Escalate on ambiguity, errors, or security concerns'
-    },
-    {
-      value: 'manual',
-      name: 'Manual',
-      icon: '🔒',
-      description: 'Human approval required at every stage'
-    }
+    { value: 'full_auto',  name: 'Full Auto',  icon: '⚡', description: 'Agents execute without human checkpoints' },
+    { value: 'supervised', name: 'Supervised', icon: '👁',  description: 'Escalate on ambiguity, errors, or security concerns' },
+    { value: 'manual',     name: 'Manual',     icon: '🔒', description: 'Human approval required at every stage' },
   ];
 
   ngOnInit() {
-    this.rules.set([
-      {
-        id: 'pre-commit',
-        name: 'Pre-Commit Review',
-        description: 'Require human approval before developer commits code',
-        enabled: true,
-        level: 'supervised'
+    // Seed with defaults first so the UI renders immediately
+    this.rules.set(DEFAULT_RULES.map(r => ({ ...r })));
+
+    // Then overlay with persisted config from backend
+    this.orchestratorService.getOversightConfig().subscribe({
+      next: (cfg) => {
+        if (cfg.autonomyLevel) this.selectedAutonomy.set(cfg.autonomyLevel);
+        if (cfg.interruptRules?.length) {
+          // Update enabled state for rules the backend knows about; keep defaults otherwise
+          this.rules.update(rules => rules.map(r => {
+            const backendRule = cfg.interruptRules.find(br => br.ruleName === r.name);
+            return backendRule ? { ...r, enabled: backendRule.enabled } : r;
+          }));
+        }
       },
-      {
-        id: 'security-scan',
-        name: 'Security Scan Gate',
-        description: 'Escalate if static analysis detects vulnerabilities',
-        enabled: true,
-        level: 'full_auto'
-      },
-      {
-        id: 'test-failure',
-        name: 'Test Failure Escalation',
-        description: 'Escalate after fix loop limit is exceeded',
-        enabled: true,
-        level: 'supervised'
-      },
-      {
-        id: 'pr-merge',
-        name: 'PR Merge Approval',
-        description: 'Require human approval before merging pull requests',
-        enabled: true,
-        level: 'manual'
-      },
-      {
-        id: 'schema-mismatch',
-        name: 'Schema Validation Failure',
-        description: 'Escalate when agent output does not match expected schema',
-        enabled: false,
-        level: 'supervised'
-      },
-      {
-        id: 'token-overrun',
-        name: 'Token Budget Exceeded',
-        description: 'Escalate when an agent exceeds its token budget',
-        enabled: true,
-        level: 'supervised'
-      }
-    ]);
+      error: () => { /* backend unavailable — stick with defaults */ }
+    });
   }
 
-  setAutonomy(level: string) {
-    this.selectedAutonomy.set(level);
-  }
+  setAutonomy(level: string) { this.selectedAutonomy.set(level); }
 
   toggleRule(ruleId: string) {
-    this.rules.update(rules =>
-      rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r)
-    );
+    this.rules.update(rules => rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r));
   }
 
-  formatLevel(level: string): string {
-    return level.replace('_', ' ');
-  }
+  formatLevel(level: string): string { return level.replace('_', ' '); }
 
   saveConfig() {
-    // TODO: POST to backend when oversight config API is available
-    console.log('Saving oversight config:', {
-      autonomy: this.selectedAutonomy(),
-      rules: this.rules()
+    this.saving.set(true);
+    this.savedOk.set(false);
+    this.saveError.set(null);
+
+    const payload = {
+      autonomyLevel: this.selectedAutonomy(),
+      interruptRules: this.rules().map(r => ({
+        ruleName: r.name,
+        tier: this.levelToTier(r.level),
+        enabled: r.enabled,
+      })),
+      autoApproveMedianTier: true,
+      maxConcurrentRuns: 5,
+    };
+
+    this.orchestratorService.saveOversightConfig(payload).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.savedOk.set(true);
+        setTimeout(() => this.savedOk.set(false), 3000);
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.saveError.set(err?.status === 0 ? 'Backend unreachable' : 'Save failed');
+        setTimeout(() => this.saveError.set(null), 4000);
+      }
     });
+  }
+
+  private levelToTier(level: string): string {
+    switch (level) {
+      case 'manual':    return 'critical';
+      case 'supervised': return 'high';
+      default:           return 'medium';
+    }
   }
 }

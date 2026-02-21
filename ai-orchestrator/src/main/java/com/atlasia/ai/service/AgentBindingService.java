@@ -9,6 +9,7 @@ import com.atlasia.ai.service.exception.OrchestratorException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -165,6 +166,27 @@ public class AgentBindingService {
      */
     public Map<UUID, AgentBinding> getActiveBindings() {
         return java.util.Collections.unmodifiableMap(activeBindings);
+    }
+
+    /**
+     * Evict bindings whose TTL has expired.
+     * Runs every 60 seconds; prevents unbounded growth of the active-bindings map
+     * when steps fail without explicit revocation.
+     */
+    @Scheduled(fixedDelay = 60_000)
+    public void evictExpiredBindings() {
+        Instant now = Instant.now();
+        int[] removed = {0};
+        activeBindings.entrySet().removeIf(e -> {
+            if (e.getValue().expiresAt().isBefore(now)) {
+                removed[0]++;
+                return true;
+            }
+            return false;
+        });
+        if (removed[0] > 0) {
+            log.debug("ACNBP EVICT: removed {} expired bindings", removed[0]);
+        }
     }
 
     // -------------------------------------------------------------------------
