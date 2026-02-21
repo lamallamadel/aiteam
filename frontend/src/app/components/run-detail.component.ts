@@ -5,11 +5,12 @@ import { OrchestratorService } from '../services/orchestrator.service';
 import { WorkflowStreamStore } from '../services/workflow-stream.store';
 import { NeuralTraceComponent } from './neural-trace.component';
 import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/orchestrator.model';
+import { ArtifactRendererComponent } from './artifact-renderer.component';
 
 @Component({
   selector: 'app-run-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, NeuralTraceComponent],
+  imports: [CommonModule, RouterModule, NeuralTraceComponent, ArtifactRendererComponent],
   template: `
     <div class="run-detail-container" *ngIf="run()">
       <div class="header">
@@ -132,8 +133,8 @@ import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/o
                 <span class="artifact-type">{{ artifact.artifactType }}</span>
                 <span class="artifact-agent">{{ artifact.agentName }}</span>
               </div>
-              <div class="artifact-payload" *ngIf="expandedArtifact() === artifact.id && artifactPayload()">
-                <pre class="payload-pre">{{ artifactPayload() }}</pre>
+              <div class="artifact-payload" *ngIf="expandedArtifact() === artifact.id && expandedArtifactObj()">
+                <app-artifact-renderer [artifact]="expandedArtifactObj()!"></app-artifact-renderer>
               </div>
               <div class="artifact-meta">
                 <span class="artifact-id mono">{{ artifact.id.substring(0, 8) }}</span>
@@ -463,7 +464,7 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   // Artifacts from REST (includes artifacts added before the stream connected)
   private restArtifacts = signal<ArtifactResponse[]>([]);
   expandedArtifact = signal<string | null>(null);
-  artifactPayload = signal<string | null>(null);
+  expandedArtifactObj = signal<ArtifactResponse | null>(null);
 
   // Merge REST artifacts with real-time completed-step artifact summaries
   allArtifacts = computed<ArtifactResponse[]>(() => this.restArtifacts());
@@ -544,12 +545,13 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   loadArtifactPayload(artifactId: string) {
     if (this.expandedArtifact() === artifactId) {
       this.expandedArtifact.set(null);
+      this.expandedArtifactObj.set(null);
       return;
     }
     const local = this.restArtifacts().find(a => a.id === artifactId);
     if (local?.payload) {
       this.expandedArtifact.set(artifactId);
-      this.artifactPayload.set(this.prettyPayload(local.payload));
+      this.expandedArtifactObj.set(local);
       return;
     }
     const runId = this.run()?.id;
@@ -560,15 +562,10 @@ export class RunDetailComponent implements OnInit, OnDestroy {
         const found = artifacts.find(a => a.id === artifactId);
         if (found) {
           this.expandedArtifact.set(artifactId);
-          this.artifactPayload.set(this.prettyPayload(found.payload));
+          this.expandedArtifactObj.set(found);
         }
       }
     });
-  }
-
-  private prettyPayload(raw: string): string {
-    try { return JSON.stringify(JSON.parse(raw), null, 2); }
-    catch { return raw; }
   }
 
   getStatusClass(status: string | undefined): string {

@@ -5,6 +5,7 @@ import { OrchestratorService } from '../services/orchestrator.service';
 import { RunResponse, RunRequest } from '../models/orchestrator.model';
 import { NeuralTraceComponent } from './neural-trace.component';
 import { SandboxComponent } from './sandbox.component';
+import { IntentPreviewModalComponent, IntentConfirmation } from './intent-preview-modal.component';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -17,7 +18,7 @@ interface Message {
 @Component({
   selector: 'app-chat-interface',
   standalone: true,
-  imports: [CommonModule, FormsModule, NeuralTraceComponent, SandboxComponent],
+  imports: [CommonModule, FormsModule, NeuralTraceComponent, SandboxComponent, IntentPreviewModalComponent],
   template: `
     <div class="chat-wrapper">
       <!-- Chat Header -->
@@ -66,8 +67,16 @@ interface Message {
             <option value="EXECUTION">Execution</option>
           </select>
         </div>
-        <button class="accent-gradient start-btn" (click)="startRun()">Launch Orchestrator</button>
+        <button class="accent-gradient start-btn" (click)="openPreview()">Launch Orchestrator</button>
       </div>
+
+      <!-- Intent Preview Modal -->
+      <app-intent-preview-modal
+        [visible]="showPreview"
+        [request]="newRequest"
+        (confirmed)="startRun($event)"
+        (cancelled)="showPreview = false">
+      </app-intent-preview-modal>
 
       <!-- Messages List -->
       <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="message-list" #scrollMe>
@@ -305,6 +314,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   sandboxCode = '';
   isVoiceEnabled = false;
 
+  showPreview = false;
   isRecording = false;
   private recognition: any;
 
@@ -392,8 +402,14 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     });
   }
 
-  startRun() {
-    this.orchestratorService.createRun(this.newRequest).subscribe({
+  openPreview() {
+    this.showPreview = true;
+  }
+
+  startRun(confirmation?: IntentConfirmation) {
+    this.showPreview = false;
+    const request = confirmation ? confirmation.request : this.newRequest;
+    this.orchestratorService.createRun(request).subscribe({
       next: (run: RunResponse) => {
         this.selectedRun = run;
         this.loadMessages();
