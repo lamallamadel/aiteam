@@ -1,0 +1,168 @@
+# ─────────────────────────────────────────────────────────────
+# AITEAM — GitLab CI/CD Pipeline
+#
+# Stages:
+#   build   — Build and test
+#   deploy  — Deploy to production/staging
+#
+# Required CI/CD variables (Settings → CI/CD → Variables):
+#   DEPLOY_SSH_KEY   — private ed25519 key for deploy user
+#   DEPLOY_HOST      — production server IP/hostname
+#   DEPLOY_USER      — SSH username
+#   DEPLOY_DIR       — deployment directory path
+# ─────────────────────────────────────────────────────────────
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DEPLOY_HOST: ""
+  DEPLOY_USER: ""
+  DEPLOY_DIR: ""
+
+# ── Reusable SSH setup ────────────────────────────────────────
+.ssh_setup:
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq rsync openssh-client 2>/dev/null
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOY_SSH_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+    - chmod 644 ~/.ssh/known_hosts
+
+# ─────────────────────────────────────────────────────────────
+# BUILD
+# ─────────────────────────────────────────────────────────────
+
+build-backend:
+  stage: build
+  image: maven:3.9-eclipse-temurin-17-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - ai-orchestrator/**/*
+        - .gitlab-ci.yml
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull-push
+  script:
+    - echo "TODO: Build backend"
+  artifacts:
+    name: "backend-jar-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/*.jar
+    expire_in: 1 hour
+
+build-frontend:
+  stage: build
+  image: node:22-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  cache:
+    key: "npm-$CI_COMMIT_REF_SLUG"
+    paths:
+      - frontend/node_modules/
+    policy: pull-push
+  script:
+    - echo "TODO: Build frontend"
+  artifacts:
+    name: "frontend-dist-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - frontend/dist/
+    expire_in: 1 hour
+
+# ─────────────────────────────────────────────────────────────
+# TEST
+# ─────────────────────────────────────────────────────────────
+
+test-backend:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - ai-orchestrator/**/*
+        - .gitlab-ci.yml
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull
+  script:
+    - echo "TODO: Run backend tests"
+
+test-frontend:
+  stage: test
+  image: node:22-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  cache:
+    key: "npm-$CI_COMMIT_REF_SLUG"
+    paths:
+      - frontend/node_modules/
+    policy: pull
+  script:
+    - echo "TODO: Run frontend tests"
+
+# ─────────────────────────────────────────────────────────────
+# DEPLOY
+# ─────────────────────────────────────────────────────────────
+
+deploy-backend:
+  stage: deploy
+  image: debian:bookworm-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - ai-orchestrator/**/*
+        - docker-compose.prod.yml
+        - .gitlab-ci.yml
+  extends: .ssh_setup
+  script:
+    - echo "TODO: Deploy backend"
+  environment:
+    name: production/backend
+    url: https://$DEPLOY_HOST/api
+
+deploy-frontend:
+  stage: deploy
+  image: debian:bookworm-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+        - nginx-prod.conf
+        - .gitlab-ci.yml
+  extends: .ssh_setup
+  script:
+    - echo "TODO: Deploy frontend"
+  environment:
+    name: production/frontend
+    url: https://$DEPLOY_HOST
+
+# ─────────────────────────────────────────────────────────────
+# ROLLBACK
+# ─────────────────────────────────────────────────────────────
+
+rollback:
+  stage: deploy
+  image: debian:bookworm-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  extends: .ssh_setup
+  script:
+    - echo "TODO: Rollback production"
+  environment:
+    name: production
+    action: rollback
