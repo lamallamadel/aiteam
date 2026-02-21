@@ -160,6 +160,8 @@ public class BlackboardService {
         runEntity.addArtifact(artifact);
         runRepository.save(runEntity);
 
+        metrics.recordBlackboardWrite(entryKey, agentName);
+
         log.info("BLACKBOARD WRITE: run_id={}, agent={}, entry={}, version={}, correlation_id={}",
                 runId, agentName, entryKey, version, correlationId);
     }
@@ -194,6 +196,8 @@ public class BlackboardService {
                 .reduce((first, second) -> second)
                 .map(RunArtifactEntity::getPayload)
                 .orElse(null);
+
+        metrics.recordBlackboardRead(entryKey, agentName);
 
         log.debug("BLACKBOARD READ: run_id={}, agent={}, entry={}, found={}, correlation_id={}",
                 runId, agentName, entryKey, payload != null, correlationId);

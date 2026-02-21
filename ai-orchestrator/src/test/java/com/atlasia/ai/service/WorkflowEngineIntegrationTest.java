@@ -125,6 +125,10 @@ class WorkflowEngineIntegrationTest {
                                 java.util.List.of(), "Artifact meets quality bar. Proceed to next step.",
                                 null, java.time.Instant.now());
                 lenient().when(judgeService.evaluate(any(), any(), any())).thenReturn(passingVerdict);
+                lenient().when(judgeService.evaluateWithMajorityVoting(any(), any(), any())).thenReturn(passingVerdict);
+
+                DynamicInterruptService.InterruptDecision proceed = DynamicInterruptService.InterruptDecision.proceed();
+                lenient().when(interruptService.evaluate(any(), any(), any(), any(), any())).thenReturn(proceed);
         }
 
         @Test

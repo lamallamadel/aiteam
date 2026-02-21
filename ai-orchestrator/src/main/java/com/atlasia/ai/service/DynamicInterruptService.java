@@ -196,6 +196,29 @@ public class DynamicInterruptService {
     }
 
     /**
+     * Record metrics for an interrupt decision after it has been made.
+     */
+    public void recordDecisionMetrics(InterruptDecision decision) {
+        if (decision.getAction() != InterruptDecision.Action.PROCEED) {
+            metrics.recordInterruptTriggered(decision.getTier(), decision.getRuleName());
+        }
+    }
+
+    /**
+     * Record that a human approved a pending interrupt.
+     */
+    public void recordApproval(String ruleName) {
+        metrics.recordInterruptApproved(ruleName);
+    }
+
+    /**
+     * Record that a human denied a pending interrupt.
+     */
+    public void recordDenial(String ruleName) {
+        metrics.recordInterruptDenied(ruleName);
+    }
+
+    /**
      * Check agent token budget and emit warning if approaching limit.
      */
     public void checkTokenBudget(String agentName, int tokensUsed, int maxTokens, UUID runId) {
@@ -224,6 +247,7 @@ public class DynamicInterruptService {
         log.warn("CRITICAL INTERRUPT: rule={}, agent={}, runId={}, correlationId={}, message={}",
                 ruleName, agentName, runId, CorrelationIdHolder.getCorrelationId(), message);
         metrics.recordGuardrailViolation(ruleName, agentName);
+        metrics.recordInterruptTriggered("critical", ruleName);
 
         eventBus.emit(runId, new WorkflowEvent.WorkflowStatusUpdate(
                 runId, Instant.now(), "INTERRUPT_CRITICAL: " + message, agentName, -1));
@@ -235,6 +259,7 @@ public class DynamicInterruptService {
         log.warn("HIGH INTERRUPT: rule={}, agent={}, runId={}, correlationId={}, message={}",
                 ruleName, agentName, runId, CorrelationIdHolder.getCorrelationId(), message);
         metrics.recordGuardrailViolation(ruleName, agentName);
+        metrics.recordInterruptTriggered("high", ruleName);
 
         eventBus.emit(runId, new WorkflowEvent.WorkflowStatusUpdate(
                 runId, Instant.now(), "INTERRUPT_HIGH: " + message, agentName, -1));
@@ -253,6 +278,8 @@ public class DynamicInterruptService {
         log.error("BLOCKED: rule={}, agent={}, runId={}, correlationId={}, message={}",
                 ruleName, agentName, runId, CorrelationIdHolder.getCorrelationId(), message);
         metrics.recordGuardrailViolation(ruleName, agentName);
+        metrics.recordInterruptTriggered("critical", ruleName);
+        metrics.recordInterruptDenied(ruleName);
 
         eventBus.emit(runId, new WorkflowEvent.WorkflowStatusUpdate(
                 runId, Instant.now(), "BLOCKED: " + message, agentName, -1));

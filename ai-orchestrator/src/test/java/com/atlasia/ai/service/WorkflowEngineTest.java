@@ -16,7 +16,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -120,6 +119,7 @@ class WorkflowEngineTest {
 
                 setupPersonaReviewMock();
                 setupJudgeMock();
+                setupInterruptMock();
         }
 
         private void setupJudgeMock() {
@@ -129,6 +129,14 @@ class WorkflowEngineTest {
                                 List.of(), "Artifact meets quality bar. Proceed to next step.",
                                 null, Instant.now());
                 lenient().when(judgeService.evaluate(any(), anyString(), anyString())).thenReturn(passingVerdict);
+                lenient().when(judgeService.evaluateWithMajorityVoting(any(), anyString(), anyString()))
+                                .thenReturn(passingVerdict);
+        }
+
+        private void setupInterruptMock() {
+                DynamicInterruptService.InterruptDecision proceed = DynamicInterruptService.InterruptDecision.proceed();
+                lenient().when(interruptService.evaluate(anyString(), any(), anyString(), any(), any()))
+                                .thenReturn(proceed);
         }
 
         private void setupPersonaReviewMock() {
@@ -411,6 +419,51 @@ class WorkflowEngineTest {
                 verify(metrics).recordAgentStepExecution(eq("REVIEW"), eq("execute"), anyLong());
                 verify(metrics).recordAgentStepExecution(eq("TESTER"), eq("execute"), anyLong());
                 verify(metrics).recordAgentStepExecution(eq("WRITER"), eq("execute"), anyLong());
+        }
+
+        @Test
+        void executeWorkflow_interruptBlocksWorkflow_setsEscalatedStatus() throws Exception {
+                lenient().when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                lenient().when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                lenient().when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+
+                // Override interrupt mock to BLOCK on developer generate
+                DynamicInterruptService.InterruptDecision blockDecision =
+                                DynamicInterruptService.InterruptDecision.block("force_push_blocked", "Force push is not allowed");
+                when(interruptService.evaluate(eq("DEVELOPER"), any(), eq("generate"), any(), any()))
+                                .thenReturn(blockDecision);
+
+                workflowEngine.executeWorkflow(runEntity.getId());
+
+                verify(developerStep, never()).generateCode(any(RunContext.class));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
+                verify(metrics).recordWorkflowEscalation(anyLong());
+        }
+
+        @Test
+        void executeWorkflow_majorityVotingVeto_setsEscalatedStatus() throws Exception {
+                lenient().when(pmStep.execute(any(RunContext.class))).thenReturn("{\"issueId\":123}");
+                lenient().when(qualifierStep.execute(any(RunContext.class))).thenReturn("{\"tasks\":[]}");
+                lenient().when(architectStep.execute(any(RunContext.class))).thenReturn("Architecture notes");
+                setupDeveloperStepMocks();
+                lenient().when(testerStep.execute(any(RunContext.class))).thenReturn("{\"ciStatus\":\"GREEN\"}");
+
+                // Override judge majority voting to return veto
+                JudgeService.JudgeVerdict vetoVerdict = new JudgeService.JudgeVerdict(
+                                UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                0.30, "veto", 0.8, Map.of(),
+                                List.of(), "VETO: Artifact fails quality bar.",
+                                null, Instant.now());
+                when(judgeService.evaluateWithMajorityVoting(any(), anyString(), anyString()))
+                                .thenReturn(vetoVerdict);
+
+                workflowEngine.executeWorkflow(runEntity.getId());
+
+                // Judge veto comes after tester; writer should be blocked
+                verify(testerStep).execute(any(RunContext.class));
+                verify(writerStep, never()).execute(any(RunContext.class));
+                verify(runRepository, atLeastOnce()).save(argThat(run -> run.getStatus() == RunStatus.ESCALATED));
+                verify(metrics).recordWorkflowEscalation(anyLong());
         }
 
         @Test

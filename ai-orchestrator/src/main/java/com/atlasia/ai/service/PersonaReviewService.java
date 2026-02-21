@@ -16,17 +16,20 @@ import java.util.stream.Collectors;
 @Service
 public class PersonaReviewService {
     private static final Logger log = LoggerFactory.getLogger(PersonaReviewService.class);
-    
+
     private final PersonaConfigLoader personaConfigLoader;
     private final LlmService llmService;
+    private final JudgeService judgeService;
     private final ObjectMapper objectMapper;
     private final ExecutorService executorService;
 
-    public PersonaReviewService(PersonaConfigLoader personaConfigLoader, 
-                                LlmService llmService, 
+    public PersonaReviewService(PersonaConfigLoader personaConfigLoader,
+                                LlmService llmService,
+                                JudgeService judgeService,
                                 ObjectMapper objectMapper) {
         this.personaConfigLoader = personaConfigLoader;
         this.llmService = llmService;
+        this.judgeService = judgeService;
         this.objectMapper = objectMapper;
         this.executorService = Executors.newFixedThreadPool(4);
     }
@@ -253,28 +256,90 @@ public class PersonaReviewService {
         report.findings = reviews;
         report.mergedRecommendations = new ArrayList<>();
         report.securityFixesApplied = false;
-        
+
         for (PersonaReview review : reviews) {
             for (PersonaIssue issue : review.issues) {
                 String recommendation = String.format("[%s - %s] %s: %s (Recommendation: %s)",
-                        review.personaName, issue.severity.toUpperCase(), issue.filePath, 
+                        review.personaName, issue.severity.toUpperCase(), issue.filePath,
                         issue.description, issue.recommendation);
                 report.mergedRecommendations.add(recommendation);
-                
+
                 if (issue.mandatory && review.personaName.equalsIgnoreCase("security-engineer")) {
                     applySecurityFix(codeChanges, issue);
                     report.securityFixesApplied = true;
                 }
             }
-            
+
             for (PersonaEnhancement enhancement : review.enhancements) {
                 String enhancementText = String.format("[%s - %s] %s (Benefit: %s)",
                         review.personaName, enhancement.category, enhancement.description, enhancement.benefit);
                 report.mergedRecommendations.add(enhancementText);
             }
         }
-        
+
+        // --- Conflict Detection + Judge Arbitration ---
+        detectAndArbitrateConflicts(reviews, report);
+
         return report;
+    }
+
+    /**
+     * Detect conflicts between persona reviews and use the Judge to arbitrate.
+     * A conflict exists when one persona has no critical/high issues (effectively approving)
+     * while another persona has critical issues (effectively rejecting).
+     */
+    private void detectAndArbitrateConflicts(List<PersonaReview> reviews, PersonaReviewReport report) {
+        List<PersonaReview> approving = new ArrayList<>();
+        List<PersonaReview> rejecting = new ArrayList<>();
+
+        for (PersonaReview review : reviews) {
+            boolean hasCritical = review.issues.stream()
+                    .anyMatch(i -> "critical".equalsIgnoreCase(i.severity) || "high".equalsIgnoreCase(i.severity));
+            if (hasCritical) {
+                rejecting.add(review);
+            } else {
+                approving.add(review);
+            }
+        }
+
+        if (!approving.isEmpty() && !rejecting.isEmpty()) {
+            log.warn("PERSONA CONFLICT DETECTED: {} personas approve, {} personas reject",
+                    approving.size(), rejecting.size());
+
+            String position1 = approving.stream()
+                    .map(r -> r.personaName + ": " + r.overallAssessment)
+                    .collect(Collectors.joining("; "));
+            String position2 = rejecting.stream()
+                    .map(r -> r.personaName + ": " + r.overallAssessment)
+                    .collect(Collectors.joining("; "));
+            String evidence1 = "No critical/high issues found";
+            String evidence2 = rejecting.stream()
+                    .flatMap(r -> r.issues.stream())
+                    .filter(i -> "critical".equalsIgnoreCase(i.severity) || "high".equalsIgnoreCase(i.severity))
+                    .map(i -> i.severity + ": " + i.description)
+                    .collect(Collectors.joining("; "));
+
+            try {
+                JudgeService.JudgeVerdict arbitration = judgeService.arbitrateConflict(
+                        null, position1, position2, evidence1, evidence2);
+
+                report.mergedRecommendations.add(0,
+                        "[JUDGE ARBITRATION] Conflict resolved: verdict=" + arbitration.verdict() +
+                                ", score=" + String.format("%.2f", arbitration.overallScore()) +
+                                " — " + arbitration.recommendation());
+
+                report.conflictDetected = true;
+                report.arbitrationVerdict = arbitration.verdict();
+
+                log.info("PERSONA CONFLICT ARBITRATED: verdict={}, score={}",
+                        arbitration.verdict(), String.format("%.2f", arbitration.overallScore()));
+            } catch (Exception e) {
+                log.error("Failed to arbitrate persona conflict: {}", e.getMessage(), e);
+                report.mergedRecommendations.add(0,
+                        "[CONFLICT] Persona reviews conflict — manual review recommended");
+                report.conflictDetected = true;
+            }
+        }
     }
 
     private void applySecurityFix(DeveloperStep.CodeChanges codeChanges, PersonaIssue issue) {
@@ -355,6 +420,8 @@ public class PersonaReviewService {
         public List<PersonaReview> findings = new ArrayList<>();
         public List<String> mergedRecommendations = new ArrayList<>();
         public boolean securityFixesApplied = false;
+        public boolean conflictDetected = false;
+        public String arbitrationVerdict = null;
 
         public List<PersonaReview> getFindings() {
             return findings;

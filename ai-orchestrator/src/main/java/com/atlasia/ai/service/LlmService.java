@@ -36,6 +36,17 @@ public class LlmService {
     private final OrchestratorMetrics metrics;
     private final WorkflowEventBus eventBus;
 
+    /** Simple pricing map: model name → cost per 1K tokens (USD). */
+    private static final Map<String, Double> COST_PER_1K_TOKENS = Map.of(
+            "gpt-4o", 0.005,
+            "gpt-4o-mini", 0.00015,
+            "gpt-4-turbo", 0.01,
+            "gpt-4", 0.03,
+            "gpt-3.5-turbo", 0.0005,
+            "claude-3-5-sonnet-20241022", 0.006,
+            "claude-3-haiku-20240307", 0.00025
+    );
+
     public LlmService(OrchestratorProperties properties, WebClient.Builder webClientBuilder,
             ObjectMapper objectMapper, OrchestratorMetrics metrics, WorkflowEventBus eventBus) {
         this.llmConfig = properties.llm();
@@ -83,11 +94,14 @@ public class LlmService {
                     "model", llmConfig.model(),
                     "messages", messages);
 
+            String correlationId = CorrelationIdHolder.getCorrelationId();
+
             Map<String, Object> response;
             try {
                 response = webClient.post()
                         .uri(llmConfig.endpoint() + "/chat/completions")
                         .header("Authorization", "Bearer " + llmConfig.apiKey())
+                        .header("X-Correlation-ID", correlationId != null ? correlationId : "")
                         .bodyValue(requestBody)
                         .retrieve()
                         .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
@@ -104,6 +118,7 @@ public class LlmService {
                                 return webClient.post()
                                         .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
                                         .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
+                                        .header("X-Correlation-ID", correlationId != null ? correlationId : "")
                                         .bodyValue(requestBody)
                                         .retrieve()
                                         .bodyToMono(
@@ -136,6 +151,7 @@ public class LlmService {
             long duration = System.currentTimeMillis() - startTime;
             sample.stop(metrics.getLlmDuration());
             metrics.recordLlmCall(llmConfig.model(), duration, tokensUsed);
+            recordCostMetrics(tokensUsed);
             emitLlmEnd(duration, tokensUsed);
 
             log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
@@ -181,11 +197,14 @@ public class LlmService {
                     "messages", messages,
                     "response_format", responseFormat);
 
+            String structuredCorrelationId = CorrelationIdHolder.getCorrelationId();
+
             Map<String, Object> response;
             try {
                 response = webClient.post()
                         .uri(llmConfig.endpoint() + "/chat/completions")
                         .header("Authorization", "Bearer " + llmConfig.apiKey())
+                        .header("X-Correlation-ID", structuredCorrelationId != null ? structuredCorrelationId : "")
                         .bodyValue(requestBody)
                         .retrieve()
                         .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
@@ -202,6 +221,7 @@ public class LlmService {
                                 return webClient.post()
                                         .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
                                         .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
+                                        .header("X-Correlation-ID", structuredCorrelationId != null ? structuredCorrelationId : "")
                                         .bodyValue(requestBody)
                                         .retrieve()
                                         .bodyToMono(
@@ -233,6 +253,7 @@ public class LlmService {
             long duration = System.currentTimeMillis() - startTime;
             sample.stop(metrics.getLlmDuration());
             metrics.recordLlmCall(llmConfig.model(), duration, tokensUsed);
+            recordCostMetrics(tokensUsed);
             emitLlmEnd(duration, tokensUsed);
 
             log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
@@ -398,6 +419,15 @@ public class LlmService {
                 "choices", List.of(
                         Map.of("message", Map.of("role", "assistant", "content", content))),
                 "usage", Map.of("total_tokens", 0));
+    }
+
+    private void recordCostMetrics(int tokensUsed) {
+        if (tokensUsed > 0) {
+            metrics.recordTokenUsagePerBolt(tokensUsed);
+            double costPer1K = COST_PER_1K_TOKENS.getOrDefault(llmConfig.model(), 0.005);
+            double cost = (tokensUsed / 1000.0) * costPer1K;
+            metrics.recordCostPerBolt(cost);
+        }
     }
 
     private void emitLlmStart() {

@@ -63,6 +63,8 @@ public class EvalSuiteService {
         UUID suiteRunId = UUID.randomUUID();
         log.info("EVAL SUITE STARTED: suiteRunId={}, scenarios={}", suiteRunId, scenarios.size());
 
+        metrics.recordEvalSuiteRun(0); // initial recording; final passAt1 rate recorded at end
+
         SuiteRun suiteRun = new SuiteRun(suiteRunId, scenarios.size(), Instant.now());
         activeSuiteRuns.put(suiteRunId, suiteRun);
 
@@ -76,7 +78,12 @@ public class EvalSuiteService {
                 ScenarioResult result = executeScenario(suiteRunId, scenario);
                 results.add(result);
 
-                if (result.pass) passCount++;
+                if (result.pass) {
+                    passCount++;
+                    metrics.recordEvalScenarioPass();
+                } else {
+                    metrics.recordEvalScenarioFail();
+                }
                 if (result.passAt1) passAt1Count++;
                 if (result.passAt2) passAt2Count++;
 
@@ -89,6 +96,7 @@ public class EvalSuiteService {
             } catch (Exception e) {
                 log.error("EVAL SCENARIO ERROR: id={}, error={}", scenario.id, e.getMessage(), e);
                 results.add(ScenarioResult.error(scenario.id, e.getMessage()));
+                metrics.recordEvalScenarioFail();
                 suiteRun.completedCount++;
             }
         }
@@ -102,6 +110,9 @@ public class EvalSuiteService {
                 suiteRunId, scenarios.size(), passCount, passRate,
                 passAt1Count, passAt1Rate, passAt2Count, passAt2Rate,
                 deploymentGatePass, results, Instant.now());
+
+        // Record final passAt1 rate metric
+        metrics.recordEvalSuiteRun(passAt1Rate);
 
         activeSuiteRuns.remove(suiteRunId);
 

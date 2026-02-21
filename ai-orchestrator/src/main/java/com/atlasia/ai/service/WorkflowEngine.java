@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -227,12 +228,13 @@ public class WorkflowEngine {
                 }
             }
 
-            // --- Pre-Merge Quality Gate: Judge (LLM-as-a-Judge) ---
-            log.info("Pre-merge Judge evaluation: runId={}, correlationId={}",
+            // --- Pre-Merge Quality Gate: Judge (LLM-as-a-Judge) with Majority Voting ---
+            log.info("Pre-merge Judge evaluation (majority voting): runId={}, correlationId={}",
                     runId, CorrelationIdHolder.getCorrelationId());
-            JudgeService.JudgeVerdict preMergeVerdict = judgeService.evaluate(
+            JudgeService.JudgeVerdict preMergeVerdict = judgeService.evaluateWithMajorityVoting(
                     runEntity, "pre_merge", "persona_review_report");
             metrics.recordJudgeEvaluation(preMergeVerdict.verdict());
+            metrics.recordVotingExecution("pre_merge");
 
             if (preMergeVerdict.isVeto()) {
                 log.warn("Judge VETO at pre-merge gate: score={}, runId={}, correlationId={}",
@@ -242,6 +244,16 @@ public class WorkflowEngine {
                                 String.format("%.2f", preMergeVerdict.overallScore()) + ")",
                         "Quality score below threshold: " + preMergeVerdict.recommendation(),
                         preMergeVerdict.verdict()));
+            }
+
+            if ("conditional_pass".equals(preMergeVerdict.verdict())) {
+                log.warn("Judge CONDITIONAL PASS at pre-merge gate: score={}, runId={}, correlationId={}",
+                        preMergeVerdict.overallScore(), runId, CorrelationIdHolder.getCorrelationId());
+                emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
+                        runId, Instant.now(),
+                        "CONDITIONAL_PASS: Quality score " + String.format("%.2f", preMergeVerdict.overallScore()) +
+                                " — " + preMergeVerdict.recommendation(),
+                        "JUDGE", progressPercent(5)));
             }
 
             // --- Terminal: Writer ---
@@ -452,6 +464,9 @@ public class WorkflowEngine {
             runEntity.setCurrentAgent(agentName);
             runRepository.save(runEntity);
 
+            // Dynamic interrupt check before code generation
+            checkInterrupt(agentName, "generate", runId);
+
             developerStep.generateCode(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -510,6 +525,9 @@ public class WorkflowEngine {
                     runId, Instant.now(), agentName, "persona_review.schema.json", true));
 
             persistArtifact(runEntity, agentName, "persona_review_report", reportJson);
+
+            // Dynamic interrupt check before commit & PR creation
+            checkInterrupt("DEVELOPER", "commitAndCreatePullRequest", runId);
 
             String prUrl = developerStep.commitAndCreatePullRequest(context, codeChanges);
             persistArtifact(runEntity, "DEVELOPER", "pr_url", prUrl);
@@ -603,6 +621,9 @@ public class WorkflowEngine {
             runEntity.setStatus(RunStatus.WRITER);
             runEntity.setCurrentAgent(agentName);
             runRepository.save(runEntity);
+
+            // Dynamic interrupt check before writer execution
+            checkInterrupt(agentName, "execute", runId);
 
             String artifact = writerStep.execute(context);
             persistArtifact(runEntity, agentName, "docs_update", artifact);
@@ -902,5 +923,32 @@ public class WorkflowEngine {
     private void emitAndTrace(UUID runId, WorkflowEvent event) {
         eventBus.emit(runId, event);
         traceEventService.recordEvent(event);
+    }
+
+    /**
+     * Check the DynamicInterruptService before a high-risk operation.
+     * Blocks if the interrupt decision is BLOCK; logs warning if requires human approval.
+     */
+    private void checkInterrupt(String agentName, String action, UUID runId) throws EscalationException {
+        DynamicInterruptService.InterruptDecision decision = interruptService.evaluate(
+                agentName, null, action, Map.of(), runId);
+
+        if (decision.isBlocked()) {
+            log.error("Interrupt BLOCKED: agent={}, action={}, rule={}, runId={}",
+                    agentName, action, decision.getRuleName(), runId);
+            throw new EscalationException(buildLoopEscalation(
+                    "Dynamic interrupt blocked action: " + action,
+                    "Rule '" + decision.getRuleName() + "': " + decision.getMessage(),
+                    "BLOCKED"));
+        }
+
+        if (decision.requiresHumanApproval()) {
+            log.warn("Interrupt requires human approval: agent={}, action={}, rule={}, tier={}, runId={}",
+                    agentName, action, decision.getRuleName(), decision.getTier(), runId);
+            emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
+                    runId, Instant.now(),
+                    "INTERRUPT_APPROVAL_NEEDED: " + decision.getMessage(),
+                    agentName, -1));
+        }
     }
 }

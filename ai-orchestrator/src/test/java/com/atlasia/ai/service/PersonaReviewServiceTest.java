@@ -27,6 +27,9 @@ class PersonaReviewServiceTest {
     @Mock
     private LlmService llmService;
 
+    @Mock
+    private JudgeService judgeService;
+
     private ObjectMapper objectMapper;
     private PersonaReviewService personaReviewService;
     private RunContext context;
@@ -35,7 +38,7 @@ class PersonaReviewServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        personaReviewService = new PersonaReviewService(personaConfigLoader, llmService, objectMapper);
+        personaReviewService = new PersonaReviewService(personaConfigLoader, llmService, judgeService, objectMapper);
 
         RunEntity runEntity = new RunEntity(
                 UUID.randomUUID(),

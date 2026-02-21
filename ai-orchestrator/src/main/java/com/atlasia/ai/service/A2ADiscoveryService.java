@@ -92,6 +92,7 @@ public class A2ADiscoveryService {
      * @return list of matching agent cards, sorted by score descending
      */
     public List<AgentCard> discover(Set<String> requiredCapabilities) {
+        metrics.recordA2ADiscovery("discovery");
         return registry.values().stream()
                 .filter(card -> "active".equals(card.status))
                 .map(card -> new ScoredAgent(card, computeMatchScore(card, requiredCapabilities)))
@@ -110,6 +111,7 @@ public class A2ADiscoveryService {
      * @return the best matching agent card, or the default for the role
      */
     public AgentCard discoverForRole(String role, Set<String> requiredCapabilities) {
+        metrics.recordA2ADiscovery(role);
         List<AgentCard> matches = discover(requiredCapabilities);
 
         if (!matches.isEmpty()) {
