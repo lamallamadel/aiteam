@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding } from '../models/orchestrator.model';
 
 @Injectable({
     providedIn: 'root'
@@ -44,5 +44,30 @@ export class OrchestratorService {
             decision,
             guidance: guidance || ''
         });
+    }
+
+    getEnvironment(runId: string): Observable<string> {
+        return this.http.get(`${this.apiUrl}/${runId}/environment`, { responseType: 'text' });
+    }
+
+    resumeRun(runId: string): Observable<RunResponse> {
+        return this.http.post<RunResponse>(`${this.apiUrl}/${runId}/resume`, {});
+    }
+
+    // A2A endpoints
+    getOrchestratorCard(): Observable<AgentCard> {
+        return this.http.get<AgentCard>('/.well-known/agent.json');
+    }
+
+    listAgents(): Observable<AgentCard[]> {
+        return this.http.get<AgentCard[]>('/api/a2a/agents');
+    }
+
+    getAgentBindings(): Observable<Record<string, AgentBinding>> {
+        return this.http.get<Record<string, AgentBinding>>('/api/a2a/bindings');
+    }
+
+    verifyBinding(bindingId: string): Observable<{ binding: AgentBinding; valid: boolean }> {
+        return this.http.get<{ binding: AgentBinding; valid: boolean }>(`/api/a2a/bindings/${bindingId}`);
     }
 }

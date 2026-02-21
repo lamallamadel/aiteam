@@ -10,6 +10,7 @@ import { WorkReportComponent } from './components/work-report.component';
 import { AgentConfigComponent } from './components/config/agent-config.component';
 import { OversightConfigComponent } from './components/config/oversight-config.component';
 import { WaterfallTraceComponent } from './components/trace/waterfall-trace.component';
+import { A2ARegistryComponent } from './components/a2a-registry.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
@@ -25,5 +26,6 @@ export const routes: Routes = [
   { path: 'oversight', component: EscalationPanelComponent },
   { path: 'analytics', component: AnalyticsDashboardComponent },
   { path: 'config/agents', component: AgentConfigComponent },
-  { path: 'config/oversight', component: OversightConfigComponent }
+  { path: 'config/oversight', component: OversightConfigComponent },
+  { path: 'a2a', component: A2ARegistryComponent }
 ];

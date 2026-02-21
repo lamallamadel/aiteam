@@ -47,6 +47,48 @@ export interface ChatResponse {
     response: string;
 }
 
+// A2A Protocol models (matching backend A2ADiscoveryService + AgentBindingService)
+export interface AgentConstraints {
+    maxTokens: number;
+    maxDurationMs: number;
+    costBudgetUsd: number;
+}
+
+export interface AgentCard {
+    name: string;
+    version: string;
+    role: string;
+    vendor: string;
+    description: string;
+    capabilities: string[];
+    outputArtifactKey: string;
+    mcpServers: string[];
+    constraints: AgentConstraints;
+    transport: string;
+    healthEndpoint: string | null;
+    status: string;
+}
+
+export interface AgentBinding {
+    bindingId: string;
+    runId: string;
+    agentName: string;
+    role: string;
+    declaredCapabilities: string[];
+    requiredCapabilities: string[];
+    constraints: AgentConstraints | null;
+    issuedAt: string;
+    expiresAt: string;
+    signature: string;
+}
+
+export interface BindingVerification {
+    binding: AgentBinding;
+    valid: boolean;
+}
+
+export type EnvironmentLifecycle = 'ACTIVE' | 'PAUSED' | 'HANDED_OFF' | 'COMPLETED';
+
 // SSE Workflow Event types (matching backend WorkflowEvent sealed interface)
 export type WorkflowEventType =
     | 'STEP_START'
