@@ -6,6 +6,11 @@ import { WorkflowEvent } from '../models/orchestrator.model';
 @Injectable({ providedIn: 'root' })
 export class WorkflowStreamStore {
   private subscription: Subscription | null = null;
+  private retryCount = 0;
+  private readonly MAX_RETRIES = 3;
+  private readonly RETRY_DELAYS = [2000, 4000, 8000];
+  private retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private currentRunId: string | null = null;
 
   // Core signals
   readonly events = signal<WorkflowEvent[]>([]);
@@ -55,6 +60,12 @@ export class WorkflowStreamStore {
   connectToRun(runId: string): void {
     this.disconnect();
     this.reset();
+    this.retryCount = 0;
+    this.currentRunId = runId;
+    this.connectInternal(runId);
+  }
+
+  private connectInternal(runId: string): void {
     this.connectedRunId.set(runId);
     this.isStreaming.set(true);
 
@@ -66,6 +77,7 @@ export class WorkflowStreamStore {
       error: (err) => {
         this.lastError.set(err?.message || 'SSE connection lost');
         this.isStreaming.set(false);
+        this.scheduleRetry(runId);
       },
       complete: () => {
         this.isStreaming.set(false);
@@ -73,7 +85,24 @@ export class WorkflowStreamStore {
     });
   }
 
+  private scheduleRetry(runId: string): void {
+    if (this.retryCount >= this.MAX_RETRIES || this.currentRunId !== runId) return;
+    const delay = this.RETRY_DELAYS[this.retryCount];
+    this.retryCount++;
+    this.lastError.set(`Connection lost — retrying in ${delay / 1000}s (attempt ${this.retryCount}/${this.MAX_RETRIES})…`);
+    this.retryTimeout = setTimeout(() => {
+      if (this.currentRunId === runId) {
+        this.connectInternal(runId);
+      }
+    }, delay);
+  }
+
   disconnect(): void {
+    this.currentRunId = null;
+    if (this.retryTimeout !== null) {
+      clearTimeout(this.retryTimeout);
+      this.retryTimeout = null;
+    }
     if (this.subscription) {
       this.subscription.unsubscribe();
       this.subscription = null;

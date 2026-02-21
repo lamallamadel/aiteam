@@ -7,6 +7,14 @@ import { EscalationService } from '../../services/escalation.service';
 import { ArtifactRendererComponent } from '../artifact-renderer.component';
 import { RunResponse, ArtifactResponse } from '../../models/orchestrator.model';
 
+interface EnvContext {
+  branchName?: string;
+  ticketSummary?: string;
+  architectureNotes?: string;
+  capturedAt?: string;
+  prUrl?: string;
+}
+
 // Suggested guidance templates per agent
 const GUIDANCE_TEMPLATES: Record<string, string[]> = {
   PM:        ['Please clarify the acceptance criteria for this ticket.',
@@ -78,6 +86,32 @@ const GUIDANCE_TEMPLATES: Record<string, string[]> = {
           </div>
           <div class="artifact-wrap">
             <app-artifact-renderer [artifact]="artifact"></app-artifact-renderer>
+          </div>
+        </div>
+
+        <!-- Environment snapshot context -->
+        <div class="env-context-section" *ngIf="getEnvContext(run.id) as env">
+          <div class="context-header">
+            <span class="context-label">Environment snapshot</span>
+            <span *ngIf="env.capturedAt" class="snapshot-age">{{ formatAge(env.capturedAt) }}</span>
+          </div>
+          <div class="env-grid">
+            <ng-container *ngIf="env.branchName">
+              <span class="env-key">Branch</span>
+              <span class="env-val mono">{{ env.branchName }}</span>
+            </ng-container>
+            <ng-container *ngIf="env.prUrl">
+              <span class="env-key">PR</span>
+              <span class="env-val mono pr-link">{{ env.prUrl }}</span>
+            </ng-container>
+            <ng-container *ngIf="env.ticketSummary">
+              <span class="env-key">Ticket</span>
+              <span class="env-val">{{ env.ticketSummary }}</span>
+            </ng-container>
+            <ng-container *ngIf="env.architectureNotes">
+              <span class="env-key">Arch notes</span>
+              <span class="env-val arch-notes">{{ env.architectureNotes | slice:0:200 }}{{ (env.architectureNotes?.length ?? 0) > 200 ? '…' : '' }}</span>
+            </ng-container>
           </div>
         </div>
 
@@ -231,6 +265,38 @@ const GUIDANCE_TEMPLATES: Record<string, string[]> = {
     }
     .artifact-wrap { max-height: 280px; overflow-y: auto; }
 
+    /* Environment context */
+    .env-context-section {
+      background: rgba(56,189,248,0.03);
+      border: 1px solid rgba(56,189,248,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .snapshot-age { margin-left: auto; font-size: 0.68rem; color: rgba(255,255,255,0.25); }
+    .env-grid {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 5px 12px;
+      padding: 10px 12px;
+      align-items: baseline;
+    }
+    .env-key {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+    .env-val {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.4;
+    }
+    .env-val.mono { font-family: monospace; color: #38bdf8; font-size: 0.75rem; }
+    .env-val.pr-link { color: rgba(56,189,248,0.7); word-break: break-all; }
+    .env-val.arch-notes { color: rgba(255,255,255,0.55); font-size: 0.75rem; }
+
     /* Reason */
     .reason-section { display: flex; align-items: flex-start; gap: 10px; }
     .reason-icon { font-size: 1.1rem; color: #eab308; flex-shrink: 0; }
@@ -308,14 +374,44 @@ export class EscalationPanelComponent implements OnInit {
   refreshing = signal(false);
   guidance: Record<string, string> = {};
   resolving: Record<string, boolean> = {};
+  private envContexts = signal<Record<string, EnvContext | null>>({});
 
   ngOnInit() {
-    // EscalationService already fetches on construction; just clear loading
-    setTimeout(() => this.loading.set(false), 500);
+    setTimeout(() => {
+      this.loading.set(false);
+      this.fetchEnvContexts();
+    }, 500);
   }
 
   getLastArtifact(runId: string): ArtifactResponse | null {
     return this.escalationService.lastArtifacts()[runId] ?? null;
+  }
+
+  getEnvContext(runId: string): EnvContext | null {
+    return this.envContexts()[runId] ?? null;
+  }
+
+  private fetchEnvContexts() {
+    this.escalationService.escalatedRuns().forEach(run => {
+      this.orchestratorService.getEnvironment(run.id).subscribe({
+        next: (json) => {
+          try {
+            const snap = JSON.parse(json);
+            const ctx: EnvContext = {
+              branchName: snap.branchName,
+              ticketSummary: snap.ticketPlan
+                ? snap.ticketPlan.split('\n')[0].substring(0, 120)
+                : undefined,
+              architectureNotes: snap.architectureNotes,
+              capturedAt: snap.capturedAt,
+              prUrl: snap.prUrl,
+            };
+            this.envContexts.update(m => ({ ...m, [run.id]: ctx }));
+          } catch { /* no valid snapshot */ }
+        },
+        error: () => { /* no checkpoint yet — skip */ }
+      });
+    });
   }
 
   getTemplates(agentName: string | undefined): string[] {
@@ -330,7 +426,10 @@ export class EscalationPanelComponent implements OnInit {
   refresh() {
     this.refreshing.set(true);
     this.escalationService.refresh();
-    setTimeout(() => this.refreshing.set(false), 800);
+    setTimeout(() => {
+      this.refreshing.set(false);
+      this.fetchEnvContexts();
+    }, 800);
   }
 
   resolveEscalation(runId: string, decision: string) {

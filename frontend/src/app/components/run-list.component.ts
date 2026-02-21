@@ -5,14 +5,15 @@ import { Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
 import { switchMap, startWith } from 'rxjs/operators';
 import { OrchestratorService } from '../services/orchestrator.service';
-import { RunResponse } from '../models/orchestrator.model';
+import { RunResponse, RunRequest } from '../models/orchestrator.model';
+import { IntentPreviewModalComponent, IntentConfirmation } from './intent-preview-modal.component';
 
 const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DEVELOPER', 'REVIEW', 'TESTER', 'WRITER', 'JUDGE']);
 
 @Component({
   selector: 'app-run-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IntentPreviewModalComponent],
   template: `
     <div class="run-list-container">
       <div class="header">
@@ -23,7 +24,8 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
           </span>
           <span *ngIf="loading()" class="loading-chip">refreshing…</span>
         </div>
-        <div class="filters">
+        <div class="header-right">
+          <div class="filters">
           <select [ngModel]="statusFilter()" (ngModelChange)="onStatusFilterChange($event)" class="filter-select glass-panel">
             <option value="">All Statuses</option>
             <option value="DONE">Done</option>
@@ -38,8 +40,18 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
             placeholder="Search by repo..."
             class="search-input glass-panel"
           />
+          </div>
+          <button class="btn-new-bolt accent-gradient" (click)="openNewBolt()">+ New Bolt</button>
         </div>
       </div>
+
+      <!-- New Bolt modal -->
+      <app-intent-preview-modal
+        [visible]="showNewBoltModal()"
+        [request]="newBoltRequest()"
+        (confirmed)="onBoltConfirmed($event)"
+        (cancelled)="showNewBoltModal.set(false)">
+      </app-intent-preview-modal>
 
       <div class="run-table">
         <div class="table-header">
@@ -114,6 +126,19 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     }
     .header-left { display: flex; align-items: center; gap: 10px; }
     .header-left h2 { margin: 0; color: white; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .btn-new-bolt {
+      padding: 9px 18px;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .btn-new-bolt:hover { opacity: 0.85; }
     .live-chip {
       display: flex;
       align-items: center;
@@ -251,6 +276,9 @@ export class RunListComponent implements OnInit, OnDestroy {
   currentPage = signal(0);
   readonly pageSize = 15;
 
+  showNewBoltModal = signal(false);
+  newBoltRequest = signal<RunRequest>({ repo: '', issueNumber: 0, mode: 'EXECUTION' });
+
   private pollSub: Subscription | null = null;
 
   filteredRuns = computed(() => {
@@ -321,4 +349,18 @@ export class RunListComponent implements OnInit, OnDestroy {
   viewRun(run: RunResponse) { this.router.navigate(['/runs', run.id]); }
   previousPage() { if (this.currentPage() > 0) this.currentPage.update(p => p - 1); }
   nextPage() { if (this.currentPage() < this.totalPages() - 1) this.currentPage.update(p => p + 1); }
+
+  openNewBolt() {
+    this.newBoltRequest.set({ repo: '', issueNumber: 0, mode: 'EXECUTION' });
+    this.showNewBoltModal.set(true);
+  }
+
+  onBoltConfirmed(evt: IntentConfirmation) {
+    this.showNewBoltModal.set(false);
+    const req: RunRequest = { ...evt.request, autonomy: evt.autonomy };
+    this.orchestratorService.createRun(req).subscribe({
+      next: (run) => this.router.navigate(['/runs', run.id]),
+      error: () => { /* toast would go here */ }
+    });
+  }
 }
