@@ -1,20 +1,13 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AnalyticsService } from '../services/analytics.service';
+import { Subscription, interval } from 'rxjs';
+import { switchMap, startWith } from 'rxjs/operators';
+import { OrchestratorService } from '../services/orchestrator.service';
+import { RunResponse } from '../models/orchestrator.model';
 
-interface Run {
-  id: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  currentAgent: string;
-  ciFixCount: number;
-  e2eFixCount: number;
-  repo?: string;
-  issueNumber?: number;
-}
+const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DEVELOPER', 'REVIEW', 'TESTER', 'WRITER', 'JUDGE']);
 
 @Component({
   selector: 'app-run-list',
@@ -23,7 +16,13 @@ interface Run {
   template: `
     <div class="run-list-container">
       <div class="header">
-        <h2>Bolt History</h2>
+        <div class="header-left">
+          <h2>Bolt History</h2>
+          <span *ngIf="activeCount() > 0" class="live-chip">
+            <span class="live-dot"></span>{{ activeCount() }} active
+          </span>
+          <span *ngIf="loading()" class="loading-chip">refreshing…</span>
+        </div>
         <div class="filters">
           <select [ngModel]="statusFilter()" (ngModelChange)="onStatusFilterChange($event)" class="filter-select glass-panel">
             <option value="">All Statuses</option>
@@ -32,11 +31,11 @@ interface Run {
             <option value="ESCALATED">Escalated</option>
             <option value="DEVELOPER">In Progress</option>
           </select>
-          <input 
-            type="text" 
-            [ngModel]="searchTerm()" 
+          <input
+            type="text"
+            [ngModel]="searchTerm()"
             (ngModelChange)="onSearchTermChange($event)"
-            placeholder="Search by repo..." 
+            placeholder="Search by repo..."
             class="search-input glass-panel"
           />
         </div>
@@ -47,14 +46,14 @@ interface Run {
           <div class="col col-id">ID</div>
           <div class="col col-repo">Repository</div>
           <div class="col col-status">Status</div>
-          <div class="col col-agent">Current Agent</div>
+          <div class="col col-agent">Agent</div>
           <div class="col col-fixes">Fixes</div>
           <div class="col col-date">Created</div>
         </div>
 
         <div class="table-body">
-          <div *ngFor="let run of filteredRuns()" class="table-row" (click)="viewRun(run)">
-            <div class="col col-id">{{ run.id.substring(0, 8) }}</div>
+          <div *ngFor="let run of pagedRuns()" class="table-row" (click)="viewRun(run)">
+            <div class="col col-id mono">{{ run.id.substring(0, 8) }}</div>
             <div class="col col-repo">
               {{ run.repo || 'N/A' }}
               <span *ngIf="run.issueNumber" class="issue-badge">#{{ run.issueNumber }}</span>
@@ -63,40 +62,40 @@ interface Run {
               <span class="status-badge" [ngClass]="getStatusClass(run.status)">
                 {{ run.status }}
               </span>
+              <span *ngIf="run.status === 'ESCALATED'" class="escalation-dot" title="Needs human decision">⚠</span>
             </div>
-            <div class="col col-agent">{{ run.currentAgent || '-' }}</div>
+            <div class="col col-agent">
+              <span *ngIf="run.currentAgent" class="agent-chip">{{ run.currentAgent }}</span>
+              <span *ngIf="!run.currentAgent" class="dim">—</span>
+            </div>
             <div class="col col-fixes">
-              <span class="fix-count" *ngIf="run.ciFixCount > 0">CI: {{ run.ciFixCount }}</span>
-              <span class="fix-count" *ngIf="run.e2eFixCount > 0">E2E: {{ run.e2eFixCount }}</span>
-              <span *ngIf="!run.ciFixCount && !run.e2eFixCount">-</span>
+              <span class="fix-count" *ngIf="run.ciFixCount > 0">CI:{{ run.ciFixCount }}</span>
+              <span class="fix-count e2e" *ngIf="run.e2eFixCount > 0">E2E:{{ run.e2eFixCount }}</span>
+              <span class="dim" *ngIf="!run.ciFixCount && !run.e2eFixCount">—</span>
             </div>
-            <div class="col col-date">{{ formatDate(run.createdAt) }}</div>
+            <div class="col col-date dim">{{ formatAge(run.createdAt) }}</div>
           </div>
 
-          <div *ngIf="filteredRuns().length === 0" class="empty-state">
+          <div *ngIf="filteredRuns().length === 0 && !loading()" class="empty-state">
             <p>No runs found</p>
+          </div>
+          <div *ngIf="filteredRuns().length === 0 && loading()" class="empty-state">
+            <p>Loading…</p>
           </div>
         </div>
       </div>
 
-      <div class="pagination">
-        <button 
-          (click)="previousPage()" 
-          [disabled]="currentPage() === 0"
-          class="btn-pagination glass-panel"
-        >
-          Previous
-        </button>
-        <span class="page-info">
-          Page {{ currentPage() + 1 }} of {{ totalPages() }}
-        </span>
-        <button 
-          (click)="nextPage()" 
-          [disabled]="currentPage() >= totalPages() - 1"
-          class="btn-pagination glass-panel"
-        >
-          Next
-        </button>
+      <div class="footer-row">
+        <span class="total-label">{{ filteredRuns().length }} runs</span>
+        <div class="pagination">
+          <button (click)="previousPage()" [disabled]="currentPage() === 0" class="btn-pagination glass-panel">
+            ‹ Prev
+          </button>
+          <span class="page-info">{{ currentPage() + 1 }} / {{ totalPages() }}</span>
+          <button (click)="nextPage()" [disabled]="currentPage() >= totalPages() - 1" class="btn-pagination glass-panel">
+            Next ›
+          </button>
+        </div>
       </div>
     </div>
   `,
@@ -106,305 +105,220 @@ interface Run {
       height: 100%;
       display: flex;
       flex-direction: column;
+      gap: 16px;
     }
-
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
     }
-
-    .header h2 {
-      margin: 0;
-      color: white;
-    }
-
-    .filters {
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .header-left h2 { margin: 0; color: white; }
+    .live-chip {
       display: flex;
-      gap: 12px;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #22c55e;
+      background: rgba(34,197,94,0.12);
+      padding: 2px 8px;
+      border-radius: 8px;
     }
-
+    .live-dot {
+      width: 6px; height: 6px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .loading-chip { font-size: 0.72rem; color: rgba(255,255,255,0.35); }
+    .filters { display: flex; gap: 12px; }
     .filter-select, .search-input {
       padding: 8px 12px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255,255,255,0.1);
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255,255,255,0.05);
       color: white;
       outline: none;
     }
-
-    .search-input {
-      width: 250px;
-    }
+    .search-input { width: 220px; }
 
     .run-table {
       flex: 1;
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(255,255,255,0.03);
       border-radius: 12px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
     }
-
     .table-header, .table-row {
       display: grid;
-      grid-template-columns: 100px 2fr 120px 150px 120px 150px;
-      gap: 16px;
-      padding: 16px;
+      grid-template-columns: 90px 2fr 130px 130px 120px 120px;
+      gap: 12px;
+      padding: 14px 16px;
       align-items: center;
     }
-
     .table-header {
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255,255,255,0.05);
       font-weight: 600;
       color: #94a3b8;
-      font-size: 0.875rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-
-    .table-body {
-      flex: 1;
-      overflow-y: auto;
-    }
-
+    .table-body { flex: 1; overflow-y: auto; }
     .table-row {
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
-
-    .table-row:hover {
-      background: rgba(56, 189, 248, 0.1);
-    }
+    .table-row:hover { background: rgba(56,189,248,0.07); }
+    .mono { font-family: monospace; }
+    .dim { color: rgba(255,255,255,0.35); }
 
     .status-badge {
       display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.75rem;
-      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+      font-weight: 700;
       text-transform: uppercase;
     }
-
-    .status-badge.done {
-      background: rgba(34, 197, 94, 0.2);
-      color: #22c55e;
-    }
-
-    .status-badge.failed {
-      background: rgba(239, 68, 68, 0.2);
-      color: #ef4444;
-    }
-
-    .status-badge.escalated {
-      background: rgba(251, 191, 36, 0.2);
-      color: #fbbf24;
-    }
-
-    .status-badge.in-progress {
-      background: rgba(56, 189, 248, 0.2);
-      color: #38bdf8;
-    }
+    .done      { background: rgba(34,197,94,0.15);  color: #22c55e; }
+    .failed    { background: rgba(239,68,68,0.15);  color: #ef4444; }
+    .escalated { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .in-progress { background: rgba(56,189,248,0.15); color: #38bdf8; }
+    .escalation-dot { color: #fbbf24; margin-left: 4px; font-size: 0.8rem; }
 
     .issue-badge {
-      display: inline-block;
-      margin-left: 8px;
-      padding: 2px 8px;
-      background: rgba(139, 92, 246, 0.2);
+      margin-left: 6px;
+      padding: 1px 6px;
+      background: rgba(139,92,246,0.15);
       color: #8b5cf6;
-      border-radius: 8px;
-      font-size: 0.75rem;
+      border-radius: 6px;
+      font-size: 0.7rem;
     }
-
+    .agent-chip {
+      padding: 1px 7px;
+      background: rgba(56,189,248,0.1);
+      color: #38bdf8;
+      border-radius: 6px;
+      font-size: 0.72rem;
+    }
     .fix-count {
       display: inline-block;
-      margin-right: 8px;
-      padding: 2px 6px;
-      background: rgba(56, 189, 248, 0.2);
+      margin-right: 4px;
+      padding: 1px 5px;
+      background: rgba(56,189,248,0.12);
       color: #38bdf8;
       border-radius: 4px;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
     }
+    .fix-count.e2e { background: rgba(139,92,246,0.12); color: #8b5cf6; }
 
-    .pagination {
+    .footer-row {
       display: flex;
-      justify-content: center;
+      justify-content: space-between;
       align-items: center;
-      gap: 16px;
-      margin-top: 24px;
     }
-
+    .total-label { font-size: 0.78rem; color: rgba(255,255,255,0.35); }
+    .pagination { display: flex; align-items: center; gap: 10px; }
     .btn-pagination {
-      padding: 8px 16px;
+      padding: 6px 14px;
       border: none;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255,255,255,0.05);
       color: white;
       cursor: pointer;
-      transition: background 0.2s;
+      font-size: 0.82rem;
+      transition: background 0.15s;
     }
-
-    .btn-pagination:hover:not(:disabled) {
-      background: rgba(56, 189, 248, 0.2);
-    }
-
-    .btn-pagination:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .page-info {
-      color: #94a3b8;
-      font-size: 0.875rem;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 48px;
-      color: #94a3b8;
-    }
+    .btn-pagination:hover:not(:disabled) { background: rgba(56,189,248,0.15); }
+    .btn-pagination:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-info { color: #94a3b8; font-size: 0.82rem; }
+    .empty-state { text-align: center; padding: 48px; color: #94a3b8; }
   `]
 })
-export class RunListComponent implements OnInit {
-  runs = signal<Run[]>([]);
-  filteredRuns = signal<Run[]>([]);
+export class RunListComponent implements OnInit, OnDestroy {
+  private orchestratorService = inject(OrchestratorService);
+  private router = inject(Router);
+
+  private allRuns = signal<RunResponse[]>([]);
+  loading = signal(true);
   statusFilter = signal('');
   searchTerm = signal('');
   currentPage = signal(0);
-  pageSize = 10;
-  totalPages = signal(1);
+  readonly pageSize = 15;
 
-  constructor(
-    private analyticsService: AnalyticsService,
-    private router: Router
-  ) {}
+  private pollSub: Subscription | null = null;
+
+  filteredRuns = computed(() => {
+    let runs = this.allRuns();
+    const sf = this.statusFilter();
+    const st = this.searchTerm().toLowerCase();
+    if (sf) runs = runs.filter(r => r.status === sf || (sf === 'DEVELOPER' && ACTIVE_STATUSES.has(r.status)));
+    if (st) runs = runs.filter(r => r.repo?.toLowerCase().includes(st));
+    return runs;
+  });
+
+  activeCount = computed(() => this.allRuns().filter(r => ACTIVE_STATUSES.has(r.status)).length);
+  totalPages = computed(() => Math.max(1, Math.ceil(this.filteredRuns().length / this.pageSize)));
+  pagedRuns = computed(() => {
+    const start = this.currentPage() * this.pageSize;
+    return this.filteredRuns().slice(start, start + this.pageSize);
+  });
 
   ngOnInit() {
-    this.loadRuns();
+    this.pollSub = interval(5000).pipe(
+      startWith(0),
+      switchMap(() => this.orchestratorService.getRuns())
+    ).subscribe({
+      next: (runs) => {
+        this.allRuns.set(runs);
+        this.loading.set(false);
+        // Reset to page 0 if current page is out of range
+        if (this.currentPage() >= this.totalPages()) this.currentPage.set(0);
+      },
+      error: () => this.loading.set(false)
+    });
+  }
+
+  ngOnDestroy() {
+    this.pollSub?.unsubscribe();
   }
 
   onStatusFilterChange(value: string) {
     this.statusFilter.set(value);
-    this.applyFilters();
+    this.currentPage.set(0);
   }
 
   onSearchTermChange(value: string) {
     this.searchTerm.set(value);
-    this.applyFilters();
-  }
-
-  loadRuns() {
-    const mockRuns: Run[] = [
-      {
-        id: '550e8400-e29b-41d4-a716-446655440001',
-        status: 'DONE',
-        createdAt: new Date(Date.now() - 3600000).toISOString(),
-        updatedAt: new Date().toISOString(),
-        currentAgent: 'WriterStep',
-        ciFixCount: 2,
-        e2eFixCount: 1,
-        repo: 'atlasia-core',
-        issueNumber: 42
-      },
-      {
-        id: '550e8400-e29b-41d4-a716-446655440002',
-        status: 'FAILED',
-        createdAt: new Date(Date.now() - 7200000).toISOString(),
-        updatedAt: new Date().toISOString(),
-        currentAgent: 'TesterStep',
-        ciFixCount: 5,
-        e2eFixCount: 3,
-        repo: 'atlasia-frontend',
-        issueNumber: 15
-      },
-      {
-        id: '550e8400-e29b-41d4-a716-446655440003',
-        status: 'DEVELOPER',
-        createdAt: new Date(Date.now() - 1800000).toISOString(),
-        updatedAt: new Date().toISOString(),
-        currentAgent: 'DeveloperStep',
-        ciFixCount: 0,
-        e2eFixCount: 0,
-        repo: 'atlasia-api',
-        issueNumber: 23
-      },
-      {
-        id: '550e8400-e29b-41d4-a716-446655440004',
-        status: 'ESCALATED',
-        createdAt: new Date(Date.now() - 10800000).toISOString(),
-        updatedAt: new Date().toISOString(),
-        currentAgent: 'ReviewStep',
-        ciFixCount: 8,
-        e2eFixCount: 4,
-        repo: 'atlasia-core',
-        issueNumber: 78
-      },
-    ];
-
-    this.runs.set(mockRuns);
-    this.applyFilters();
-  }
-
-  applyFilters() {
-    let filtered = this.runs();
-
-    if (this.statusFilter()) {
-      filtered = filtered.filter(run => run.status === this.statusFilter());
-    }
-
-    if (this.searchTerm()) {
-      const term = this.searchTerm().toLowerCase();
-      filtered = filtered.filter(run => 
-        run.repo?.toLowerCase().includes(term)
-      );
-    }
-
-    this.filteredRuns.set(filtered);
-    this.totalPages.set(Math.ceil(filtered.length / this.pageSize));
+    this.currentPage.set(0);
   }
 
   getStatusClass(status: string): string {
-    switch (status) {
-      case 'DONE':
-        return 'done';
-      case 'FAILED':
-        return 'failed';
-      case 'ESCALATED':
-        return 'escalated';
-      default:
-        return 'in-progress';
-    }
+    if (status === 'DONE') return 'done';
+    if (status === 'FAILED') return 'failed';
+    if (status === 'ESCALATED') return 'escalated';
+    return 'in-progress';
   }
 
-  formatDate(dateStr: string): string {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+  formatAge(dateStr: string): string {
+    try {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const m = Math.floor(diff / 60000);
+      const h = Math.floor(diff / 3600000);
+      const d = Math.floor(diff / 86400000);
+      if (m < 60) return `${m}m ago`;
+      if (h < 24) return `${h}h ago`;
+      if (d < 7) return `${d}d ago`;
+      return new Date(dateStr).toLocaleDateString();
+    } catch { return dateStr; }
   }
 
-  viewRun(run: Run) {
-    this.router.navigate(['/runs', run.id]);
-  }
-
-  previousPage() {
-    if (this.currentPage() > 0) {
-      this.currentPage.update(p => p - 1);
-    }
-  }
-
-  nextPage() {
-    if (this.currentPage() < this.totalPages() - 1) {
-      this.currentPage.update(p => p + 1);
-    }
-  }
+  viewRun(run: RunResponse) { this.router.navigate(['/runs', run.id]); }
+  previousPage() { if (this.currentPage() > 0) this.currentPage.update(p => p - 1); }
+  nextPage() { if (this.currentPage() < this.totalPages() - 1) this.currentPage.update(p => p + 1); }
 }

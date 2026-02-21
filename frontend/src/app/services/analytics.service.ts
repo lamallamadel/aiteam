@@ -2,26 +2,74 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-export interface AnalyticsSummary {
+// ── DTOs matching backend exactly ────────────────────────────────────────────
+
+export interface RunsSummaryDto {
   totalRuns: number;
   successRate: number;
   failureRate: number;
   escalationRate: number;
   statusBreakdown: Record<string, number>;
-  repoBreakdown: Record<string, number>;
+  timeSeriesData?: {
+    runCountByDate: Record<string, number>;
+    successRateByDate: Record<string, number>;
+    failureRateByDate: Record<string, number>;
+    escalationRateByDate: Record<string, number>;
+  };
 }
 
-export interface AgentPerformance {
-  avgDurationByAgent: Record<string, number>;
-  errorRateByAgent: Record<string, number>;
-  avgFixCountByStatus: Record<string, number>;
+export interface AgentMetrics {
+  agentName: string;
+  totalRuns: number;
+  averageDuration: number;
+  errorRate: number;
+  successRate: number;
+  averageCiFixCount: number;
+  averageE2eFixCount: number;
 }
 
-export interface EscalationInsight {
-  totalEscalationsAnalysed: number;
-  topErrorPatterns: Record<string, number>;
-  problematicFiles: string[];
-  clusters: EscalationCluster[];
+export interface AgentsPerformanceDto {
+  agentMetrics: AgentMetrics[];
+  overallAverageDuration: number;
+  overallErrorRate: number;
+}
+
+export interface PersonaStatistics {
+  personaName: string;
+  personaRole: string;
+  totalFindings: number;
+  criticalFindings: number;
+  highFindings: number;
+  mediumFindings: number;
+  lowFindings: number;
+  mandatoryFindings: number;
+  averageFindingsPerRun: number;
+}
+
+export interface PersonasFindingsDto {
+  personaStatistics: PersonaStatistics[];
+  severityBreakdown: Record<string, { count: number; percentage: number }>;
+  totalFindings: number;
+  mandatoryFindings: number;
+}
+
+export interface FixLoopPattern {
+  repo: string;
+  issueNumber: number;
+  ciFixCount: number;
+  e2eFixCount: number;
+  totalIterations: number;
+  status: string;
+  pattern: string;
+}
+
+export interface FixLoopsDto {
+  patterns: FixLoopPattern[];
+  loopStatistics: Record<string, { totalRuns: number; averageIterations: number; maxIterations: number; successRate: number }>;
+  averageCiIterations: number;
+  averageE2eIterations: number;
+  runsWithMultipleCiIterations: number;
+  runsWithMultipleE2eIterations: number;
 }
 
 export interface EscalationCluster {
@@ -30,67 +78,46 @@ export interface EscalationCluster {
   suggestedRootCause: string;
 }
 
-export interface PersonaEffectiveness {
-  personaMetrics: Record<string, PersonaMetrics>;
-  configurationRecommendations: string[];
+export interface EscalationInsightDto {
+  totalEscalationsAnalysed: number;
+  topErrorPatterns: Record<string, number>;
+  problematicFiles: string[];
+  clusters: EscalationCluster[];
 }
 
-export interface PersonaMetrics {
-  reviewsCount: number;
-  criticalFindings: number;
-  effectivenessScore: number;
-  falsePositives: number;
-}
-
-export interface Run {
-  id: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  currentAgent: string;
-  ciFixCount: number;
-  e2eFixCount: number;
-  artifacts: ArtifactSummary[];
-  repo?: string;
-  issueNumber?: number;
-}
-
-export interface ArtifactSummary {
-  id: string;
+export interface LatencyPoint {
   agentName: string;
-  artifactType: string;
-  createdAt: string;
+  avgLatencyMs: number;
+  callCount: number;
+  totalTokens: number;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class AnalyticsService {
   private http = inject(HttpClient);
-  private apiUrl = '/api/analytics';
-  private runsApiUrl = '/api/runs';
+  private base = '/api/analytics';
 
-  getSummary(): Observable<AnalyticsSummary> {
-    return this.http.get<AnalyticsSummary>(`${this.apiUrl}/runs/summary`);
+  getSummary(): Observable<RunsSummaryDto> {
+    return this.http.get<RunsSummaryDto>(`${this.base}/runs/summary`);
   }
 
-  getAgentPerformance(): Observable<AgentPerformance> {
-    return this.http.get<AgentPerformance>(`${this.apiUrl}/agents/performance`);
+  getAgentPerformance(): Observable<AgentsPerformanceDto> {
+    return this.http.get<AgentsPerformanceDto>(`${this.base}/agents/performance`);
   }
 
-  getEscalationInsights(): Observable<EscalationInsight> {
-    return this.http.get<EscalationInsight>(`${this.apiUrl}/escalations/insights`);
+  getPersonasFindings(): Observable<PersonasFindingsDto> {
+    return this.http.get<PersonasFindingsDto>(`${this.base}/personas/findings`);
   }
 
-  getPersonaEffectiveness(): Observable<PersonaEffectiveness> {
-    return this.http.get<PersonaEffectiveness>(`${this.apiUrl}/personas/effectiveness`);
+  getFixLoops(): Observable<FixLoopsDto> {
+    return this.http.get<FixLoopsDto>(`${this.base}/fix-loops`);
   }
 
-  getRun(id: string): Observable<Run> {
-    return this.http.get<Run>(`${this.runsApiUrl}/${id}`);
+  generateEscalationInsights(): Observable<EscalationInsightDto> {
+    return this.http.post<EscalationInsightDto>(`${this.base}/escalations/insights`, {});
   }
 
-  getRunArtifacts(id: string): Observable<ArtifactSummary[]> {
-    return this.http.get<ArtifactSummary[]>(`${this.runsApiUrl}/${id}/artifacts`);
+  getLatencyTrend(): Observable<LatencyPoint[]> {
+    return this.http.get<LatencyPoint[]>(`${this.base}/traces/latency-trend`);
   }
 }

@@ -2,36 +2,13 @@ import { Component, OnInit, signal, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core
 import { CommonModule } from '@angular/common';
 import { BaseChartDirective } from 'ng2-charts';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
-import { AnalyticsService } from '../services/analytics.service';
+import {
+  AnalyticsService,
+  RunsSummaryDto, AgentsPerformanceDto, PersonasFindingsDto,
+  FixLoopsDto, LatencyPoint
+} from '../services/analytics.service';
 
 Chart.register(...registerables);
-
-interface AnalyticsSummary {
-  totalRuns: number;
-  successRate: number;
-  failureRate: number;
-  escalationRate: number;
-  statusBreakdown: Record<string, number>;
-  repoBreakdown: Record<string, number>;
-}
-
-interface AgentPerformance {
-  avgDurationByAgent: Record<string, number>;
-  errorRateByAgent: Record<string, number>;
-  avgFixCountByStatus: Record<string, number>;
-}
-
-interface PersonaEffectiveness {
-  personaMetrics: Record<string, PersonaMetrics>;
-  configurationRecommendations: string[];
-}
-
-interface PersonaMetrics {
-  reviewsCount: number;
-  criticalFindings: number;
-  effectivenessScore: number;
-  falsePositives: number;
-}
 
 @Component({
   selector: 'app-analytics-dashboard',
@@ -40,10 +17,12 @@ interface PersonaMetrics {
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   template: `
     <div class="analytics-container">
+
+      <!-- KPI row ─────────────────────────────────────────────────────── -->
       <div class="metrics-grid">
         <div class="metric-card glass-panel">
           <div class="metric-label">Total Bolts</div>
-          <div class="metric-value">{{ summary()?.totalRuns || 0 }}</div>
+          <div class="metric-value">{{ summary()?.totalRuns ?? '—' }}</div>
         </div>
         <div class="metric-card glass-panel success">
           <div class="metric-label">Success Rate</div>
@@ -57,72 +36,142 @@ interface PersonaMetrics {
           <div class="metric-label">Failure Rate</div>
           <div class="metric-value">{{ formatPercent(summary()?.failureRate) }}</div>
         </div>
+        <div class="metric-card glass-panel">
+          <div class="metric-label">Avg CI Loops</div>
+          <div class="metric-value">{{ fixLoops()?.averageCiIterations?.toFixed(1) ?? '—' }}</div>
+        </div>
+        <div class="metric-card glass-panel">
+          <div class="metric-label">Avg E2E Loops</div>
+          <div class="metric-value">{{ fixLoops()?.averageE2eIterations?.toFixed(1) ?? '—' }}</div>
+        </div>
       </div>
 
+      <!-- Charts row ───────────────────────────────────────────────────── -->
       <div class="charts-grid">
-        <div class="chart-card glass-panel">
-          <h3>Success Rate Trend</h3>
-          <div class="chart-wrapper">
-            <canvas 
-              baseChart
-              [data]="successRateChartData"
-              [options]="successRateChartOptions"
-              [type]="'line'"
-            ></canvas>
-          </div>
-        </div>
 
-        <div class="chart-card glass-panel">
-          <h3>Agent Performance</h3>
-          <div class="chart-wrapper">
-            <canvas 
-              baseChart
-              [data]="agentPerformanceChartData"
-              [options]="agentPerformanceChartOptions"
-              [type]="'bar'"
-            ></canvas>
-          </div>
-        </div>
-
+        <!-- Status distribution donut -->
         <div class="chart-card glass-panel">
           <h3>Status Distribution</h3>
           <div class="chart-wrapper">
-            <canvas 
-              baseChart
-              [data]="statusDistributionChartData"
-              [options]="statusDistributionChartOptions"
-              [type]="'doughnut'"
-            ></canvas>
+            <canvas baseChart
+              [data]="statusChartData"
+              [options]="donutOptions"
+              type="doughnut">
+            </canvas>
           </div>
         </div>
 
+        <!-- Agent avg duration bar -->
         <div class="chart-card glass-panel">
-          <h3>Persona Effectiveness</h3>
+          <h3>Agent Avg Duration (ms)</h3>
+          <div class="chart-wrapper">
+            <canvas baseChart
+              [data]="agentDurationChartData"
+              [options]="barOptions"
+              type="bar">
+            </canvas>
+          </div>
+        </div>
+
+        <!-- Latency trend bar -->
+        <div class="chart-card glass-panel">
+          <h3>LLM Latency by Agent (ms)</h3>
+          <div class="chart-wrapper">
+            <canvas baseChart
+              [data]="latencyChartData"
+              [options]="barOptions"
+              type="bar">
+            </canvas>
+          </div>
+        </div>
+
+        <!-- Persona findings -->
+        <div class="chart-card glass-panel">
+          <h3>Persona Findings</h3>
           <div class="persona-list">
-            <div *ngFor="let persona of getPersonasList()" class="persona-item">
-              <div class="persona-header">
-                <span class="persona-name">{{ persona.name }}</span>
-                <span class="effectiveness-score" [ngClass]="getScoreClass(persona.score)">
-                  {{ formatPercent(persona.score) }}
-                </span>
-              </div>
-              <div class="persona-stats">
-                <span class="stat">{{ persona.reviews }} reviews</span>
-                <span class="stat critical">{{ persona.critical }} critical</span>
-                <span class="stat warning">{{ persona.falsePositives }} false positives</span>
-              </div>
-            </div>
+            @if (personasFindings()?.personaStatistics?.length) {
+              @for (p of personasFindings()!.personaStatistics; track p.personaName) {
+                <div class="persona-item">
+                  <div class="persona-header">
+                    <span class="persona-name">{{ p.personaName }}</span>
+                    <span class="role-chip">{{ p.personaRole }}</span>
+                  </div>
+                  <div class="findings-bar-row">
+                    <span class="finding-chip critical">{{ p.criticalFindings }} crit</span>
+                    <span class="finding-chip high">{{ p.highFindings }} high</span>
+                    <span class="finding-chip medium">{{ p.mediumFindings }} med</span>
+                    <span class="finding-chip low">{{ p.lowFindings }} low</span>
+                    <span class="per-run">{{ p.averageFindingsPerRun.toFixed(1) }}/run</span>
+                  </div>
+                </div>
+              }
+            } @else {
+              <div class="empty-msg">No persona data yet</div>
+            }
           </div>
         </div>
       </div>
 
-      <div class="recommendations glass-panel" *ngIf="personaEffectiveness()">
-        <h3>Configuration Recommendations</h3>
-        <ul>
-          <li *ngFor="let rec of personaEffectiveness()?.configurationRecommendations">
-            {{ rec }}
-          </li>
-        </ul>
+      <!-- Agent performance table ──────────────────────────────────────── -->
+      <div class="table-card glass-panel" *ngIf="agentPerformance()?.agentMetrics?.length">
+        <h3>Agent Performance</h3>
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Runs</th>
+              <th>Avg Duration</th>
+              <th>Success</th>
+              <th>Error Rate</th>
+              <th>Avg CI Fixes</th>
+              <th>Avg E2E Fixes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let m of agentPerformance()!.agentMetrics">
+              <td class="agent-name">{{ m.agentName }}</td>
+              <td>{{ m.totalRuns }}</td>
+              <td>{{ m.averageDuration | number:'1.0-0' }} ms</td>
+              <td class="success-cell">{{ formatPercent(m.successRate) }}</td>
+              <td class="error-cell">{{ formatPercent(m.errorRate) }}</td>
+              <td>{{ m.averageCiFixCount | number:'1.1-1' }}</td>
+              <td>{{ m.averageE2eFixCount | number:'1.1-1' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Fix loop patterns ────────────────────────────────────────────── -->
+      <div class="table-card glass-panel" *ngIf="fixLoops()?.patterns?.length">
+        <h3>Fix Loop Patterns (recent {{ fixLoops()!.patterns.length }} runs)</h3>
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th>Repo</th>
+              <th>Issue</th>
+              <th>CI Fixes</th>
+              <th>E2E Fixes</th>
+              <th>Total Iter.</th>
+              <th>Status</th>
+              <th>Pattern</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let p of fixLoops()!.patterns">
+              <td class="agent-name">{{ p.repo }}</td>
+              <td>#{{ p.issueNumber }}</td>
+              <td>{{ p.ciFixCount }}</td>
+              <td>{{ p.e2eFixCount }}</td>
+              <td>{{ p.totalIterations }}</td>
+              <td><span class="status-chip" [ngClass]="p.status.toLowerCase()">{{ p.status }}</span></td>
+              <td class="pattern-cell">{{ p.pattern }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="error-notice" *ngIf="loadError()">
+        {{ loadError() }}
       </div>
     </div>
   `,
@@ -131,393 +180,223 @@ interface PersonaMetrics {
       padding: 24px;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 20px;
       height: 100%;
       overflow-y: auto;
     }
-
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
     }
-
     .metric-card {
-      padding: 20px;
+      padding: 18px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-
-    .metric-card.success {
-      border-color: rgba(34, 197, 94, 0.3);
-    }
-
-    .metric-card.warning {
-      border-color: rgba(251, 191, 36, 0.3);
-    }
-
-    .metric-card.danger {
-      border-color: rgba(239, 68, 68, 0.3);
-    }
-
-    .metric-label {
-      font-size: 0.875rem;
-      color: #94a3b8;
-      margin-bottom: 8px;
-    }
-
-    .metric-value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: white;
-    }
+    .metric-card.success { border-color: rgba(34,197,94,0.3); }
+    .metric-card.warning { border-color: rgba(251,191,36,0.3); }
+    .metric-card.danger  { border-color: rgba(239,68,68,0.3); }
+    .metric-label { font-size: 0.78rem; color: #94a3b8; margin-bottom: 8px; }
+    .metric-value { font-size: 1.9rem; font-weight: 700; color: white; }
 
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 20px;
     }
-
     .chart-card {
-      padding: 24px;
+      padding: 20px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-
-    .chart-card h3 {
-      margin: 0 0 20px 0;
-      color: white;
-      font-size: 1.125rem;
-    }
-
-    .chart-wrapper {
-      position: relative;
-      height: 300px;
-    }
-
-    .persona-list {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .persona-item {
-      padding: 16px;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .persona-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .persona-name {
-      font-weight: 600;
-      color: white;
-    }
-
-    .effectiveness-score {
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-
-    .effectiveness-score.high {
-      background: rgba(34, 197, 94, 0.2);
-      color: #22c55e;
-    }
-
-    .effectiveness-score.medium {
-      background: rgba(251, 191, 36, 0.2);
-      color: #fbbf24;
-    }
-
-    .effectiveness-score.low {
-      background: rgba(239, 68, 68, 0.2);
-      color: #ef4444;
-    }
-
-    .persona-stats {
-      display: flex;
-      gap: 16px;
-      font-size: 0.875rem;
-      color: #94a3b8;
-    }
-
-    .stat.critical {
-      color: #ef4444;
-    }
-
-    .stat.warning {
-      color: #fbbf24;
-    }
-
-    .recommendations {
-      padding: 24px;
-      border-radius: 12px;
-      background: rgba(56, 189, 248, 0.05);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-    }
-
-    .recommendations h3 {
+    .chart-card h3, .table-card h3 {
       margin: 0 0 16px 0;
       color: white;
+      font-size: 0.95rem;
+      font-weight: 600;
     }
+    .chart-wrapper { position: relative; height: 260px; }
 
-    .recommendations ul {
-      margin: 0;
-      padding-left: 24px;
-      color: #94a3b8;
+    /* Persona list */
+    .persona-list { display: flex; flex-direction: column; gap: 10px; }
+    .persona-item {
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.04);
     }
+    .persona-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .persona-name { font-weight: 600; color: white; font-size: 0.85rem; }
+    .role-chip {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      background: rgba(139,92,246,0.15);
+      color: #8b5cf6;
+      border-radius: 6px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .findings-bar-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .finding-chip {
+      font-size: 0.68rem;
+      padding: 1px 6px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .finding-chip.critical { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .finding-chip.high { background: rgba(234,179,8,0.15); color: #eab308; }
+    .finding-chip.medium { background: rgba(56,189,248,0.12); color: #38bdf8; }
+    .finding-chip.low { background: rgba(148,163,184,0.12); color: #94a3b8; }
+    .per-run { margin-left: auto; font-size: 0.68rem; color: rgba(255,255,255,0.3); }
+    .empty-msg { color: rgba(255,255,255,0.35); font-size: 0.85rem; padding: 12px 0; }
 
-    .recommendations li {
-      margin-bottom: 8px;
+    /* Tables */
+    .table-card {
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .perf-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .perf-table th {
+      text-align: left;
+      padding: 8px 12px;
+      color: rgba(255,255,255,0.35);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .perf-table td {
+      padding: 9px 12px;
+      color: rgba(255,255,255,0.7);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .perf-table tr:last-child td { border-bottom: none; }
+    .perf-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    .agent-name { font-weight: 600; color: #38bdf8; }
+    .success-cell { color: #22c55e; font-weight: 600; }
+    .error-cell { color: #ef4444; }
+    .pattern-cell { font-family: monospace; font-size: 0.72rem; color: rgba(255,255,255,0.45); }
+    .status-chip {
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .status-chip.done     { background: rgba(34,197,94,0.15);  color: #22c55e; }
+    .status-chip.failed   { background: rgba(239,68,68,0.15);  color: #ef4444; }
+    .status-chip.escalated{ background: rgba(234,179,8,0.15);  color: #eab308; }
+
+    .error-notice {
+      padding: 12px 16px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 8px;
+      color: #fca5a5;
+      font-size: 0.82rem;
     }
   `]
 })
 export class AnalyticsDashboardComponent implements OnInit {
-  summary = signal<AnalyticsSummary | null>(null);
-  agentPerformance = signal<AgentPerformance | null>(null);
-  personaEffectiveness = signal<PersonaEffectiveness | null>(null);
+  summary         = signal<RunsSummaryDto | null>(null);
+  agentPerformance= signal<AgentsPerformanceDto | null>(null);
+  personasFindings= signal<PersonasFindingsDto | null>(null);
+  fixLoops        = signal<FixLoopsDto | null>(null);
+  latency         = signal<LatencyPoint[]>([]);
+  loadError       = signal<string | null>(null);
 
-  successRateChartData: ChartConfiguration['data'] = {
-    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-    datasets: [
-      {
-        label: 'Success Rate',
-        data: [85, 88, 92, 94],
-        borderColor: '#22c55e',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        tension: 0.4,
-        fill: true
-      }
-    ]
+  // ── Charts ──────────────────────────────────────────────────────────────
+  statusChartData: ChartConfiguration['data'] = {
+    labels: [],
+    datasets: [{ data: [], backgroundColor: ['rgba(34,197,94,0.8)','rgba(239,68,68,0.8)','rgba(251,191,36,0.8)','rgba(56,189,248,0.8)'], borderWidth: 0 }]
   };
 
-  successRateChartOptions: ChartConfiguration['options'] = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      }
-    },
+  agentDurationChartData: ChartConfiguration['data'] = {
+    labels: [],
+    datasets: [{ label: 'Avg Duration (ms)', data: [], backgroundColor: 'rgba(56,189,248,0.7)' }]
+  };
+
+  latencyChartData: ChartConfiguration['data'] = {
+    labels: [],
+    datasets: [{ label: 'Avg LLM Latency (ms)', data: [], backgroundColor: 'rgba(139,92,246,0.7)' }]
+  };
+
+  readonly donutOptions: ChartConfiguration['options'] = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { color: '#94a3b8', padding: 14 } } }
+  };
+
+  readonly barOptions: ChartConfiguration['options'] = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
     scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        },
-        ticks: {
-          color: '#94a3b8'
-        }
-      },
-      x: {
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        },
-        ticks: {
-          color: '#94a3b8'
-        }
-      }
+      y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#94a3b8' } },
+      x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
     }
   };
 
-  agentPerformanceChartData: ChartConfiguration['data'] = {
-    labels: ['PM', 'Qualifier', 'Developer', 'Tester', 'Writer'],
-    datasets: [
-      {
-        label: 'Avg Duration (min)',
-        data: [2.5, 1.8, 15.2, 8.4, 3.1],
-        backgroundColor: [
-          'rgba(56, 189, 248, 0.8)',
-          'rgba(139, 92, 246, 0.8)',
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(251, 191, 36, 0.8)',
-          'rgba(239, 68, 68, 0.8)'
-        ]
-      }
-    ]
-  };
+  constructor(private analyticsService: AnalyticsService) {}
 
-  agentPerformanceChartOptions: ChartConfiguration['options'] = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          color: 'rgba(255, 255, 255, 0.1)'
-        },
-        ticks: {
-          color: '#94a3b8'
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#94a3b8'
-        }
-      }
-    }
-  };
+  ngOnInit() { this.load(); }
 
-  statusDistributionChartData: ChartConfiguration['data'] = {
-    labels: ['Done', 'Failed', 'Escalated', 'In Progress'],
-    datasets: [
-      {
-        data: [65, 15, 12, 8],
-        backgroundColor: [
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(251, 191, 36, 0.8)',
-          'rgba(56, 189, 248, 0.8)'
-        ],
-        borderWidth: 0
-      }
-    ]
-  };
-
-  statusDistributionChartOptions: ChartConfiguration['options'] = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'right',
-        labels: {
-          color: '#94a3b8',
-          padding: 16
-        }
-      }
-    }
-  };
-
-  constructor(private analyticsService: AnalyticsService) { }
-
-  ngOnInit() {
-    this.loadAnalytics();
-  }
-
-  loadAnalytics() {
+  load() {
     this.analyticsService.getSummary().subscribe({
-      next: (data) => {
-        this.summary.set(data);
-        this.updateStatusChart(data.statusBreakdown);
-      },
-      error: (err) => {
-        console.error('Failed to load analytics summary', err);
-        this.loadMockData();
-      }
+      next: (d) => { this.summary.set(d); this.updateStatusChart(d.statusBreakdown); },
+      error: () => this.loadError.set('Could not reach analytics API — backend may be offline.')
     });
 
     this.analyticsService.getAgentPerformance().subscribe({
-      next: (data) => {
-        this.agentPerformance.set(data);
-        this.updateAgentChart(data);
-      },
-      error: (err) => console.error('Failed to load agent performance', err)
+      next: (d) => { this.agentPerformance.set(d); this.updateAgentDurationChart(d); }
     });
 
-    this.analyticsService.getPersonaEffectiveness().subscribe({
-      next: (data) => this.personaEffectiveness.set(data),
-      error: (err) => console.error('Failed to load persona effectiveness', err)
+    this.analyticsService.getPersonasFindings().subscribe({
+      next: (d) => this.personasFindings.set(d)
+    });
+
+    this.analyticsService.getFixLoops().subscribe({
+      next: (d) => this.fixLoops.set(d)
+    });
+
+    this.analyticsService.getLatencyTrend().subscribe({
+      next: (pts) => { this.latency.set(pts); this.updateLatencyChart(pts); }
     });
   }
 
-  loadMockData() {
-    const mockSummary: AnalyticsSummary = {
-      totalRuns: 247,
-      successRate: 0.94,
-      failureRate: 0.04,
-      escalationRate: 0.02,
-      statusBreakdown: {
-        'DONE': 232,
-        'FAILED': 10,
-        'ESCALATED': 5,
-        'DEVELOPER': 0
-      },
-      repoBreakdown: {}
-    };
-    this.summary.set(mockSummary);
-  }
-
-  updateStatusChart(breakdown: Record<string, number>) {
-    if (!breakdown) return;
-
-    const labels: string[] = [];
-    const data: number[] = [];
-
-    Object.entries(breakdown).forEach(([status, count]) => {
-      labels.push(status);
-      data.push(count);
-    });
-
-    this.statusDistributionChartData = {
-      ...this.statusDistributionChartData,
-      labels,
+  private updateStatusChart(breakdown: Record<string, number>) {
+    const entries = Object.entries(breakdown);
+    this.statusChartData = {
+      labels: entries.map(([k]) => k),
       datasets: [{
-        ...this.statusDistributionChartData.datasets[0],
-        data
+        data: entries.map(([, v]) => v),
+        backgroundColor: ['rgba(34,197,94,0.8)','rgba(239,68,68,0.8)','rgba(251,191,36,0.8)','rgba(56,189,248,0.8)','rgba(148,163,184,0.8)'],
+        borderWidth: 0
       }]
     };
   }
 
-  updateAgentChart(performance: AgentPerformance) {
-    if (!performance.avgDurationByAgent) return;
-
-    const labels: string[] = [];
-    const data: number[] = [];
-
-    Object.entries(performance.avgDurationByAgent).forEach(([agent, duration]) => {
-      labels.push(agent);
-      data.push(duration);
-    });
-
-    this.agentPerformanceChartData = {
-      ...this.agentPerformanceChartData,
-      labels,
-      datasets: [{
-        ...this.agentPerformanceChartData.datasets[0],
-        data
-      }]
+  private updateAgentDurationChart(perf: AgentsPerformanceDto) {
+    const metrics = perf.agentMetrics ?? [];
+    this.agentDurationChartData = {
+      labels: metrics.map(m => m.agentName),
+      datasets: [{ label: 'Avg Duration (ms)', data: metrics.map(m => m.averageDuration), backgroundColor: 'rgba(56,189,248,0.7)' }]
     };
   }
 
-  getPersonasList() {
-    if (!this.personaEffectiveness()?.personaMetrics) return [];
-
-    return Object.entries(this.personaEffectiveness()!.personaMetrics).map(([name, metrics]) => ({
-      name,
-      score: metrics.effectivenessScore,
-      reviews: metrics.reviewsCount,
-      critical: metrics.criticalFindings,
-      falsePositives: metrics.falsePositives
-    }));
+  private updateLatencyChart(pts: LatencyPoint[]) {
+    this.latencyChartData = {
+      labels: pts.map(p => p.agentName),
+      datasets: [{ label: 'Avg LLM Latency (ms)', data: pts.map(p => p.avgLatencyMs), backgroundColor: 'rgba(139,92,246,0.7)' }]
+    };
   }
 
-  formatPercent(value: number | undefined): string {
-    if (value === undefined) return '0%';
-    return `${Math.round(value * 100)}%`;
-  }
-
-  getScoreClass(score: number): string {
-    if (score >= 0.8) return 'high';
-    if (score >= 0.5) return 'medium';
-    return 'low';
+  formatPercent(v: number | undefined): string {
+    if (v === undefined || v === null) return '—';
+    return `${Math.round(v * 100)}%`;
   }
 }

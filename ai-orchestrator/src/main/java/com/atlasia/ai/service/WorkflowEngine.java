@@ -129,18 +129,23 @@ public class WorkflowEngine {
             } else {
                 log.info("PM step pruned by user: runId={}", runId);
             }
+            executeGraftsAfter(runId, "PM", context, runEntity);
+
             if (!runEntity.isStepPruned("QUALIFIER")) {
                 emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
                 executeQualifierStep(context);
             } else {
                 log.info("QUALIFIER step pruned by user: runId={}", runId);
             }
+            executeGraftsAfter(runId, "QUALIFIER", context, runEntity);
+
             if (!runEntity.isStepPruned("ARCHITECT")) {
                 emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
                 executeArchitectStep(context);
             } else {
                 log.info("ARCHITECT step pruned by user: runId={}", runId);
             }
+            executeGraftsAfter(runId, "ARCHITECT", context, runEntity);
 
             // --- Autonomy Gate: pause before code generation if confirm/observe ---
             if (!runEntity.isAutonomyDevGatePassed() &&
@@ -162,6 +167,7 @@ public class WorkflowEngine {
 
             emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
             executeDeveloperStep(context);
+            executeGraftsAfter(runId, "DEVELOPER", context, runEntity);
 
             // Review loop: developer → review → (tester | developer)
             boolean reviewApproved = runEntity.isStepPruned("REVIEW");
@@ -290,6 +296,7 @@ public class WorkflowEngine {
             } else {
                 log.info("WRITER step pruned by user: runId={}", runId);
             }
+            executeGraftsAfter(runId, "WRITER", context, runEntity);
 
             runEntity.setStatus(RunStatus.DONE);
             runEntity.setCurrentAgent(null);
@@ -1084,6 +1091,72 @@ public class WorkflowEngine {
                     runId, Instant.now(),
                     "INTERRUPT_APPROVAL_NEEDED: " + decision.getMessage(),
                     agentName, -1));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Vis-CoT Graft Execution
+    // -------------------------------------------------------------------------
+
+    private static final java.util.Map<String, String> AGENT_NAME_TO_ROLE = java.util.Map.of(
+            "pm-v1",        "PM",
+            "qualifier-v1", "QUALIFIER",
+            "architect-v1", "ARCHITECT",
+            "tester-v1",    "TESTER",
+            "writer-v1",    "WRITER"
+    );
+
+    /**
+     * After each pipeline step, execute any pending grafts whose "after" field matches
+     * the completed step. Grafts are resolved via AgentStepFactory and run inline.
+     * Executed grafts are removed from the pending list and saved.
+     */
+    private void executeGraftsAfter(UUID runId, String completedStep, RunContext context, RunEntity runEntity) {
+        String raw = runEntity.getPendingGrafts();
+        if (raw == null || raw.isBlank() || raw.equals("[]")) return;
+
+        try {
+            com.fasterxml.jackson.databind.JsonNode arr = objectMapper.readTree(raw);
+            java.util.List<com.fasterxml.jackson.databind.JsonNode> remaining = new java.util.ArrayList<>();
+            boolean anyExecuted = false;
+
+            for (com.fasterxml.jackson.databind.JsonNode graft : arr) {
+                String after     = graft.path("after").asText("");
+                String agentName = graft.path("agentName").asText("");
+
+                if (!completedStep.equalsIgnoreCase(after)) {
+                    remaining.add(graft);
+                    continue;
+                }
+
+                String role = AGENT_NAME_TO_ROLE.get(agentName);
+                if (role == null) {
+                    log.warn("GRAFT: unknown agentName='{}' for graft after={}, skipping: runId={}", agentName, after, runId);
+                    remaining.add(graft);
+                    continue;
+                }
+
+                log.info("GRAFT: executing agentName={} role={} after={}: runId={}", agentName, role, after, runId);
+                emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
+                        runId, Instant.now(), "GRAFT: " + agentName + " (after " + after + ")", role, -1));
+
+                try {
+                    agentStepFactory.resolveForRole(role, Set.of()).execute(context);
+                    anyExecuted = true;
+                    log.info("GRAFT: completed agentName={}: runId={}", agentName, runId);
+                } catch (Exception e) {
+                    log.error("GRAFT: execution failed for agentName={}: runId={}", agentName, runId, e);
+                    remaining.add(graft); // keep it for retry
+                }
+            }
+
+            if (anyExecuted) {
+                String updatedJson = remaining.isEmpty() ? "[]" : objectMapper.writeValueAsString(remaining);
+                runEntity.setPendingGrafts(updatedJson);
+                runRepository.save(runEntity);
+            }
+        } catch (Exception e) {
+            log.error("GRAFT: failed to process pending grafts: runId={}", runId, e);
         }
     }
 }
