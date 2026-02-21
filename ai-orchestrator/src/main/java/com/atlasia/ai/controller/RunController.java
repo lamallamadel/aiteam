@@ -221,6 +221,88 @@ public class RunController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    /**
+     * Flag a pipeline step with an annotation (stored as a flag_annotation artifact).
+     * Body: { "stepId": "PM", "note": "optional note" }
+     */
+    @PostMapping("/{id}/flags")
+    public ResponseEntity<Void> flagStep(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @RequestBody java.util.Map<String, String> body) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runRepository.findById(id)
+                .map(run -> {
+                    String stepId = body.getOrDefault("stepId", "UNKNOWN");
+                    String note   = body.getOrDefault("note", "");
+                    RunArtifactEntity flag = new RunArtifactEntity(
+                            "HUMAN",
+                            "flag_annotation",
+                            String.format("{\"stepId\":\"%s\",\"note\":\"%s\"}", stepId, note),
+                            java.time.Instant.now());
+                    run.addArtifact(flag);
+                    runRepository.save(run);
+                    return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Update the pruned steps list.
+     * Body: { "prunedSteps": "QUALIFIER,WRITER" }
+     */
+    @PutMapping("/{id}/pruned-steps")
+    public ResponseEntity<Void> setPrunedSteps(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @RequestBody java.util.Map<String, String> body) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runRepository.findById(id)
+                .map(run -> {
+                    run.setPrunedSteps(body.get("prunedSteps"));
+                    runRepository.save(run);
+                    return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Add a pending graft request (appended to JSONB array).
+     * Body: { "after": "ARCHITECT", "agentName": "security-scanner-v1" }
+     */
+    @PostMapping("/{id}/grafts")
+    public ResponseEntity<Void> addGraft(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @RequestBody java.util.Map<String, String> body) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runRepository.findById(id)
+                .map(run -> {
+                    String after     = body.getOrDefault("after", "");
+                    String agentName = body.getOrDefault("agentName", "");
+                    // Append to existing JSON array (simple string append to JSONB stored as text)
+                    String existing = run.getPendingGrafts();
+                    String entry = String.format("{\"after\":\"%s\",\"agentName\":\"%s\"}", after, agentName);
+                    String updated;
+                    if (existing == null || existing.isBlank() || existing.equals("[]")) {
+                        updated = "[" + entry + "]";
+                    } else {
+                        // Strip trailing ] and append
+                        updated = existing.substring(0, existing.lastIndexOf(']')) + "," + entry + "]";
+                    }
+                    run.setPendingGrafts(updated);
+                    runRepository.save(run);
+                    return ResponseEntity.ok().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     private RunResponse toRunResponse(RunEntity entity) {
         List<RunResponse.ArtifactSummary> artifactSummaries = entity.getArtifacts().stream()
                 .map(artifact -> new RunResponse.ArtifactSummary(

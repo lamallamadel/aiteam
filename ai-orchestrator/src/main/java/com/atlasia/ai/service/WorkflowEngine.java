@@ -123,12 +123,24 @@ public class WorkflowEngine {
             RunContext context = new RunContext(runEntity, owner, repo);
 
             // --- Sequential Pipeline: PM → Qualifier → Architect → Developer ---
-            emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
-            executePmStep(context);
-            emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
-            executeQualifierStep(context);
-            emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
-            executeArchitectStep(context);
+            if (!runEntity.isStepPruned("PM")) {
+                emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
+                executePmStep(context);
+            } else {
+                log.info("PM step pruned by user: runId={}", runId);
+            }
+            if (!runEntity.isStepPruned("QUALIFIER")) {
+                emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
+                executeQualifierStep(context);
+            } else {
+                log.info("QUALIFIER step pruned by user: runId={}", runId);
+            }
+            if (!runEntity.isStepPruned("ARCHITECT")) {
+                emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
+                executeArchitectStep(context);
+            } else {
+                log.info("ARCHITECT step pruned by user: runId={}", runId);
+            }
 
             // --- Autonomy Gate: pause before code generation if confirm/observe ---
             if (!runEntity.isAutonomyDevGatePassed() &&
@@ -152,7 +164,10 @@ public class WorkflowEngine {
             executeDeveloperStep(context);
 
             // Review loop: developer → review → (tester | developer)
-            boolean reviewApproved = false;
+            boolean reviewApproved = runEntity.isStepPruned("REVIEW");
+            if (reviewApproved) {
+                log.info("REVIEW step pruned by user: runId={}", runId);
+            }
             while (!reviewApproved) {
                 emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
                 String reviewVerdict = executePersonaReviewWithVerdict(context);
@@ -188,7 +203,10 @@ public class WorkflowEngine {
             }
 
             // Tester loop: review approved → tester → (writer | developer)
-            boolean testsGreen = false;
+            boolean testsGreen = runEntity.isStepPruned("TESTER");
+            if (testsGreen) {
+                log.info("TESTER step pruned by user: runId={}", runId);
+            }
             while (!testsGreen) {
                 emitStatus(runId, "IN_PROGRESS", "TESTER", progressPercent(5));
                 String ciStatus = executeTesterStepWithStatus(context);
@@ -266,8 +284,12 @@ public class WorkflowEngine {
             }
 
             // --- Terminal: Writer ---
-            emitStatus(runId, "IN_PROGRESS", "WRITER", progressPercent(6));
-            executeWriterStep(context);
+            if (!runEntity.isStepPruned("WRITER")) {
+                emitStatus(runId, "IN_PROGRESS", "WRITER", progressPercent(6));
+                executeWriterStep(context);
+            } else {
+                log.info("WRITER step pruned by user: runId={}", runId);
+            }
 
             runEntity.setStatus(RunStatus.DONE);
             runEntity.setCurrentAgent(null);

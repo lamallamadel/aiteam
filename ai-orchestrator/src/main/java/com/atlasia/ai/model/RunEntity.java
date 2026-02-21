@@ -58,6 +58,15 @@ public class RunEntity {
     @Column(name = "environment_checkpoint", columnDefinition = "jsonb")
     private String environmentCheckpoint;
 
+    /** Comma-separated list of step names to skip (e.g. "QUALIFIER,WRITER"). */
+    @Column(name = "pruned_steps")
+    private String prunedSteps;
+
+    /** JSON array of pending graft requests: [{after, agentName}]. */
+    @Type(JsonBinaryType.class)
+    @Column(name = "pending_grafts", columnDefinition = "jsonb")
+    private String pendingGrafts;
+
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RunArtifactEntity> artifacts = new ArrayList<>();
 
@@ -88,6 +97,27 @@ public class RunEntity {
     public boolean isAutonomyDevGatePassed() { return autonomyDevGatePassed; }
     public EnvironmentLifecycle getEnvironmentLifecycle() { return environmentLifecycle; }
     public String getEnvironmentCheckpoint() { return environmentCheckpoint; }
+    public String getPrunedSteps() { return prunedSteps; }
+    public String getPendingGrafts() { return pendingGrafts; }
+
+    /** Returns true if the given step name appears in the pruned steps list. */
+    public boolean isStepPruned(String stepName) {
+        if (prunedSteps == null || prunedSteps.isBlank()) return false;
+        for (String s : prunedSteps.split(",")) {
+            if (s.trim().equalsIgnoreCase(stepName)) return true;
+        }
+        return false;
+    }
+
+    public void setPrunedSteps(String prunedSteps) {
+        this.prunedSteps = prunedSteps;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setPendingGrafts(String pendingGrafts) {
+        this.pendingGrafts = pendingGrafts;
+        this.updatedAt = Instant.now();
+    }
 
     public void setAutonomy(String autonomy) { this.autonomy = autonomy; }
     public void setAutonomyDevGatePassed(boolean passed) {

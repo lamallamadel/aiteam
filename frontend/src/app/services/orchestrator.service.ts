@@ -70,4 +70,17 @@ export class OrchestratorService {
     verifyBinding(bindingId: string): Observable<{ binding: AgentBinding; valid: boolean }> {
         return this.http.get<{ binding: AgentBinding; valid: boolean }>(`/api/a2a/bindings/${bindingId}`);
     }
+
+    // Vis-CoT pipeline mutation endpoints
+    flagNode(runId: string, stepId: string, note: string = ''): Observable<void> {
+        return this.http.post<void>(`${this.apiUrl}/${runId}/flags`, { stepId, note });
+    }
+
+    setPrunedSteps(runId: string, prunedSteps: string): Observable<void> {
+        return this.http.put<void>(`${this.apiUrl}/${runId}/pruned-steps`, { prunedSteps });
+    }
+
+    addGraft(runId: string, after: string, agentName: string): Observable<void> {
+        return this.http.post<void>(`${this.apiUrl}/${runId}/grafts`, { after, agentName });
+    }
 }

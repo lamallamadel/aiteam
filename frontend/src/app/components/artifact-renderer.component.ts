@@ -3,6 +3,26 @@ import { CommonModule } from '@angular/common';
 import { ArtifactResponse } from '../models/orchestrator.model';
 import { ConfidenceSignalComponent, JudgeVerdict } from './confidence-signal.component';
 
+// ── Open-ended GenUI layout types ────────────────────────────────────────────
+
+export type UiLayoutType = 'table' | 'key_value' | 'diff' | 'list' | 'metric_grid';
+
+export interface UiLayout {
+  _ui_layout: UiLayoutType;
+  _ui_title?: string;
+  // table
+  headers?: string[];
+  rows?: (string | number)[][];
+  // key_value
+  pairs?: { key: string; value: string | number }[];
+  // diff
+  lines?: { type: 'add' | 'del' | 'ctx'; text: string }[];
+  // list
+  items?: string[];
+  // metric_grid
+  metrics?: { label: string; value: string | number; trend?: 'up' | 'down' | 'flat' }[];
+}
+
 // ── Typed shapes for each schema ────────────────────────────────────────────
 
 interface TicketPlan {
@@ -218,6 +238,74 @@ interface TestReport {
       </div>
     </ng-container>
 
+    <!-- _ui_layout: open-ended GenUI ──────────────────────────────────────── -->
+    <ng-container *ngIf="type() === 'ui_layout' && uiLayout() as ul">
+      <div class="widget ui-widget">
+        <div *ngIf="ul._ui_title" class="widget-row">
+          <span class="widget-title">{{ ul._ui_title }}</span>
+          <span class="layout-type-chip">{{ ul._ui_layout }}</span>
+        </div>
+
+        <!-- table ──────────────────────────────────────────────────── -->
+        <ng-container *ngIf="ul._ui_layout === 'table'">
+          <div class="ui-table-wrap">
+            <table class="ui-table">
+              <thead *ngIf="ul.headers?.length">
+                <tr>
+                  <th *ngFor="let h of ul.headers">{{ h }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of ul.rows">
+                  <td *ngFor="let cell of row">{{ cell }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ng-container>
+
+        <!-- key_value ──────────────────────────────────────────────── -->
+        <ng-container *ngIf="ul._ui_layout === 'key_value'">
+          <div class="kv-grid">
+            <ng-container *ngFor="let p of ul.pairs">
+              <span class="kv-key">{{ p.key }}</span>
+              <span class="kv-value">{{ p.value }}</span>
+            </ng-container>
+          </div>
+        </ng-container>
+
+        <!-- diff ───────────────────────────────────────────────────── -->
+        <ng-container *ngIf="ul._ui_layout === 'diff'">
+          <div class="diff-block">
+            <div *ngFor="let line of ul.lines" class="diff-line" [ngClass]="'diff-' + line.type">
+              <span class="diff-gutter">{{ line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ' }}</span>
+              <span class="diff-text">{{ line.text }}</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- list ───────────────────────────────────────────────────── -->
+        <ng-container *ngIf="ul._ui_layout === 'list'">
+          <ul class="ui-list">
+            <li *ngFor="let item of ul.items">{{ item }}</li>
+          </ul>
+        </ng-container>
+
+        <!-- metric_grid ────────────────────────────────────────────── -->
+        <ng-container *ngIf="ul._ui_layout === 'metric_grid'">
+          <div class="metric-grid">
+            <div *ngFor="let m of ul.metrics" class="metric-card">
+              <span class="metric-label">{{ m.label }}</span>
+              <span class="metric-value">{{ m.value }}</span>
+              <span *ngIf="m.trend" class="metric-trend" [ngClass]="'trend-' + m.trend">
+                {{ m.trend === 'up' ? '▲' : m.trend === 'down' ? '▼' : '→' }}
+              </span>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+    </ng-container>
+
     <!-- Fallback: raw JSON ──────────────────────────────────────────────────  -->
     <ng-container *ngIf="type() === 'raw'">
       <pre class="payload-pre">{{ prettyPayload() }}</pre>
@@ -420,6 +508,110 @@ interface TestReport {
     .notes-list { display: flex; flex-direction: column; gap: 3px; }
     .note-item { margin: 0; font-size: 0.78rem; color: rgba(255,255,255,0.5); }
 
+    /* ── Open-ended GenUI Layouts ───────────────────────────────── */
+    .ui-widget { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+    .layout-type-chip {
+      margin-left: auto;
+      font-size: 0.65rem;
+      font-family: monospace;
+      padding: 1px 6px;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.3);
+      border-radius: 6px;
+    }
+    /* table */
+    .ui-table-wrap { overflow-x: auto; }
+    .ui-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+    .ui-table th {
+      text-align: left;
+      padding: 5px 10px;
+      color: rgba(255,255,255,0.35);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .ui-table td {
+      padding: 6px 10px;
+      color: rgba(255,255,255,0.7);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .ui-table tr:last-child td { border-bottom: none; }
+    .ui-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    /* key_value */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 14px;
+      align-items: baseline;
+    }
+    .kv-key {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.35);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .kv-value {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.75);
+      font-family: monospace;
+      word-break: break-all;
+    }
+    /* diff */
+    .diff-block {
+      font-family: monospace;
+      font-size: 0.75rem;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .diff-line {
+      display: flex;
+      align-items: flex-start;
+      padding: 2px 8px;
+      gap: 8px;
+    }
+    .diff-add { background: rgba(34,197,94,0.08); color: #86efac; }
+    .diff-del { background: rgba(239,68,68,0.08);  color: #fca5a5; }
+    .diff-ctx { color: rgba(255,255,255,0.35); }
+    .diff-gutter { flex-shrink: 0; width: 10px; opacity: 0.6; }
+    .diff-text { white-space: pre-wrap; word-break: break-all; }
+    /* list */
+    .ui-list {
+      margin: 0;
+      padding: 0 0 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ui-list li { font-size: 0.8rem; color: rgba(255,255,255,0.7); line-height: 1.4; }
+    /* metric_grid */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+    }
+    .metric-card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-start;
+    }
+    .metric-label { font-size: 0.65rem; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+    .metric-value { font-size: 1.1rem; font-weight: 700; color: white; line-height: 1; }
+    .metric-trend { font-size: 0.7rem; font-weight: 700; }
+    .trend-up   { color: #22c55e; }
+    .trend-down { color: #ef4444; }
+    .trend-flat { color: #94a3b8; }
+
     /* ── Fallback raw JSON ──────────────────────────────────────── */
     .payload-pre {
       background: rgba(0,0,0,0.3);
@@ -439,12 +631,13 @@ export class ArtifactRendererComponent implements OnChanges {
   @Input({ required: true }) artifact!: ArtifactResponse;
 
   private _parsed = signal<any>(null);
-  type = signal<'ticket_plan' | 'work_plan' | 'judge_verdict' | 'test_report' | 'raw'>('raw');
+  type = signal<'ticket_plan' | 'work_plan' | 'judge_verdict' | 'test_report' | 'ui_layout' | 'raw'>('raw');
 
   ticketPlan = signal<TicketPlan | null>(null);
   workPlan   = signal<WorkPlan   | null>(null);
   judgeVerdict = signal<JudgeVerdict | null>(null);
   testReport = signal<TestReport | null>(null);
+  uiLayout   = signal<UiLayout   | null>(null);
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['artifact'] && this.artifact) {
@@ -470,6 +663,9 @@ export class ArtifactRendererComponent implements OnChanges {
     } else if ((t === 'test_report' || t === 'ci_report') && parsed) {
       this.type.set('test_report');
       this.testReport.set(parsed as TestReport);
+    } else if (parsed && parsed['_ui_layout']) {
+      this.type.set('ui_layout');
+      this.uiLayout.set(parsed as UiLayout);
     } else {
       this.type.set('raw');
       this._parsed.set(parsed);

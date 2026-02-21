@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { WorkflowStreamStore } from '../services/workflow-stream.store';
-import { NeuralTraceComponent } from './neural-trace.component';
+import { NeuralTraceComponent, GraftEvent } from './neural-trace.component';
 import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/orchestrator.model';
 import { ArtifactRendererComponent } from './artifact-renderer.component';
 
@@ -39,7 +39,23 @@ import { ArtifactRendererComponent } from './artifact-renderer.component';
       </div>
 
       <!-- Live neural trace — feeds directly from SSE stream -->
-      <app-neural-trace [steps]="streamStore.stepTimeline()"></app-neural-trace>
+      <app-neural-trace
+        [steps]="streamStore.stepTimeline()"
+        [interactive]="true"
+        (flagged)="onNodeFlagged($event)"
+        (pruned)="onNodePruned($event)"
+        (grafted)="onNodeGrafted($event)">
+      </app-neural-trace>
+
+      <!-- Pending grafts notice -->
+      <div class="grafts-panel glass-panel" *ngIf="pendingGrafts().length > 0">
+        <span class="grafts-label">⊕ Pending Grafts</span>
+        <div class="graft-chips">
+          <span *ngFor="let g of pendingGrafts()" class="graft-chip">
+            after {{ g.after }}: <strong>{{ g.agentName }}</strong>
+          </span>
+        </div>
+      </div>
 
       <!-- Live progress bar -->
       <div class="progress-bar-wrap glass-panel" *ngIf="streamStore.isStreaming()">
@@ -413,6 +429,31 @@ import { ArtifactRendererComponent } from './artifact-renderer.component';
       color: #64748b;
     }
 
+    /* Pending grafts panel */
+    .grafts-panel {
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .grafts-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #a78bfa;
+      white-space: nowrap;
+    }
+    .graft-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .graft-chip {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      background: rgba(139,92,246,0.12);
+      border: 1px solid rgba(139,92,246,0.25);
+      color: rgba(255,255,255,0.65);
+      border-radius: 8px;
+    }
+    .graft-chip strong { color: #a78bfa; }
+
     /* Token row */
     .token-row {
       display: flex;
@@ -460,6 +501,8 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   resuming = signal(false);
   envLifecycle = signal<EnvironmentLifecycle | null>(null);
   envCheckpointTime = signal<string | null>(null);
+  prunedSteps = signal<string[]>([]);
+  pendingGrafts = signal<{ after: string; agentName: string }[]>([]);
 
   // Artifacts from REST (includes artifacts added before the stream connected)
   private restArtifacts = signal<ArtifactResponse[]>([]);
@@ -581,6 +624,30 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   formatDate(dateStr: string | undefined): string {
     if (!dateStr) return 'N/A';
     return new Date(dateStr).toLocaleString();
+  }
+
+  onNodeFlagged(stepId: string) {
+    const id = this.run()?.id;
+    if (!id) return;
+    this.orchestratorService.flagNode(id, stepId).subscribe();
+  }
+
+  onNodePruned(stepId: string) {
+    const id = this.run()?.id;
+    if (!id) return;
+    const current = this.prunedSteps();
+    const updated = current.includes(stepId)
+      ? current.filter(s => s !== stepId)
+      : [...current, stepId];
+    this.prunedSteps.set(updated);
+    this.orchestratorService.setPrunedSteps(id, updated.join(',')).subscribe();
+  }
+
+  onNodeGrafted(event: GraftEvent) {
+    const id = this.run()?.id;
+    if (!id) return;
+    this.pendingGrafts.update(g => [...g, { after: event.after, agentName: event.agentName }]);
+    this.orchestratorService.addGraft(id, event.after, event.agentName).subscribe();
   }
 
   goBack() { this.router.navigate(['/runs']); }
