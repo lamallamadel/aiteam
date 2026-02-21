@@ -17,21 +17,16 @@ RUN npm run build -- --configuration production
 
 # Stage 2: Serve
 FROM nginx:1.27-alpine
-WORKDIR /usr/share/nginx/html
 
 # Copy built artifacts from builder
-COPY --from=builder /build/dist/dashboard/browser .
+COPY --from=builder /build/dist/dashboard/browser /usr/share/nginx/html
 
 # Copy optimized nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Remove default nginx config and clean up
-RUN rm -f /etc/nginx/conf.d/default.conf.bak && \
-    # Ensure nginx runs as non-root nginx user (already exists in nginx image)
-    chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx
-
-# Switch to non-root user (nginx user already exists in the image)
-USER nginx
+# Create nginx pid directory (writable by nginx user)
+RUN mkdir -p /var/run/nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/run/nginx /var/cache/nginx /var/log/nginx /usr/share/nginx/html
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
