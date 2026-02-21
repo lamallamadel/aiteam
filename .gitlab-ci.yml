@@ -1,15 +1,18 @@
 # ─────────────────────────────────────────────────────────────
-# AITEAM — GitLab CI/CD Pipeline
+# AITEAM — GitLab CI/CD Pipeline (PRIMARY)
 #
 # Stages:
-#   build   — Build and test
-#   deploy  — Deploy to production/staging
+#   build   — Build backend JAR + frontend dist
+#   test    — Run tests (Maven verify + Playwright E2E)
+#   deploy  — Deploy to production via SSH + docker-compose
 #
 # Required CI/CD variables (Settings → CI/CD → Variables):
-#   DEPLOY_SSH_KEY   — private ed25519 key for deploy user
+#   DEPLOY_SSH_KEY   — private ed25519 key (base64 encoded)
 #   DEPLOY_HOST      — production server IP/hostname
-#   DEPLOY_USER      — SSH username
-#   DEPLOY_DIR       — deployment directory path
+#   DEPLOY_USER      — SSH username (e.g., root, ubuntu, deploy)
+#   DEPLOY_DIR       — deployment directory (e.g., /opt/aiteam)
+#   GHCR_TOKEN       — GitHub token for GHCR push (base64)
+#   GHCR_USERNAME    — GitHub username for GHCR
 # ─────────────────────────────────────────────────────────────
 
 stages:
@@ -18,19 +21,34 @@ stages:
   - deploy
 
 variables:
-  DEPLOY_HOST: ""
-  DEPLOY_USER: ""
-  DEPLOY_DIR: ""
+  DEPLOY_HOST: "${DEPLOY_HOST}"
+  DEPLOY_USER: "${DEPLOY_USER}"
+  DEPLOY_DIR: "${DEPLOY_DIR}"
+  GHCR_REGISTRY: "ghcr.io"
+  GHCR_IMAGE_BACKEND: "${GHCR_REGISTRY}/${CI_PROJECT_NAMESPACE}/ai-orchestrator"
+  GHCR_IMAGE_FRONTEND: "${GHCR_REGISTRY}/${CI_PROJECT_NAMESPACE}/ai-dashboard"
 
 # ── Reusable SSH setup ────────────────────────────────────────
 .ssh_setup:
+  image: debian:bookworm-slim
   before_script:
-    - apt-get update -qq && apt-get install -y -qq rsync openssh-client 2>/dev/null
+    - apt-get update -qq && apt-get install -y -qq openssh-client rsync git 2>/dev/null
     - eval $(ssh-agent -s)
-    - echo "$DEPLOY_SSH_KEY" | tr -d '\r' | ssh-add -
+    - echo "$DEPLOY_SSH_KEY" | base64 -d | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
     - chmod 644 ~/.ssh/known_hosts
+
+# ── Reusable Docker setup ─────────────────────────────────────
+.docker_setup:
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo "$GHCR_TOKEN" | base64 -d | docker login -u "$GHCR_USERNAME" --password-stdin $GHCR_REGISTRY
 
 # ─────────────────────────────────────────────────────────────
 # BUILD
@@ -50,12 +68,18 @@ build-backend:
       - .m2/repository/
     policy: pull-push
   script:
-    - echo "TODO: Build backend"
+    - echo "🔨 Building backend JAR..."
+    - cd ai-orchestrator
+    - mvn clean package -DskipTests -q
+    - ls -lh target/*.jar
+    - echo "✅ Backend JAR built successfully"
   artifacts:
     name: "backend-jar-$CI_COMMIT_SHORT_SHA"
     paths:
       - ai-orchestrator/target/*.jar
     expire_in: 1 hour
+    reports:
+      dotenv: build.env
 
 build-frontend:
   stage: build
@@ -71,11 +95,16 @@ build-frontend:
       - frontend/node_modules/
     policy: pull-push
   script:
-    - echo "TODO: Build frontend"
+    - echo "🔨 Building frontend dist..."
+    - cd frontend
+    - npm ci --prefer-offline
+    - npm run build -- --configuration production
+    - ls -lh dist/dashboard/browser/
+    - echo "✅ Frontend dist built successfully"
   artifacts:
     name: "frontend-dist-$CI_COMMIT_SHORT_SHA"
     paths:
-      - frontend/dist/
+      - frontend/dist/dashboard/browser/
     expire_in: 1 hour
 
 # ─────────────────────────────────────────────────────────────
@@ -95,12 +124,29 @@ test-backend:
     paths:
       - .m2/repository/
     policy: pull
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
   script:
-    - echo "TODO: Run backend tests"
+    - echo "🧪 Running backend tests (mvn verify)..."
+    - cd ai-orchestrator
+    - mvn verify -q -Dspring.profiles.active=test
+    - echo "✅ Backend tests passed"
+  artifacts:
+    name: "backend-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/surefire-reports/
+      - ai-orchestrator/target/failsafe-reports/
+    reports:
+      junit: ai-orchestrator/target/*-reports/*.xml
+    expire_in: 30 days
+    when: always
 
 test-frontend:
   stage: test
-  image: node:22-alpine
+  image: mcr.microsoft.com/playwright:v1.40.0-focal
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
       changes:
@@ -112,57 +158,158 @@ test-frontend:
       - frontend/node_modules/
     policy: pull
   script:
-    - echo "TODO: Run frontend tests"
+    - echo "🧪 Running frontend E2E tests (npm run e2e)..."
+    - cd frontend
+    - npm ci --prefer-offline
+    - npx playwright install --with-deps
+    - npm run e2e
+    - echo "✅ Frontend E2E tests passed"
+  artifacts:
+    name: "frontend-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - frontend/test-results/
+      - frontend/playwright-report/
+    reports:
+      junit: frontend/test-results/junit.xml
+    expire_in: 30 days
+    when: always
 
 # ─────────────────────────────────────────────────────────────
 # DEPLOY
 # ─────────────────────────────────────────────────────────────
 
-deploy-backend:
+deploy-production:
   stage: deploy
-  image: debian:bookworm-slim
+  extends: .ssh_setup
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - ai-orchestrator/**/*
-        - docker-compose.prod.yml
-        - .gitlab-ci.yml
-  extends: .ssh_setup
+      when: manual
   script:
-    - echo "TODO: Deploy backend"
+    - echo "🚀 Deploying aiteam to production..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR"
+    - |
+      ssh -o ConnectTimeout=10 "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        echo '📍 Connecting to production server...'
+        echo '🔄 Pulling latest code from GitLab...'
+        cd $DEPLOY_DIR
+        git pull origin main --quiet
+        
+        echo '🐳 Pulling latest images from GHCR...'
+        docker-compose -f docker-compose.prod.yml pull
+        
+        echo '💾 Running pre-deployment backup...'
+        ./scripts/deploy.sh prod
+        
+        echo '✅ Deployment complete'
+        echo '📊 Service status:'
+        docker-compose -f docker-compose.prod.yml ps
+      "
+    - echo "✅ Production deployment successful"
   environment:
-    name: production/backend
-    url: https://$DEPLOY_HOST/api
-
-deploy-frontend:
-  stage: deploy
-  image: debian:bookworm-slim
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - frontend/**/*
-        - nginx-prod.conf
-        - .gitlab-ci.yml
-  extends: .ssh_setup
-  script:
-    - echo "TODO: Deploy frontend"
-  environment:
-    name: production/frontend
+    name: production
     url: https://$DEPLOY_HOST
+    auto_stop_in: never
+
+deploy-staging:
+  stage: deploy
+  extends: .ssh_setup
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+  script:
+    - echo "🚀 Deploying aiteam to staging..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR"
+    - |
+      ssh -o ConnectTimeout=10 "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        echo '📍 Connecting to staging server...'
+        echo '🔄 Pulling latest code from GitLab (develop)...'
+        cd $DEPLOY_DIR
+        git checkout develop
+        git pull origin develop --quiet
+        
+        echo '🐳 Pulling latest images from GHCR...'
+        docker-compose -f docker-compose.dev.yml pull
+        
+        echo '🚀 Starting staging environment...'
+        docker-compose -f docker-compose.dev.yml up -d
+        
+        echo '✅ Staging deployment complete'
+        echo '📊 Service status:'
+        docker-compose -f docker-compose.dev.yml ps
+      "
+    - echo "✅ Staging deployment successful"
+  environment:
+    name: staging
+    url: https://staging.$DEPLOY_HOST
+    auto_stop_in: never
 
 # ─────────────────────────────────────────────────────────────
 # ROLLBACK
 # ─────────────────────────────────────────────────────────────
 
-rollback:
+rollback-production:
   stage: deploy
-  image: debian:bookworm-slim
+  extends: .ssh_setup
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
-  extends: .ssh_setup
   script:
-    - echo "TODO: Rollback production"
+    - echo "⚠️  ROLLBACK: Restoring production to previous version..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR"
+    - |
+      ssh -o ConnectTimeout=10 "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        cd $DEPLOY_DIR
+        echo '🔄 Running rollback script...'
+        ./scripts/rollback.sh prod
+        echo '✅ Rollback complete'
+        echo '📊 Service status after rollback:'
+        docker-compose -f docker-compose.prod.yml ps
+      "
+    - echo "✅ Production rollback successful"
   environment:
     name: production
     action: rollback
+
+# ─────────────────────────────────────────────────────────────
+# NOTIFICATIONS
+# ─────────────────────────────────────────────────────────────
+
+.notify_slack:
+  image: debian:bookworm-slim
+  script:
+    - apt-get update -qq && apt-get install -y -qq curl 2>/dev/null
+    - |
+      curl -X POST $SLACK_WEBHOOK_URL \
+        -H 'Content-Type: application/json' \
+        -d "{
+          \"text\": \"$SLACK_MESSAGE\",
+          \"blocks\": [
+            {
+              \"type\": \"section\",
+              \"text\": {
+                \"type\": \"mrkdwn\",
+                \"text\": \"*$SLACK_TITLE*\n$SLACK_MESSAGE\"
+              }
+            }
+          ]
+        }" || true
+  when: on_failure
+
+notify-deploy-failure:
+  extends: .notify_slack
+  stage: deploy
+  variables:
+    SLACK_TITLE: "❌ AITEAM Deployment Failed"
+    SLACK_MESSAGE: "Branch: $CI_COMMIT_BRANCH\nCommit: $CI_COMMIT_SHORT_SHA\nPipeline: $CI_PIPELINE_URL"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      when: on_failure
