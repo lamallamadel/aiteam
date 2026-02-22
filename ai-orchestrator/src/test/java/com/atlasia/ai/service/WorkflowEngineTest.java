@@ -81,6 +81,9 @@ class WorkflowEngineTest {
         @Mock
         private AgentBindingService agentBindingService;
 
+        @Mock
+        private GraftExecutionService graftExecutionService;
+
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
 
@@ -100,7 +103,8 @@ class WorkflowEngineTest {
                                 agentStepFactory,
                                 agentBindingService,
                                 new com.atlasia.ai.service.InterruptDecisionStore(),
-                                new ObjectMapper());
+                                new ObjectMapper(),
+                                graftExecutionService);
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
 
                 // Wire the factory to return the appropriate step mocks

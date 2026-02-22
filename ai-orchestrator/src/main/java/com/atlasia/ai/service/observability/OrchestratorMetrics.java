@@ -66,6 +66,13 @@ public class OrchestratorMetrics {
     private final Counter behaviorDiffRegressionsTotal;
     private final DistributionSummary evalPassAt1Rate;
 
+    private final Counter graftExecutionsTotal;
+    private final Counter graftSuccessTotal;
+    private final Counter graftFailureTotal;
+    private final Counter graftTimeoutTotal;
+    private final Counter graftCircuitOpenTotal;
+    private final Timer graftDuration;
+
     public OrchestratorMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
 
@@ -244,6 +251,30 @@ public class OrchestratorMetrics {
 
         this.evalPassAt1Rate = DistributionSummary.builder("orchestrator.eval.pass.at.1.rate")
                 .description("Pass@1 rate distribution across eval suite runs")
+                .register(meterRegistry);
+
+        this.graftExecutionsTotal = Counter.builder("orchestrator.graft.executions.total")
+                .description("Total number of graft executions")
+                .register(meterRegistry);
+
+        this.graftSuccessTotal = Counter.builder("orchestrator.graft.success.total")
+                .description("Total number of successful graft executions")
+                .register(meterRegistry);
+
+        this.graftFailureTotal = Counter.builder("orchestrator.graft.failure.total")
+                .description("Total number of failed graft executions")
+                .register(meterRegistry);
+
+        this.graftTimeoutTotal = Counter.builder("orchestrator.graft.timeout.total")
+                .description("Total number of graft executions that timed out")
+                .register(meterRegistry);
+
+        this.graftCircuitOpenTotal = Counter.builder("orchestrator.graft.circuit.open.total")
+                .description("Total number of graft executions blocked by circuit breaker")
+                .register(meterRegistry);
+
+        this.graftDuration = Timer.builder("orchestrator.graft.duration")
+                .description("Duration of graft executions")
                 .register(meterRegistry);
     }
 
@@ -450,5 +481,36 @@ public class OrchestratorMetrics {
 
     public void recordBehaviorDiffRegression(String scenarioId) {
         behaviorDiffRegressionsTotal.increment();
+    }
+
+    public void recordGraftExecution(String agentName) {
+        graftExecutionsTotal.increment();
+    }
+
+    public void recordGraftSuccess(String agentName, long duration) {
+        graftSuccessTotal.increment();
+        if (duration > 0) {
+            graftDuration.record(duration, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    public void recordGraftFailure(String agentName) {
+        graftFailureTotal.increment();
+    }
+
+    public void recordGraftTimeout(String agentName) {
+        graftTimeoutTotal.increment();
+    }
+
+    public void recordGraftCircuitOpen(String agentName) {
+        graftCircuitOpenTotal.increment();
+    }
+
+    public Timer.Sample startGraftTimer() {
+        return Timer.start(meterRegistry);
+    }
+
+    public Timer getGraftDuration() {
+        return graftDuration;
     }
 }
