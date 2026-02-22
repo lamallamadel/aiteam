@@ -1,8 +1,10 @@
 package com.atlasia.ai.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 import java.util.Map;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PersonaConfig(
         String name,
         String role,
