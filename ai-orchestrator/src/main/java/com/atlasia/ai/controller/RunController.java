@@ -12,6 +12,9 @@ import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.GitHubApiClient;
 import com.atlasia.ai.service.WorkflowEngine;
 import com.atlasia.ai.service.event.WorkflowEventBus;
+import com.atlasia.ai.service.CollaborationService;
+import com.atlasia.ai.model.CollaborationEventEntity;
+import com.atlasia.ai.api.dto.CollaborationEventDto;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -34,15 +37,17 @@ public class RunController {
     private final WorkflowEngine workflowEngine;
     private final GitHubApiClient gitHubApiClient;
     private final WorkflowEventBus eventBus;
+    private final CollaborationService collaborationService;
 
     public RunController(RunRepository runRepository, OrchestratorProperties props,
             WorkflowEngine workflowEngine, GitHubApiClient gitHubApiClient,
-            WorkflowEventBus eventBus) {
+            WorkflowEventBus eventBus, CollaborationService collaborationService) {
         this.runRepository = runRepository;
         this.props = props;
         this.workflowEngine = workflowEngine;
         this.gitHubApiClient = gitHubApiClient;
         this.eventBus = eventBus;
+        this.collaborationService = collaborationService;
     }
 
     @GetMapping
@@ -301,6 +306,44 @@ public class RunController {
                     return ResponseEntity.ok().<Void>build();
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Get collaboration events for a run.
+     */
+    @GetMapping("/{id}/collaboration/events")
+    public ResponseEntity<List<CollaborationEventDto>> getCollaborationEvents(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @RequestParam(value = "limit", defaultValue = "50") int limit) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        List<CollaborationEventEntity> events = collaborationService.getRecentEvents(id, limit);
+        List<CollaborationEventDto> dtos = events.stream()
+                .map(e -> new CollaborationEventDto(
+                        e.getId(),
+                        e.getRunId(),
+                        e.getUserId(),
+                        e.getEventType(),
+                        e.getEventData(),
+                        e.getTimestamp()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+
+    /**
+     * Get active users for a run.
+     */
+    @GetMapping("/{id}/collaboration/users")
+    public ResponseEntity<java.util.Set<String>> getActiveUsers(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id) {
+        if (getValidatedToken(authorization) == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        java.util.Set<String> users = collaborationService.getActiveUsers(id);
+        return ResponseEntity.ok(users);
     }
 
     private RunResponse toRunResponse(RunEntity entity) {

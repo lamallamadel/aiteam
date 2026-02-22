@@ -42,7 +42,21 @@ const GRAFTABLE_AGENTS = [
           <span class="pulse-dot" [class.live]="isLive()"></span>
           AGENT PIPELINE
         </span>
-        <span class="step-count">{{ doneCount() }}/{{ PIPELINE.length }} complete</span>
+        <div class="header-right">
+          <span class="step-count">{{ doneCount() }}/{{ PIPELINE.length }} complete</span>
+          <div class="presence-indicator" *ngIf="showPresence && activeUsers.length > 0">
+            <span class="presence-icon">👥</span>
+            <span class="presence-count">{{ activeUsers.length }}</span>
+            <div class="presence-tooltip">
+              <div *ngFor="let user of activeUsers" class="presence-user">
+                <span class="user-avatar" [style.background]="getUserColor(user)">
+                  {{ getUserInitial(user) }}
+                </span>
+                <span class="user-name">{{ user }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="pipeline-track">
@@ -51,7 +65,7 @@ const GRAFTABLE_AGENTS = [
           <div class="node-wrap">
             <div class="pipeline-node"
                  [ngClass]="nodeClass(step.id)"
-                 (mouseenter)="hoveredNode = step.id"
+                 (mouseenter)="onNodeHover(step.id)"
                  (mouseleave)="hoveredNode = null">
 
               <!-- Status ring -->
@@ -87,6 +101,16 @@ const GRAFTABLE_AGENTS = [
               <!-- Pruned overlay -->
               <div class="pruned-overlay" *ngIf="prunedNodes.has(step.id)">
                 <span>PRUNED</span>
+              </div>
+
+              <!-- Collaboration cursors -->
+              <div class="collab-cursors" *ngIf="showPresence">
+                <div *ngFor="let user of getUsersAtNode(step.id)" 
+                     class="collab-cursor"
+                     [style.background]="getUserColor(user)"
+                     [title]="user">
+                  {{ getUserInitial(user) }}
+                </div>
               </div>
             </div>
 
@@ -158,6 +182,11 @@ const GRAFTABLE_AGENTS = [
       display: flex;
       align-items: center;
       gap: 7px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
     .pulse-dot {
       width: 6px; height: 6px;
@@ -429,14 +458,113 @@ const GRAFTABLE_AGENTS = [
     .dot.failed   { background: #ef4444; }
     .dot.flagged  { background: #eab308; }
     .dot.pruned   { background: #475569; }
+
+    /* ── Presence ────────────────────────────────────────────────── */
+    .presence-indicator {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.7);
+    }
+    .presence-icon { font-size: 0.8rem; }
+    .presence-count { font-weight: 700; color: #3b82f6; }
+    
+    .presence-tooltip {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 6px;
+      padding: 8px;
+      background: rgba(15,23,42,0.97);
+      border: 1px solid rgba(59,130,246,0.3);
+      border-radius: 8px;
+      min-width: 150px;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .presence-indicator:hover .presence-tooltip {
+      display: flex;
+    }
+    
+    .presence-user {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .presence-user:hover {
+      background: rgba(255,255,255,0.05);
+    }
+    
+    .user-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .user-name {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.8);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Collaboration Cursors ───────────────────────────────────── */
+    .collab-cursors {
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 2px;
+      z-index: 20;
+    }
+    .collab-cursor {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: white;
+      border: 2px solid rgba(15,23,42,1);
+      animation: cursor-pulse 1.5s infinite;
+    }
+    @keyframes cursor-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
   `]
 })
 export class NeuralTraceComponent implements OnChanges {
   @Input() steps: any[] = [];
   @Input() interactive = false;
+  @Input() showPresence = false;
+  @Input() activeUsers: string[] = [];
+  @Input() cursorPositions: Map<string, string> = new Map();
   @Output() flagged  = new EventEmitter<string>();
   @Output() pruned   = new EventEmitter<string>();
   @Output() grafted  = new EventEmitter<GraftEvent>();
+  @Output() cursorMoved = new EventEmitter<string>();
 
   readonly PIPELINE = PIPELINE;
   readonly GRAFTABLE_AGENTS = GRAFTABLE_AGENTS;
@@ -446,6 +574,8 @@ export class NeuralTraceComponent implements OnChanges {
 
   flaggedNodes = new Set<string>();
   prunedNodes  = new Set<string>();
+  
+  private userColorCache = new Map<string, string>();
 
   // Derived state from steps input
   private statusMap = signal<Map<string, NodeStatus>>(new Map());
@@ -576,5 +706,42 @@ export class NeuralTraceComponent implements OnChanges {
   confirmGraft(after: string, agentName: string) {
     this.graftPickerAt = null;
     this.grafted.emit({ after: after as PipelineId, agentName });
+  }
+
+  onNodeHover(nodeId: string) {
+    this.hoveredNode = nodeId;
+    if (this.showPresence) {
+      this.cursorMoved.emit(nodeId);
+    }
+  }
+
+  getUsersAtNode(nodeId: string): string[] {
+    const users: string[] = [];
+    this.cursorPositions.forEach((cursorNodeId, userId) => {
+      if (cursorNodeId === nodeId) {
+        users.push(userId);
+      }
+    });
+    return users;
+  }
+
+  getUserColor(userId: string): string {
+    if (this.userColorCache.has(userId)) {
+      return this.userColorCache.get(userId)!;
+    }
+
+    const colors = [
+      '#ef4444', '#f59e0b', '#10b981', '#3b82f6', 
+      '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'
+    ];
+    
+    const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const color = colors[hash % colors.length];
+    this.userColorCache.set(userId, color);
+    return color;
+  }
+
+  getUserInitial(userId: string): string {
+    return userId.substring(0, 1).toUpperCase();
   }
 }

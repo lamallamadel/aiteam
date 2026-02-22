@@ -6,12 +6,14 @@ import { WorkflowStreamStore } from '../services/workflow-stream.store';
 import { NeuralTraceComponent, GraftEvent } from './neural-trace.component';
 import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/orchestrator.model';
 import { ArtifactRendererComponent } from './artifact-renderer.component';
+import { CollaborationNotificationsComponent } from './collaboration-notifications.component';
 
 @Component({
   selector: 'app-run-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, NeuralTraceComponent, ArtifactRendererComponent],
+  imports: [CommonModule, RouterModule, NeuralTraceComponent, ArtifactRendererComponent, CollaborationNotificationsComponent],
   template: `
+    <app-collaboration-notifications></app-collaboration-notifications>
     <div class="run-detail-container" *ngIf="run()">
       <div class="header">
         <button (click)="goBack()" class="btn-back glass-panel">← Back to Runs</button>
@@ -42,9 +44,13 @@ import { ArtifactRendererComponent } from './artifact-renderer.component';
       <app-neural-trace
         [steps]="streamStore.stepTimeline()"
         [interactive]="true"
+        [showPresence]="streamStore.isCollaborationConnected()"
+        [activeUsers]="streamStore.activeUsers()"
+        [cursorPositions]="streamStore.cursorPositions()"
         (flagged)="onNodeFlagged($event)"
         (pruned)="onNodePruned($event)"
-        (grafted)="onNodeGrafted($event)">
+        (grafted)="onNodeGrafted($event)"
+        (cursorMoved)="onCursorMoved($event)">
       </app-neural-trace>
 
       <!-- Pending grafts notice -->
@@ -629,6 +635,9 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   onNodeFlagged(stepId: string) {
     const id = this.run()?.id;
     if (!id) return;
+    // Send via WebSocket for real-time collaboration
+    this.streamStore.sendFlag(stepId);
+    // Also persist via REST
     this.orchestratorService.flagNode(id, stepId).subscribe();
   }
 
@@ -636,10 +645,14 @@ export class RunDetailComponent implements OnInit, OnDestroy {
     const id = this.run()?.id;
     if (!id) return;
     const current = this.prunedSteps();
-    const updated = current.includes(stepId)
-      ? current.filter(s => s !== stepId)
-      : [...current, stepId];
+    const isPruned = !current.includes(stepId);
+    const updated = isPruned
+      ? [...current, stepId]
+      : current.filter(s => s !== stepId);
     this.prunedSteps.set(updated);
+    // Send via WebSocket for real-time collaboration
+    this.streamStore.sendPrune(stepId, isPruned);
+    // Also persist via REST
     this.orchestratorService.setPrunedSteps(id, updated.join(',')).subscribe();
   }
 
@@ -647,7 +660,14 @@ export class RunDetailComponent implements OnInit, OnDestroy {
     const id = this.run()?.id;
     if (!id) return;
     this.pendingGrafts.update(g => [...g, { after: event.after, agentName: event.agentName }]);
+    // Send via WebSocket for real-time collaboration
+    this.streamStore.sendGraft(event.after, event.agentName);
+    // Also persist via REST
     this.orchestratorService.addGraft(id, event.after, event.agentName).subscribe();
+  }
+
+  onCursorMoved(nodeId: string) {
+    this.streamStore.sendCursorMove(nodeId);
   }
 
   goBack() { this.router.navigate(['/runs']); }
