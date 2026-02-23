@@ -27,7 +27,7 @@ interface AgentRole {
               <span class="message-timestamp">{{ timestamp }}</span>
             </div>
             <div class="message-body">
-              <div class="message-text" [innerHTML]="getTypedText()"></div>
+              <div class="message-text" [innerHTML]="typedText()"></div>
             </div>
           </div>
 
@@ -602,7 +602,7 @@ Your AI-powered development automation platform is ready to go. Here's what make
 
 Let's get you set up in just a few quick steps.`;
 
-  typedText = '';
+  typedText = signal('');
   isTypingComplete = false;
   private typingInterval?: ReturnType<typeof setInterval>;
 
@@ -678,7 +678,7 @@ Let's get you set up in just a few quick steps.`;
     
     this.typingInterval = setInterval(() => {
       if (currentIndex <= plainText.length) {
-        this.typedText = plainText.substring(0, currentIndex);
+        this.typedText.set(plainText.substring(0, currentIndex));
         currentIndex++;
       } else {
         if (this.typingInterval) {
@@ -692,7 +692,7 @@ Let's get you set up in just a few quick steps.`;
   }
 
   getTypedText(): string {
-    return this.typedText;
+    return this.typedText();
   }
 
   nextStep() {
