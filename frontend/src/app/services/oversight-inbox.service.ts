@@ -22,7 +22,9 @@ export class OversightInboxService implements OnDestroy {
   private fetchPending() {
     this.orchestratorService.getPendingInterrupts().subscribe({
       next: (interrupts) => {
-        this.pendingInterrupts.set(interrupts);
+        setTimeout(() => {
+          this.pendingInterrupts.set(interrupts);
+        });
       },
       error: () => {}
     });

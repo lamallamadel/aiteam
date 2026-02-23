@@ -28,7 +28,9 @@ export class EscalationService implements OnDestroy {
     this.orchestratorService.getRuns().subscribe({
       next: (runs) => {
         const escalated = runs.filter(r => r.status === 'ESCALATED');
-        this.escalatedRuns.set(escalated);
+        setTimeout(() => {
+          this.escalatedRuns.set(escalated);
+        });
         // Fetch last artifact for any newly seen escalated run
         escalated.forEach(run => {
           const cached = this.lastArtifacts();
@@ -45,10 +47,14 @@ export class EscalationService implements OnDestroy {
     this.orchestratorService.getArtifacts(runId).subscribe({
       next: (artifacts) => {
         const last = artifacts.length ? artifacts[artifacts.length - 1] : null;
-        this.lastArtifacts.update(m => ({ ...m, [runId]: last }));
+        setTimeout(() => {
+          this.lastArtifacts.update(m => ({ ...m, [runId]: last }));
+        });
       },
       error: () => {
-        this.lastArtifacts.update(m => ({ ...m, [runId]: null }));
+        setTimeout(() => {
+          this.lastArtifacts.update(m => ({ ...m, [runId]: null }));
+        });
       }
     });
   }

@@ -380,7 +380,7 @@ public class RunController {
 
         // 1. Check if it's the admin token
         if (StringUtils.hasText(props.token()) && props.token().equals(token)) {
-            return null; // Return null means use default credentials (app token or properties token)
+            return "ADMIN_TOKEN"; // Return non-null placeholder
         }
 
         // 2. Check if it's a valid GitHub token
