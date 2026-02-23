@@ -4,6 +4,7 @@ import com.atlasia.ai.service.JwtAuthenticationFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,15 +26,19 @@ import java.util.List;
 @EnableWebSecurity
 @EnableMethodSecurity
 @EnableScheduling
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({CorsProperties.class, OAuth2Properties.class})
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CorsProperties corsProperties;
+    private final OAuth2LoginSuccessHandler oauth2LoginSuccessHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, CorsProperties corsProperties) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, 
+                          CorsProperties corsProperties,
+                          @Lazy OAuth2LoginSuccessHandler oauth2LoginSuccessHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.corsProperties = corsProperties;
+        this.oauth2LoginSuccessHandler = oauth2LoginSuccessHandler;
     }
 
     @Bean
@@ -56,10 +61,15 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/oauth2/**").permitAll()
+                .requestMatchers("/login/oauth2/**").permitAll()
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().authenticated()
+            )
+            .oauth2Login(oauth2 -> oauth2
+                .successHandler(oauth2LoginSuccessHandler)
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

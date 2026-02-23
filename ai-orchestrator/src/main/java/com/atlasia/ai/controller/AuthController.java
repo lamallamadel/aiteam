@@ -2,6 +2,7 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.*;
 import com.atlasia.ai.service.AuthenticationService;
+import com.atlasia.ai.service.OAuth2Service;
 import com.atlasia.ai.service.PasswordResetService;
 import com.atlasia.ai.service.RefreshTokenService;
 import com.atlasia.ai.service.UserRegistrationService;
@@ -10,10 +11,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -25,16 +29,19 @@ public class AuthController {
     private final AuthenticationService authenticationService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordResetService passwordResetService;
+    private final OAuth2Service oauth2Service;
 
     public AuthController(
             UserRegistrationService userRegistrationService,
             AuthenticationService authenticationService,
             RefreshTokenService refreshTokenService,
-            PasswordResetService passwordResetService) {
+            PasswordResetService passwordResetService,
+            OAuth2Service oauth2Service) {
         this.userRegistrationService = userRegistrationService;
         this.authenticationService = authenticationService;
         this.refreshTokenService = refreshTokenService;
         this.passwordResetService = passwordResetService;
+        this.oauth2Service = oauth2Service;
     }
 
     @PostMapping("/register")
@@ -159,6 +166,74 @@ public class AuthController {
             error.put("error", "Password reset failed");
             error.put("message", "An error occurred while processing your request");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    @PostMapping("/oauth2/link")
+    public ResponseEntity<?> linkOAuth2Account(
+            @Valid @RequestBody OAuth2LinkRequest request,
+            @RequestHeader("Authorization") String authHeader) {
+        try {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                logger.warn("OAuth2 link attempt without authentication");
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Unauthorized");
+                error.put("message", "User must be authenticated to link OAuth2 account");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+            }
+
+            String token = authHeader.substring(7);
+            UUID userId = extractUserIdFromToken(token);
+
+            oauth2Service.linkOAuth2Account(
+                    userId,
+                    request.getProvider(),
+                    request.getProviderUserId(),
+                    request.getAccessToken(),
+                    request.getRefreshToken()
+            );
+
+            OAuth2LinkResponse response = new OAuth2LinkResponse(
+                    "OAuth2 account linked successfully",
+                    request.getProvider(),
+                    true
+            );
+
+            logger.info("OAuth2 account linked: userId={}, provider={}", userId, request.getProvider());
+            return ResponseEntity.ok(response);
+
+        } catch (IllegalStateException e) {
+            logger.warn("OAuth2 link failed: {}", e.getMessage());
+            OAuth2LinkResponse response = new OAuth2LinkResponse(
+                    e.getMessage(),
+                    request.getProvider(),
+                    false
+            );
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (IllegalArgumentException e) {
+            logger.warn("OAuth2 link failed: {}", e.getMessage());
+            OAuth2LinkResponse response = new OAuth2LinkResponse(
+                    e.getMessage(),
+                    request.getProvider(),
+                    false
+            );
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            logger.error("OAuth2 link error: {}", e.getMessage(), e);
+            OAuth2LinkResponse response = new OAuth2LinkResponse(
+                    "Failed to link OAuth2 account",
+                    request.getProvider(),
+                    false
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    private UUID extractUserIdFromToken(String token) {
+        try {
+            return authenticationService.extractUserIdFromToken(token);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid token");
         }
     }
 }

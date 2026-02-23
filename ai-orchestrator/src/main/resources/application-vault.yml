@@ -1,0 +1,14 @@
+spring:
+  cloud:
+    vault:
+      enabled: ${VAULT_ENABLED:false}
+      uri: ${VAULT_URI:http://localhost:8200}
+      token: ${VAULT_TOKEN:}
+      kv:
+        enabled: true
+        backend: secret
+        default-context: atlasia
+      authentication: TOKEN
+      scheme: http
+      connection-timeout: 5000
+      read-timeout: 15000

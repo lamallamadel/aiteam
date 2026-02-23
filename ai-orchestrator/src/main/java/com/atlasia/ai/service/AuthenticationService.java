@@ -103,4 +103,8 @@ public class AuthenticationService {
             logger.warn("Logout failed: {}", e.getMessage());
         }
     }
+
+    public java.util.UUID extractUserIdFromToken(String token) {
+        return jwtService.extractUserId(token);
+    }
 }
