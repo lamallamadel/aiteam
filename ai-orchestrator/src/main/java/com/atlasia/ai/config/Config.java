@@ -8,7 +8,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 
 @Configuration
-@EnableConfigurationProperties(OrchestratorProperties.class)
+@EnableConfigurationProperties({OrchestratorProperties.class, JwtProperties.class})
 public class Config {
     
     @Bean(name = "workflowExecutor")

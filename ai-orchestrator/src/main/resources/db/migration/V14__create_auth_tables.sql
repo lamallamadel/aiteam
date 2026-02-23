@@ -36,6 +36,15 @@ CREATE TABLE user_roles (
     CONSTRAINT fk_user_roles_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
+-- Create role_permissions junction table
+CREATE TABLE role_permissions (
+    role_id INTEGER NOT NULL,
+    permission_id INTEGER NOT NULL,
+    PRIMARY KEY (role_id, permission_id),
+    CONSTRAINT fk_role_permissions_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    CONSTRAINT fk_role_permissions_permission FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+
 -- Create user_permissions junction table for attribute-based overrides
 CREATE TABLE user_permissions (
     user_id UUID NOT NULL,
@@ -89,6 +98,7 @@ CREATE INDEX idx_oauth2_accounts_provider_user_id ON oauth2_accounts(provider, p
 
 -- Create indexes for junction tables
 CREATE INDEX idx_user_roles_role_id ON user_roles(role_id);
+CREATE INDEX idx_role_permissions_permission_id ON role_permissions(permission_id);
 CREATE INDEX idx_user_permissions_permission_id ON user_permissions(permission_id);
 
 -- Add comments for documentation
@@ -96,6 +106,7 @@ COMMENT ON TABLE users IS 'User accounts for authentication and authorization';
 COMMENT ON TABLE roles IS 'Role definitions for role-based access control (RBAC)';
 COMMENT ON TABLE permissions IS 'Permission definitions for fine-grained access control';
 COMMENT ON TABLE user_roles IS 'Junction table mapping users to roles';
+COMMENT ON TABLE role_permissions IS 'Junction table mapping roles to permissions';
 COMMENT ON TABLE user_permissions IS 'Junction table for user-specific permission overrides';
 COMMENT ON TABLE refresh_tokens IS 'Refresh tokens for JWT authentication';
 COMMENT ON TABLE oauth2_accounts IS 'OAuth2 provider account linkages';

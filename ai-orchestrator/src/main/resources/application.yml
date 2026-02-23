@@ -69,3 +69,8 @@ atlasia:
       sse-timeout-minutes: ${SSE_TIMEOUT_MINUTES:30}
       default-mode: ${DEFAULT_MODE:EXECUTION}
       enabled-agents: ${ENABLED_AGENTS:PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER}
+  jwt:
+    secret-key: ${JWT_SECRET_KEY:}
+    access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:15}
+    refresh-token-expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:7}
+    issuer: ${JWT_ISSUER:atlasia-ai-orchestrator}
