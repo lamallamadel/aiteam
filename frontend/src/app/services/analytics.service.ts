@@ -78,11 +78,18 @@ export interface EscalationCluster {
   suggestedRootCause: string;
 }
 
+export interface KeywordInsight {
+  keyword: string;
+  frequency: number;
+}
+
 export interface EscalationInsightDto {
   totalEscalationsAnalysed: number;
   topErrorPatterns: Record<string, number>;
   problematicFiles: string[];
   clusters: EscalationCluster[];
+  keywords?: KeywordInsight[];
+  agentBottlenecks?: Record<string, number>;
 }
 
 export interface LatencyPoint {
@@ -120,6 +127,10 @@ export class AnalyticsService {
   }
 
   generateEscalationInsights(): Observable<EscalationInsightDto> {
+    return this.http.post<EscalationInsightDto>(`${this.base}/escalations/insights`, {});
+  }
+
+  getEscalationInsights(): Observable<EscalationInsightDto> {
     return this.http.post<EscalationInsightDto>(`${this.base}/escalations/insights`, {});
   }
 

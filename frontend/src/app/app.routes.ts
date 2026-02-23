@@ -3,6 +3,7 @@ import { DashboardHomeComponent } from './components/dashboard-home.component';
 import { RunListComponent } from './components/run-list.component';
 import { RunDetailComponent } from './components/run-detail.component';
 import { AnalyticsDashboardComponent } from './components/analytics-dashboard.component';
+import { FailureAnalyticsComponent } from './components/failure-analytics.component';
 import { ChatDashboardComponent } from './components/index';
 import { EscalationPanelComponent } from './components/oversight/escalation-panel.component';
 import { OversightInboxComponent } from './components/oversight/oversight-inbox.component';
@@ -30,6 +31,7 @@ export const routes: Routes = [
   { path: 'oversight', component: EscalationPanelComponent },
   { path: 'oversight/inbox', component: OversightInboxComponent },
   { path: 'analytics', component: AnalyticsDashboardComponent },
+  { path: 'analytics/failures', component: FailureAnalyticsComponent },
   { path: 'config/agents', component: AgentConfigComponent },
   { path: 'config/oversight', component: OversightConfigComponent },
   { path: 'a2a', component: A2ARegistryComponent },
