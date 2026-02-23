@@ -31,7 +31,7 @@ interface AgentRole {
             </div>
           </div>
 
-          <div class="cta-section" *ngIf="isTypingComplete">
+          <div class="cta-section" *ngIf="isTypingComplete()">
             <button class="primary-btn" (click)="nextStep()">Get Started →</button>
           </div>
         </div>
@@ -57,7 +57,7 @@ interface AgentRole {
                 <button 
                   *ngFor="let provider of gitProviders"
                   class="provider-btn"
-                  [class.selected]="selectedProvider === provider.id"
+                  [class.selected]="selectedProvider() === provider.id"
                   (click)="selectProvider(provider.id)">
                   <span class="provider-icon">{{ provider.icon }}</span>
                   <span class="provider-name">{{ provider.name }}</span>
@@ -69,7 +69,8 @@ interface AgentRole {
               <label>Access Token</label>
               <input 
                 type="password" 
-                [(ngModel)]="gitToken" 
+                [ngModel]="gitToken()"
+                (ngModelChange)="gitToken.set($event)"
                 placeholder="Enter your personal access token"
                 class="input-field">
               <span class="input-hint">
@@ -77,11 +78,12 @@ interface AgentRole {
               </span>
             </div>
 
-            <div class="form-group" *ngIf="selectedProvider === 'custom'">
+            <div class="form-group" *ngIf="selectedProvider() === 'custom'">
               <label>Custom Git URL (Optional)</label>
               <input 
                 type="text" 
-                [(ngModel)]="customGitUrl" 
+                [ngModel]="customGitUrl()"
+                (ngModelChange)="customGitUrl.set($event)"
                 placeholder="https://git.example.com"
                 class="input-field">
             </div>
@@ -117,7 +119,7 @@ interface AgentRole {
               <div 
                 *ngFor="let role of agentRoles"
                 class="role-card"
-                [class.selected]="selectedRole === role.id"
+                [class.selected]="selectedRole() === role.id"
                 (click)="selectRole(role.id)">
                 <div class="role-header">
                   <span class="role-icon">{{ role.icon }}</span>
@@ -141,7 +143,7 @@ interface AgentRole {
               <button class="secondary-btn" (click)="skipRole()">Skip for Now</button>
               <button 
                 class="primary-btn" 
-                [disabled]="!selectedRole"
+                [disabled]="!selectedRole()"
                 (click)="completeOnboarding()">
                 Complete Setup →
               </button>
@@ -603,7 +605,7 @@ Your AI-powered development automation platform is ready to go. Here's what make
 Let's get you set up in just a few quick steps.`;
 
   typedText = signal('');
-  isTypingComplete = false;
+  isTypingComplete = signal(false);
   private typingInterval?: ReturnType<typeof setInterval>;
 
   gitProviders = [
@@ -613,9 +615,9 @@ Let's get you set up in just a few quick steps.`;
     { id: 'custom', name: 'Custom', icon: '⚙️' }
   ];
 
-  selectedProvider: string = '';
-  gitToken: string = '';
-  customGitUrl: string = '';
+  selectedProvider = signal('');
+  gitToken = signal('');
+  customGitUrl = signal('');
 
   agentRoles: AgentRole[] = [
     {
@@ -655,7 +657,7 @@ Let's get you set up in just a few quick steps.`;
     }
   ];
 
-  selectedRole: string = '';
+  selectedRole = signal('');
 
   constructor(
     private settingsService: SettingsService,
@@ -673,6 +675,7 @@ Let's get you set up in just a few quick steps.`;
   }
 
   startTypingAnimation() {
+    console.log('Starting typing animation...');
     const plainText = this.welcomeMessage;
     let currentIndex = 0;
     
@@ -684,27 +687,26 @@ Let's get you set up in just a few quick steps.`;
         if (this.typingInterval) {
           clearInterval(this.typingInterval);
         }
+        console.log('Typing animation complete.');
         setTimeout(() => {
-          this.isTypingComplete = true;
+          this.isTypingComplete.set(true);
         });
       }
-    }, 15);
-  }
-
-  getTypedText(): string {
-    return this.typedText();
+    }, 10);
   }
 
   nextStep() {
+    console.log('Navigating to next step from:', this.currentStep());
     this.currentStep.update(step => step + 1);
+    console.log('New step:', this.currentStep());
   }
 
   selectProvider(providerId: string) {
-    this.selectedProvider = providerId;
+    this.selectedProvider.set(providerId);
   }
 
   canProceedFromProvider(): boolean {
-    return this.selectedProvider !== '' && this.gitToken.trim() !== '';
+    return this.selectedProvider() !== '' && this.gitToken().trim() !== '';
   }
 
   skipProvider() {
@@ -722,22 +724,22 @@ Let's get you set up in just a few quick steps.`;
       'bitbucket': 'bitbucket'
     };
 
-    const provider = this.selectedProvider === 'custom' 
+    const provider = this.selectedProvider() === 'custom' 
       ? null 
-      : providerMap[this.selectedProvider];
+      : providerMap[this.selectedProvider()];
 
     this.settingsService.updateGitProvider({
       provider: provider,
-      token: this.gitToken,
-      url: this.customGitUrl || null,
-      label: this.selectedProvider === 'custom' ? 'Custom Git' : null
+      token: this.gitToken(),
+      url: this.customGitUrl() || null,
+      label: this.selectedProvider() === 'custom' ? 'Custom Git' : null
     });
 
     this.nextStep();
   }
 
   selectRole(roleId: string) {
-    this.selectedRole = roleId;
+    this.selectedRole.set(roleId);
   }
 
   skipRole() {
@@ -745,8 +747,8 @@ Let's get you set up in just a few quick steps.`;
   }
 
   completeOnboarding() {
-    if (this.selectedRole) {
-      localStorage.setItem(this.DEFAULT_AGENT_ROLE_KEY, this.selectedRole);
+    if (this.selectedRole()) {
+      localStorage.setItem(this.DEFAULT_AGENT_ROLE_KEY, this.selectedRole());
     }
 
     localStorage.setItem(this.ONBOARDING_COMPLETE_KEY, 'true');

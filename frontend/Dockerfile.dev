@@ -21,4 +21,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
 # Run ng serve with polling for hot-reload
 # --poll enables file watching in Docker environments
 # --host 0.0.0.0 makes it accessible from host machine
-CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--poll", "2000"]
+CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--poll", "2000", "--allowed-hosts"]

@@ -11,7 +11,7 @@ export class AuthService {
     }
 
     getToken(): string | null {
-        return localStorage.getItem(this.TOKEN_KEY) || 'dev-token';
+        return localStorage.getItem(this.TOKEN_KEY) || 'changeme';
     }
 
     hasToken(): boolean {
