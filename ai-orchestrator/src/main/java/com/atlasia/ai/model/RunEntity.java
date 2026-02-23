@@ -67,6 +67,11 @@ public class RunEntity {
     @Column(name = "pending_grafts", columnDefinition = "jsonb")
     private String pendingGrafts;
 
+    /** JSON array of executed graft metadata: [{graftId, agentName, checkpoint, status}]. */
+    @Type(JsonBinaryType.class)
+    @Column(name = "executed_grafts", columnDefinition = "jsonb")
+    private String executedGrafts;
+
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RunArtifactEntity> artifacts = new ArrayList<>();
 
@@ -99,6 +104,7 @@ public class RunEntity {
     public String getEnvironmentCheckpoint() { return environmentCheckpoint; }
     public String getPrunedSteps() { return prunedSteps; }
     public String getPendingGrafts() { return pendingGrafts; }
+    public String getExecutedGrafts() { return executedGrafts; }
 
     /** Returns true if the given step name appears in the pruned steps list. */
     public boolean isStepPruned(String stepName) {
@@ -116,6 +122,11 @@ public class RunEntity {
 
     public void setPendingGrafts(String pendingGrafts) {
         this.pendingGrafts = pendingGrafts;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setExecutedGrafts(String executedGrafts) {
+        this.executedGrafts = executedGrafts;
         this.updatedAt = Instant.now();
     }
 

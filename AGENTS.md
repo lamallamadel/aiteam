@@ -32,6 +32,13 @@ Access them directly via the "Chat Mode" in the UI.
 Monorepo with `/ai-orchestrator` (Spring Boot API), `/frontend` (Angular UI), `/ai` (agent configurations), `/infra` (Docker setup). 
 The system uses a **Dual-Mode** engine (Code vs Chat) to provide both autonomous engineering and lightweight AI dialogue.
 
+### Multi-User Collaboration (NEW)
+Real-time WebSocket-based collaboration for workflow runs:
+- **WebSocket Endpoint**: `/ws/runs/{runId}/collaboration` (STOMP over SockJS)
+- **Features**: Live graft/prune/flag mutations, presence indicators, cursor tracking, operational transformation
+- **Audit**: All events stored in `collaboration_events` table with full history
+- **Docs**: See `docs/COLLABORATION.md` and `docs/COLLABORATION_EXAMPLES.md`
+
 ## Code Style
 - Java: Package structure `com.atlasia.ai.{controller,model,persistence,api,config}`
 - No secrets/tokens committed; bearer token auth for `/runs` endpoint

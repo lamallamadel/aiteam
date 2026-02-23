@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding } from '../models/orchestrator.model';
+import { CollaborationEventEntity } from '../models/collaboration.model';
 
 export interface OversightInterruptRule {
   ruleName: string;
@@ -104,5 +105,16 @@ export class OrchestratorService {
 
     saveOversightConfig(config: OversightConfigPayload): Observable<OversightConfigPayload> {
         return this.http.post<OversightConfigPayload>('/api/oversight/config', config);
+    }
+
+    // Collaboration endpoints
+    getCollaborationEvents(runId: string, limit: number = 50): Observable<CollaborationEventEntity[]> {
+        return this.http.get<CollaborationEventEntity[]>(
+            `${this.apiUrl}/${runId}/collaboration/events?limit=${limit}`
+        );
+    }
+
+    getActiveUsers(runId: string): Observable<string[]> {
+        return this.http.get<string[]>(`${this.apiUrl}/${runId}/collaboration/users`);
     }
 }

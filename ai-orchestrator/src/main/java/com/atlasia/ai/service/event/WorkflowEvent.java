@@ -13,7 +13,10 @@ public sealed interface WorkflowEvent permits
         WorkflowEvent.LlmCallEnd,
         WorkflowEvent.SchemaValidation,
         WorkflowEvent.WorkflowError,
-        WorkflowEvent.EscalationRaised {
+        WorkflowEvent.EscalationRaised,
+        WorkflowEvent.GraftStart,
+        WorkflowEvent.GraftComplete,
+        WorkflowEvent.GraftFailed {
 
     UUID runId();
 
@@ -78,5 +81,23 @@ public sealed interface WorkflowEvent permits
             String reason) implements WorkflowEvent {
         @Override
         public String eventType() { return "ESCALATION_RAISED"; }
+    }
+
+    record GraftStart(UUID runId, Instant timestamp, String graftId, String agentName,
+            String checkpointAfter) implements WorkflowEvent {
+        @Override
+        public String eventType() { return "GRAFT_START"; }
+    }
+
+    record GraftComplete(UUID runId, Instant timestamp, String graftId, String agentName,
+            long durationMs, UUID artifactId) implements WorkflowEvent {
+        @Override
+        public String eventType() { return "GRAFT_COMPLETE"; }
+    }
+
+    record GraftFailed(UUID runId, Instant timestamp, String graftId, String agentName,
+            String errorType, String message) implements WorkflowEvent {
+        @Override
+        public String eventType() { return "GRAFT_FAILED"; }
     }
 }

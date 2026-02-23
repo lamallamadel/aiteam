@@ -2,10 +2,12 @@ import { Injectable, signal, computed } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SseService } from './sse.service';
 import { WorkflowEvent } from '../models/orchestrator.model';
+import { CollaborationWebSocketService, CollaborationEvent } from './collaboration-websocket.service';
 
 @Injectable({ providedIn: 'root' })
 export class WorkflowStreamStore {
   private subscription: Subscription | null = null;
+  private collaborationSubscription: Subscription | null = null;
   private retryCount = 0;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAYS = [2000, 4000, 8000];
@@ -19,6 +21,12 @@ export class WorkflowStreamStore {
   readonly isStreaming = signal<boolean>(false);
   readonly lastError = signal<string | null>(null);
   readonly connectedRunId = signal<string | null>(null);
+  
+  // Collaboration signals
+  readonly collaborationEvents = signal<CollaborationEvent[]>([]);
+  readonly activeUsers = signal<string[]>([]);
+  readonly cursorPositions = signal<Map<string, string>>(new Map());
+  readonly isCollaborationConnected = signal<boolean>(false);
 
   // Computed signals
   readonly stepTimeline = computed(() =>
@@ -55,14 +63,41 @@ export class WorkflowStreamStore {
     this.events().some(e => e.eventType === 'ESCALATION_RAISED')
   );
 
-  constructor(private sseService: SseService) {}
+  constructor(
+    private sseService: SseService,
+    private collaborationService: CollaborationWebSocketService
+  ) {
+    // Subscribe to collaboration events
+    this.collaborationSubscription = this.collaborationService.events$.subscribe(event => {
+      if (event) {
+        this.collaborationEvents.update(events => [...events, event]);
+        this.handleCollaborationEvent(event);
+      }
+    });
 
-  connectToRun(runId: string): void {
+    // Subscribe to presence updates
+    this.collaborationService.presence$.subscribe(presence => {
+      this.activeUsers.set(presence.activeUsers);
+      this.cursorPositions.set(presence.cursors);
+    });
+
+    // Subscribe to connection status
+    this.collaborationService.connected$.subscribe(connected => {
+      this.isCollaborationConnected.set(connected);
+    });
+  }
+
+  connectToRun(runId: string, enableCollaboration: boolean = true): void {
     this.disconnect();
     this.reset();
     this.retryCount = 0;
     this.currentRunId = runId;
     this.connectInternal(runId);
+    
+    // Connect to collaboration WebSocket
+    if (enableCollaboration) {
+      this.collaborationService.connect(runId);
+    }
   }
 
   private connectInternal(runId: string): void {
@@ -108,6 +143,7 @@ export class WorkflowStreamStore {
       this.subscription = null;
     }
     this.sseService.disconnect();
+    this.collaborationService.disconnect();
     this.isStreaming.set(false);
   }
 
@@ -117,6 +153,7 @@ export class WorkflowStreamStore {
     this.progress.set(0);
     this.lastError.set(null);
     this.connectedRunId.set(null);
+    this.collaborationEvents.set([]);
   }
 
   private processEvent(event: WorkflowEvent): void {
@@ -135,5 +172,32 @@ export class WorkflowStreamStore {
         this.lastError.set(`Escalation: ${event.reason || 'Unknown reason'}`);
         break;
     }
+  }
+
+  private handleCollaborationEvent(event: CollaborationEvent): void {
+    // Handle collaboration events to sync state
+    // This is where operational transformation logic would apply
+    console.log('Collaboration event received:', event);
+  }
+
+  // Collaboration methods
+  sendGraft(after: string, agentName: string): void {
+    this.collaborationService.sendGraft(after, agentName);
+  }
+
+  sendPrune(stepId: string, isPruned: boolean): void {
+    this.collaborationService.sendPrune(stepId, isPruned);
+  }
+
+  sendFlag(stepId: string, note?: string): void {
+    this.collaborationService.sendFlag(stepId, note);
+  }
+
+  sendCursorMove(nodeId: string): void {
+    this.collaborationService.sendCursorMove(nodeId);
+  }
+
+  getCurrentUserId(): string {
+    return this.collaborationService.getUserId();
   }
 }

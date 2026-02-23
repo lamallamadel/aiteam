@@ -51,6 +51,12 @@ public class TraceEventService {
                 handleEscalation(e);
             } else if (event instanceof WorkflowEvent.WorkflowStatusUpdate e) {
                 handleStatusUpdate(e);
+            } else if (event instanceof WorkflowEvent.GraftStart e) {
+                handleGraftStart(e);
+            } else if (event instanceof WorkflowEvent.GraftComplete e) {
+                handleGraftComplete(e);
+            } else if (event instanceof WorkflowEvent.GraftFailed e) {
+                handleGraftFailed(e);
             }
             // ToolCall events are not persisted as trace spans
         } catch (Exception ex) {
@@ -148,6 +154,46 @@ public class TraceEventService {
         span.setMetadata(String.format("{\"status\":\"%s\",\"progressPercent\":%d}",
                 event.status(), event.progressPercent()));
         traceEventRepository.save(span);
+    }
+
+    private void handleGraftStart(WorkflowEvent.GraftStart event) {
+        UUID parentSpanId = currentStepSpan.get(event.runId());
+        UUID spanId = UUID.randomUUID();
+        TraceEventEntity span = new TraceEventEntity(
+                spanId, event.runId(), parentSpanId, "GRAFT",
+                event.agentName(), "Graft " + event.graftId() + " — " + event.agentName() + " (after " + event.checkpointAfter() + ")",
+                event.timestamp());
+        traceEventRepository.save(span);
+    }
+
+    private void handleGraftComplete(WorkflowEvent.GraftComplete event) {
+        traceEventRepository.findByRunIdOrderByStartTimeAsc(event.runId()).stream()
+                .filter(e -> "GRAFT".equals(e.getEventType()) && 
+                             e.getLabel().contains(event.graftId()) && 
+                             e.getEndTime() == null)
+                .reduce((a, b) -> b)
+                .ifPresent(span -> {
+                    span.setEndTime(event.timestamp());
+                    span.setDurationMs(event.durationMs());
+                    span.setMetadata(String.format("{\"graftId\":\"%s\",\"artifactId\":\"%s\"}",
+                            event.graftId(), event.artifactId()));
+                    traceEventRepository.save(span);
+                });
+    }
+
+    private void handleGraftFailed(WorkflowEvent.GraftFailed event) {
+        traceEventRepository.findByRunIdOrderByStartTimeAsc(event.runId()).stream()
+                .filter(e -> "GRAFT".equals(e.getEventType()) && 
+                             e.getLabel().contains(event.graftId()) && 
+                             e.getEndTime() == null)
+                .reduce((a, b) -> b)
+                .ifPresent(span -> {
+                    span.setEndTime(event.timestamp());
+                    span.setDurationMs(0L);
+                    span.setMetadata(String.format("{\"graftId\":\"%s\",\"errorType\":\"%s\",\"message\":\"%s\"}",
+                            event.graftId(), event.errorType(), event.message().replace("\"", "\\\"")));
+                    traceEventRepository.save(span);
+                });
     }
 
     public void cleanup(UUID runId) {
