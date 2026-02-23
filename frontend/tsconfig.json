@@ -15,7 +15,9 @@
     "target": "ES2022",
     "module": "preserve",
     "moduleResolution": "bundler",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
