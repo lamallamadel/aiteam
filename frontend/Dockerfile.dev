@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies (with npm ci for reproducible builds in dev)
-RUN npm ci && ls node_modules/@stomp/stompjs/package.json && ls node_modules/sockjs-client/package.json
+RUN npm ci
 
 # Copy the rest (except node_modules which is mounted as volume)
 COPY . .
