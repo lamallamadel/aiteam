@@ -65,6 +65,8 @@ services:
       NG_CLI_ANALYTICS: ci
       ANGULAR_ENVIRONMENT: development
       NODE_OPTIONS: "--max-old-space-size=4096"
+    mem_limit: 4G
+    mem_reservation: 1G
     ports:
       - "4200:4200"
     volumes:
