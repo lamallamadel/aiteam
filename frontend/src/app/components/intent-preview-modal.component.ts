@@ -28,7 +28,7 @@ export interface IntentConfirmation {
   imports: [CommonModule, FormsModule],
   template: `
     <div class="modal-backdrop" *ngIf="visible" (click)="onBackdropClick($event)">
-      <div class="modal-panel glass-panel" role="dialog" aria-modal="true">
+      <div class="modal-panel" role="dialog" aria-modal="true">
 
         <!-- Modal header -->
         <div class="modal-header">
@@ -152,9 +152,8 @@ export interface IntentConfirmation {
       display: flex;
       flex-direction: column;
       gap: 20px;
-      border: 1px solid rgba(56,189,248,0.2);
-      background: rgba(15, 23, 42, 0.95);
-      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      background: var(--surface);
     }
 
     /* ── Header ─────────────────────────────────────────────────── */
@@ -203,10 +202,10 @@ export interface IntentConfirmation {
     .summary-field { display: flex; align-items: center; gap: 8px; }
     .field-label { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
     .field-value { font-size: 0.9rem; color: white; font-weight: 600; }
-    .mono { font-family: monospace; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .mode-select {
       background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       color: white;
       padding: 4px 10px;
       border-radius: 6px;
@@ -295,7 +294,7 @@ export interface IntentConfirmation {
       flex: 1;
       padding: 10px 12px;
       background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.07);
+      border: 1px solid var(--border);
       border-radius: 8px;
       cursor: pointer;
       display: flex;
@@ -334,7 +333,7 @@ export interface IntentConfirmation {
     .btn-cancel {
       padding: 10px 20px;
       background: transparent;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       color: #94a3b8;
       border-radius: 8px;
       cursor: pointer;

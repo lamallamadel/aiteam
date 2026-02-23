@@ -150,6 +150,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       background: rgba(34,197,94,0.12);
       padding: 2px 8px;
       border-radius: 8px;
+      font-variant-numeric: tabular-nums;
     }
     .live-dot {
       width: 6px; height: 6px;
@@ -225,6 +226,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       color: #8b5cf6;
       border-radius: 6px;
       font-size: 0.7rem;
+      font-variant-numeric: tabular-nums;
     }
     .agent-chip {
       padding: 1px 7px;
@@ -251,7 +253,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       justify-content: space-between;
       align-items: center;
     }
-    .total-label { font-size: 0.78rem; color: rgba(255,255,255,0.35); }
+    .total-label { font-size: 0.78rem; color: rgba(255,255,255,0.35); font-variant-numeric: tabular-nums; }
     .pagination { display: flex; align-items: center; gap: 10px; }
     .btn-pagination {
       padding: 6px 14px;
@@ -265,7 +267,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     }
     .btn-pagination:hover:not(:disabled) { background: rgba(56,189,248,0.15); }
     .btn-pagination:disabled { opacity: 0.4; cursor: not-allowed; }
-    .page-info { color: #94a3b8; font-size: 0.82rem; }
+    .page-info { color: #94a3b8; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
     .empty-state { text-align: center; padding: 48px; color: #94a3b8; }
   `]
 })

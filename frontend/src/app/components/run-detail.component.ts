@@ -108,19 +108,19 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
           </div>
           <div class="info-row">
             <span class="label">CI Fixes</span>
-            <span class="value">{{ run()?.ciFixCount || 0 }}</span>
+            <span class="value mono">{{ run()?.ciFixCount || 0 }}</span>
           </div>
           <div class="info-row">
             <span class="label">E2E Fixes</span>
-            <span class="value">{{ run()?.e2eFixCount || 0 }}</span>
+            <span class="value mono">{{ run()?.e2eFixCount || 0 }}</span>
           </div>
           <div class="info-row">
             <span class="label">Created</span>
-            <span class="value">{{ formatDate(run()?.createdAt) }}</span>
+            <span class="value mono">{{ formatDate(run()?.createdAt) }}</span>
           </div>
           <div class="info-row">
             <span class="label">Updated</span>
-            <span class="value">{{ formatDate(run()?.updatedAt) }}</span>
+            <span class="value mono">{{ formatDate(run()?.updatedAt) }}</span>
           </div>
 
           <!-- Environment lifecycle section -->
@@ -134,7 +134,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
             </div>
             <div class="info-row" *ngIf="envCheckpointTime()">
               <span class="label">Checkpoint</span>
-              <span class="value">{{ envCheckpointTime() }}</span>
+              <span class="value mono">{{ envCheckpointTime() }}</span>
             </div>
             <div class="env-actions" *ngIf="isResumeAvailable()">
               <p class="paused-hint">This run was paused with a saved environment checkpoint.</p>
@@ -160,7 +160,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
               </div>
               <div class="artifact-meta">
                 <span class="artifact-id mono">{{ artifact.id.substring(0, 8) }}</span>
-                <span class="artifact-date">{{ formatDate(artifact.createdAt) }}</span>
+                <span class="artifact-date mono">{{ formatDate(artifact.createdAt) }}</span>
               </div>
             </div>
             <div *ngIf="allArtifacts().length === 0" class="empty-state">
@@ -223,7 +223,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       gap: 12px;
     }
     .header-title h2 { margin: 0; color: white; font-size: 1.4rem; }
-    .issue-num { color: #38bdf8; }
+    .issue-num { color: #38bdf8; font-variant-numeric: tabular-nums; }
     .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .btn-back, .btn-action {
       padding: 8px 16px;
@@ -271,7 +271,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       color: #38bdf8;
       font-weight: 600;
     }
-    .progress-pct { margin-left: auto; color: rgba(255,255,255,0.6); }
+    .progress-pct { margin-left: auto; color: rgba(255,255,255,0.6); font-variant-numeric: tabular-nums; }
     .pulse-dot {
       width: 7px; height: 7px;
       background: #22c55e;
@@ -296,6 +296,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       gap: 16px;
       font-size: 0.75rem;
       color: rgba(255,255,255,0.4);
+      font-variant-numeric: tabular-nums;
     }
 
     /* Escalation banner */
@@ -404,7 +405,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
     .artifact-item {
       padding: 10px 12px;
       background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
       border-radius: 8px;
       cursor: pointer;
       transition: border-color 0.2s;
@@ -469,6 +470,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       border: 1px solid rgba(139,92,246,0.25);
       color: rgba(255,255,255,0.65);
       border-radius: 8px;
+      font-variant-numeric: tabular-nums;
     }
     .graft-chip strong { color: #a78bfa; }
 

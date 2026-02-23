@@ -78,13 +78,17 @@ interface Message {
         (cancelled)="showPreview = false">
       </app-intent-preview-modal>
 
-      <!-- Messages List -->
+      <!-- Messages List - Document-centric flow -->
       <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="message-list" #scrollMe>
-        <div *ngFor="let msg of messages" class="message" [ngClass]="[msg.role, msg.senderName ? 'persona-' + msg.senderName.toLowerCase() : '']">
-          <div class="sender-column">
-            <div class="sender-label" *ngIf="msg.senderName">{{ msg.senderName }}</div>
+        <div *ngFor="let msg of messages" class="message-document" [ngClass]="msg.role">
+          <div class="message-header">
+            <span class="message-sender" *ngIf="msg.senderName || msg.role === 'user'">
+              {{ msg.senderName || (msg.role === 'user' ? 'YOU' : 'ASSISTANT') }}
+            </span>
+            <span class="message-timestamp">{{ msg.timestamp | date:'HH:mm:ss' }}</span>
           </div>
-          <div class="message-content">
+          
+          <div class="message-body">
             <div class="message-text">{{ msg.text }}</div>
             
             <!-- Visionary Run Button -->
@@ -97,24 +101,21 @@ interface Message {
               <span class="pulse"></span> <span class="agent-name">{{ msg.orchestrationStep }}</span>
             </div>
             
-            <div class="message-footer">
-                <span class="timestamp">{{ msg.timestamp | date:'shortTime' }}</span>
-                <button *ngIf="msg.role === 'assistant'" class="copy-btn" (click)="copyToClipboard(msg.text)" title="Copy message">
-                    📋
-                </button>
-            </div>
+            <button *ngIf="msg.role === 'assistant'" class="copy-btn" (click)="copyToClipboard(msg.text)" title="Copy message">
+                📋 Copy
+            </button>
           </div>
         </div>
         
-        <div *ngIf="isTyping" class="message assistant typing">
-          <div class="sender-column"></div>
-          <div class="message-content typing-content">
-            <div class="typing-label">
+        <div *ngIf="isTyping" class="message-document assistant typing">
+          <div class="message-header">
+            <span class="message-sender">
               <span *ngFor="let p of Array.from(typingPersonas); let last = last">
                 {{ p | uppercase }}{{ !last ? ', ' : '' }}
               </span>
-              Thinking...
-            </div>
+            </span>
+          </div>
+          <div class="message-body typing-content">
             <div class="typing-indicator"><span></span><span></span><span></span></div>
           </div>
         </div>
@@ -129,17 +130,17 @@ interface Message {
         </div>
       </div>
       
-      <!-- Input Area -->
-      <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="input-area">
+      <!-- Floating Command Bar -->
+      <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="command-bar">
         <button class="voice-btn" [class.recording]="isRecording" (click)="toggleRecord()" 
                 [title]="isRecording ? 'Stop Recording' : 'Voice Command'">
           <span class="mic-icon">🎤</span>
           <div *ngIf="isRecording" class="pulse-ring"></div>
         </button>
-        <input type="text" placeholder="Ask anything or provide feedback..." 
+        <input type="text" placeholder="Type a message..." 
                [(ngModel)]="feedbackText" (keyup.enter)="sendFeedback()">
         <button class="send-btn" [disabled]="isTyping" (click)="sendFeedback()">
-          {{ isTyping ? 'Thinking...' : 'Send' }}
+          {{ isTyping ? '⋯' : 'Send' }}
         </button>
       </div>
 
@@ -149,60 +150,123 @@ interface Message {
   `,
   styles: [`
     :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
-    .chat-wrapper { display: flex; flex-direction: column; flex: 1; padding: 20px; background: rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; min-height: 0; width: 100%; }
+    .chat-wrapper { display: flex; flex-direction: column; flex: 1; padding: 20px; background: var(--background); border-radius: 0; overflow: hidden; min-height: 0; width: 100%; }
     
-    .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; background: var(--surface); }
+    .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
     .header-info { display: flex; align-items: center; gap: 16px; }
     .header-icon { width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
     .header-icon.gem { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
     .header-text h3 { margin: 0; font-size: 1.1rem; color: #f8fafc; }
     .header-text p { margin: 2px 0 0; font-size: 0.85rem; color: #94a3b8; }
-    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; background: rgba(255,255,255,0.05); color: #94a3b8; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; background: rgba(255,255,255,0.05); color: #94a3b8; font-variant-numeric: tabular-nums; }
     .status-badge.gem { background: #38bdf8; color: white; }
     
-    .new-run-form { max-width: 500px; margin: auto; padding: 40px; display: flex; flex-direction: column; gap: 20px; width: 100%; background: var(--surface); }
+    .new-run-form { max-width: 500px; margin: auto; padding: 40px; display: flex; flex-direction: column; gap: 20px; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
     .new-run-form h2 { margin: 0; color: #38bdf8; text-align: center; font-size: 1.5rem; }
     .form-group { display: flex; flex-direction: column; gap: 8px; }
     .form-group label { color: #94a3b8; font-size: 0.9rem; font-weight: 500; }
-    .form-group input, .form-group select { padding: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: white; border-radius: 8px; outline: none; transition: border-color 0.2s; }
+    .form-group input, .form-group select { padding: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: white; border-radius: 8px; outline: none; transition: border-color 0.2s; }
     .form-group input:focus { border-color: #38bdf8; }
     .start-btn { padding: 16px; margin-top: 20px; font-size: 1.1rem; }
     
     app-neural-trace { flex-shrink: 0; min-height: 120px; }
     
-    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px; min-height: 0; }
-    .message { display: flex; gap: 0; width: 100%; }
-    .message.user { align-self: flex-end; }
+    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 0; min-height: 0; background: var(--border); }
     
-    .sender-column { width: 120px; flex-shrink: 0; padding-top: 4px; }
-    .sender-label { font-size: 0.7rem; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; font-family: monospace; }
+    /* Document-centric message blocks */
+    .message-document { 
+      display: flex; 
+      flex-direction: column;
+      background: var(--surface); 
+      border-left: 3px solid transparent;
+      padding: 16px 20px;
+    }
+    .message-document.user { 
+      border-left-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.05);
+    }
+    .message-document.assistant { 
+      border-left-color: #8b5cf6;
+    }
+    .message-document.typing {
+      border-left-color: #fbbf24;
+    }
     
-    /* Persona specific colors */
-    .persona-code-quality-engineer .sender-label { color: #f43f5e; }
-    .persona-morgan .sender-label { color: #8b5cf6; }
-    .persona-atlasia .sender-label { color: #38bdf8; }
-    .persona-sage .sender-label { color: #10b981; }
-    .persona-pulse .sender-label { color: #f59e0b; }
+    .message-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .message-sender { 
+      font-size: 0.7rem; 
+      font-weight: 800; 
+      color: #38bdf8; 
+      text-transform: uppercase; 
+      letter-spacing: 0.08em; 
+      font-family: var(--font-mono);
+    }
+    .message-timestamp { 
+      font-size: 0.7rem; 
+      color: #64748b; 
+      font-family: var(--font-mono); 
+      font-variant-numeric: tabular-nums;
+    }
     
-    .message-content { flex: 1; padding: 12px 16px; background: var(--surface); min-width: 0; }
-    .message.user .message-content { background: #0ea5e9; color: white; }
+    .message-body { 
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .message-text { 
+      line-height: 1.6; 
+      white-space: pre-wrap; 
+      font-size: 0.95rem; 
+      word-break: break-word; 
+      color: #e2e8f0;
+    }
+    .message-text pre { 
+      background: rgba(0,0,0,0.4); 
+      padding: 12px; 
+      border-radius: 8px; 
+      overflow-x: auto; 
+      margin: 10px 0; 
+      border: 1px solid var(--border);
+    }
+    .message-text code { font-family: var(--font-mono); font-size: 0.85rem; }
     
-    .message-text { line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; word-break: break-word; }
-    .message-text pre { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 10px 0; border: 1px solid rgba(255,255,255,0.1); }
-    .message-text code { font-family: 'Fira Code', monospace; font-size: 0.85rem; }
-    .message-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 12px; }
-    .timestamp { font-size: 0.7rem; color: #64748b; font-family: monospace; }
-    .message.user .timestamp { color: rgba(255,255,255,0.7); }
-    .copy-btn { background: transparent; border: none; cursor: pointer; font-size: 1rem; opacity: 0.4; transition: opacity 0.2s; padding: 0; display: flex; align-items: center; color: inherit; }
-    .copy-btn:hover { opacity: 1; }
+    .copy-btn { 
+      align-self: flex-start;
+      background: rgba(255,255,255,0.05); 
+      border: 1px solid var(--border); 
+      cursor: pointer; 
+      font-size: 0.75rem; 
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: all 0.2s; 
+      color: #94a3b8;
+      font-family: var(--font-mono);
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.1); color: white; }
     
-    .step-indicator { margin-top: 10px; padding: 8px; background: rgba(56, 189, 248, 0.1); border-radius: 6px; font-size: 0.8rem; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
-    .step-indicator .agent-name { font-family: monospace; }
+    .step-indicator { 
+      padding: 8px 12px; 
+      background: rgba(56, 189, 248, 0.1); 
+      border-radius: 6px; 
+      font-size: 0.8rem; 
+      color: #38bdf8; 
+      display: flex; 
+      align-items: center; 
+      gap: 8px;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+    .step-indicator .agent-name { font-family: var(--font-mono); }
     .pulse { width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); } }
     
-    .typing-content { padding: 12px 20px; }
-    .typing-label { font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px; font-weight: 600; }
+    .typing-content { padding: 0; }
     .typing-indicator { display: flex; gap: 4px; }
     .typing-indicator span { width: 6px; height: 6px; background: #64748b; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
     .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
@@ -217,21 +281,31 @@ interface Message {
     .error-banner .error-text p { margin: 2px 0 0; font-size: 0.8rem; opacity: 0.8; }
     .error-banner button { margin-left: auto; background: transparent; border: none; color: white; cursor: pointer; }
     
-    .input-area { 
-      margin-top: 20px; display: flex; gap: 12px; padding: 12px; 
-      background: rgba(0,0,0,0.2); 
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+    /* Floating Command Bar */
+    .command-bar { 
+      margin-top: 16px;
+      display: flex; 
+      gap: 12px; 
+      padding: 12px 16px; 
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 12px; 
       flex-shrink: 0; 
-      position: sticky;
-      bottom: 0;
+      align-items: center;
     }
-    .input-area input { 
-      flex: 1; padding: 12px; background: transparent; border: none; color: white; 
-      outline: none; font-size: 0.95rem; 
+    .command-bar input { 
+      flex: 1; 
+      padding: 12px; 
+      background: rgba(0,0,0,0.3); 
+      border: 1px solid var(--border);
+      color: white; 
+      border-radius: 8px;
+      outline: none; 
+      font-size: 0.95rem;
+      transition: border-color 0.2s;
     }
-    .input-area .send-btn { 
+    .command-bar input:focus { border-color: #38bdf8; }
+    .command-bar .send-btn { 
       padding: 12px 24px; 
       border: none; 
       border-radius: 8px; 
@@ -239,14 +313,16 @@ interface Message {
       color: white; 
       font-weight: 600; 
       cursor: pointer; 
-      transition: all 0.2s; 
+      transition: all 0.2s;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
-    .input-area .send-btn:hover:not(:disabled) { opacity: 0.9; }
-    .input-area .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .command-bar .send-btn:hover:not(:disabled) { opacity: 0.9; }
+    .command-bar .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .voice-btn {
       background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       width: 44px;
       height: 44px;
       border-radius: 50%;
@@ -256,6 +332,7 @@ interface Message {
       justify-content: center;
       position: relative;
       transition: all 0.3s;
+      flex-shrink: 0;
     }
     .voice-btn:hover { background: rgba(56, 189, 248, 0.1); border-color: #38bdf8; }
     .voice-btn.recording { background: #ef4444; border-color: #ef4444; color: white; }
@@ -276,7 +353,7 @@ interface Message {
     }
 
     .visionary-btn {
-      margin-top: 10px;
+      align-self: flex-start;
       padding: 8px 16px;
       border: 1px solid rgba(56, 189, 248, 0.3);
       background: rgba(56, 189, 248, 0.1);
@@ -294,7 +371,7 @@ interface Message {
 
     .voice-toggle-btn {
       background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       width: 32px;
       height: 32px;
       border-radius: 8px;

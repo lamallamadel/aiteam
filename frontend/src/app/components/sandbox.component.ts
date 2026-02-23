@@ -84,9 +84,9 @@ import { CommonModule } from '@angular/common';
       flex-direction: column;
       transform: translateX(100%);
       animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      border-left: 1px solid var(--border);
+      border-left: 3px solid #38bdf8;
       border-radius: 0;
-      background: var(--surface-elevated);
+      background: var(--surface);
     }
     @keyframes slideIn { to { transform: translateX(0); } }
     
@@ -96,7 +96,7 @@ import { CommonModule } from '@angular/common';
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--border);
-      background: rgba(15, 23, 42, 0.4);
+      background: var(--surface);
     }
     .header-main { display: flex; gap: 16px; align-items: center; }
     .header-main .icon { font-size: 1.8rem; text-shadow: 0 0 10px #38bdf8; }
@@ -114,6 +114,7 @@ import { CommonModule } from '@angular/common';
       padding: 24px;
       overflow-y: auto;
       min-height: 0;
+      background: var(--background);
     }
     
     .section-container { display: flex; flex-direction: column; min-height: 0; flex-shrink: 0; }
@@ -121,14 +122,15 @@ import { CommonModule } from '@angular/common';
     .label { font-size: 0.65rem; font-weight: 900; color: #38bdf8; letter-spacing: 0.15em; margin-bottom: 12px; opacity: 0.8; }
     
     .code-editor {
-      background: rgba(0,0,0,0.4);
+      background: var(--surface);
       padding: 16px;
       border-radius: 12px;
       border: 1px solid var(--border);
+      border-left: 3px solid #8b5cf6;
       max-height: 200px;
       overflow: auto;
     }
-    pre { margin: 0; font-family: 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.5; color: #e2e8f0; }
+    pre { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.5; color: #e2e8f0; }
     
     .terminal {
       background: #020617;
@@ -137,6 +139,7 @@ import { CommonModule } from '@angular/common';
       flex-direction: column;
       overflow: hidden;
       border: 1px solid var(--border);
+      border-left: 3px solid #22c55e;
       height: 250px;
     }
     .terminal-header {
@@ -152,12 +155,12 @@ import { CommonModule } from '@angular/common';
     .red { background: #ef4444; }
     .yellow { background: #f59e0b; }
     .green { background: #10b981; }
-    .title { font-size: 0.6rem; color: #475569; font-family: 'Fira Code', monospace; font-weight: 600; }
+    .title { font-size: 0.6rem; color: #475569; font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
     
     .terminal-body {
       padding: 16px;
       color: #10b981;
-      font-family: 'Fira Code', monospace;
+      font-family: var(--font-mono);
       font-size: 0.85rem;
       flex: 1;
       overflow-y: auto;
@@ -197,6 +200,7 @@ import { CommonModule } from '@angular/common';
       overflow: hidden;
       margin-top: 4px;
       border: 1px solid var(--border);
+      border-left: 3px solid #fbbf24;
     }
     iframe { width: 100%; height: 100%; }
   `]

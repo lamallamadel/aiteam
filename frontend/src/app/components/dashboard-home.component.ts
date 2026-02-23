@@ -182,6 +182,7 @@ interface QuickStats {
       line-height: 1;
       margin-bottom: 4px;
       font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
     }
 
     .stat-label {
@@ -247,7 +248,7 @@ interface QuickStats {
       padding: 16px;
       background: rgba(255, 255, 255, 0.02);
       border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
     }
 
     .activity-dot {
@@ -285,6 +286,8 @@ interface QuickStats {
     .activity-meta {
       color: #94a3b8;
       font-size: 0.75rem;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
   `]
 })
