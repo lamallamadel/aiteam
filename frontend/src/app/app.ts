@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { OrchestratorService } from './services/orchestrator.service';
 import { EscalationService } from './services/escalation.service';
+import { OversightInboxService } from './services/oversight-inbox.service';
 import { Persona } from './models/orchestrator.model';
 
 @Component({
@@ -18,7 +19,8 @@ export class App implements OnInit {
 
   constructor(
     private orchestratorService: OrchestratorService,
-    public escalationService: EscalationService
+    public escalationService: EscalationService,
+    public oversightInboxService: OversightInboxService
   ) { }
 
   ngOnInit() {

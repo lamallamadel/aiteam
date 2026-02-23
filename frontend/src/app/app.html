@@ -13,6 +13,12 @@
             {{ escalationService.escalationCount() }}
           </span>
         </a>
+        <a routerLink="/oversight/inbox" routerLinkActive="active" class="nav-item oversight-item">
+          Approval Inbox
+          <span *ngIf="oversightInboxService.interruptCount() > 0" class="nav-badge">
+            {{ oversightInboxService.interruptCount() }}
+          </span>
+        </a>
       </div>
 
       <div class="nav-section">

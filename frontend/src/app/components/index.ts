@@ -16,3 +16,4 @@ export { CollaborationAnalyticsDashboardComponent } from './collaboration-analyt
 export { TimeTravelDemoComponent } from './time-travel-demo.component';
 export { OnboardingFlowComponent } from './onboarding-flow.component';
 export { SettingsDashboardComponent } from './settings-dashboard.component';
+export { OversightInboxComponent } from './oversight/oversight-inbox.component';

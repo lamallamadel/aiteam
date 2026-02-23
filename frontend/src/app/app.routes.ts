@@ -5,6 +5,7 @@ import { RunDetailComponent } from './components/run-detail.component';
 import { AnalyticsDashboardComponent } from './components/analytics-dashboard.component';
 import { ChatDashboardComponent } from './components/index';
 import { EscalationPanelComponent } from './components/oversight/escalation-panel.component';
+import { OversightInboxComponent } from './components/oversight/oversight-inbox.component';
 import { ActivityLogComponent } from './components/activity-log.component';
 import { WorkReportComponent } from './components/work-report.component';
 import { AgentConfigComponent } from './components/config/agent-config.component';
@@ -27,6 +28,7 @@ export const routes: Routes = [
   { path: 'runs/:id/report', component: WorkReportComponent },
   { path: 'runs/:id/trace', component: WaterfallTraceComponent },
   { path: 'oversight', component: EscalationPanelComponent },
+  { path: 'oversight/inbox', component: OversightInboxComponent },
   { path: 'analytics', component: AnalyticsDashboardComponent },
   { path: 'config/agents', component: AgentConfigComponent },
   { path: 'config/oversight', component: OversightConfigComponent },
