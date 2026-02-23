@@ -171,3 +171,26 @@ export interface FailureRecord {
     timestamp: string;
     errorMessage: string;
 }
+
+export interface GitProvider {
+    provider: 'github' | 'gitlab' | 'bitbucket' | null;
+    token: string | null;
+    url: string | null;
+    label: string | null;
+}
+
+export interface UsageData {
+    tokenConsumption: number;
+    budget: number;
+}
+
+export interface RateLimitConfig {
+    rpm: number;
+    tpm: number;
+}
+
+export interface AIPreferences {
+    autonomyLevel: 'autonomous' | 'confirm' | 'observe';
+    oversightRules: string[];
+    systemInstructions: string | null;
+}
