@@ -14,3 +14,5 @@ export { TimeTravelControlsComponent } from './time-travel-controls.component';
 export { EventSourcingVizComponent } from './event-sourcing-viz.component';
 export { CollaborationAnalyticsDashboardComponent } from './collaboration-analytics-dashboard.component';
 export { TimeTravelDemoComponent } from './time-travel-demo.component';
+export { OnboardingFlowComponent } from './onboarding-flow.component';
+export { SettingsDashboardComponent } from './settings-dashboard.component';

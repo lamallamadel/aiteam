@@ -12,6 +12,8 @@ import { OversightConfigComponent } from './components/config/oversight-config.c
 import { WaterfallTraceComponent } from './components/trace/waterfall-trace.component';
 import { A2ARegistryComponent } from './components/a2a-registry.component';
 import { GraftManagementComponent } from './components/graft-management.component';
+import { OnboardingFlowComponent } from './components/onboarding-flow.component';
+import { SettingsDashboardComponent } from './components/settings-dashboard.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
@@ -30,5 +32,7 @@ export const routes: Routes = [
   { path: 'config/oversight', component: OversightConfigComponent },
   { path: 'a2a', component: A2ARegistryComponent },
   { path: 'grafts', component: GraftManagementComponent },
-  { path: 'grafts/:runId', component: GraftManagementComponent }
+  { path: 'grafts/:runId', component: GraftManagementComponent },
+  { path: 'onboarding', component: OnboardingFlowComponent },
+  { path: 'settings', component: SettingsDashboardComponent }
 ];
