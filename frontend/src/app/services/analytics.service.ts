@@ -92,6 +92,12 @@ export interface LatencyPoint {
   totalTokens: number;
 }
 
+export interface TokenSummaryDto {
+  totalTokens: number;
+  llmCallCount: number;
+  tokensByAgent: Record<string, number>;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AnalyticsService {
   private http = inject(HttpClient);
@@ -119,5 +125,9 @@ export class AnalyticsService {
 
   getLatencyTrend(): Observable<LatencyPoint[]> {
     return this.http.get<LatencyPoint[]>(`${this.base}/traces/latency-trend`);
+  }
+
+  getTraceSummary(runId: string): Observable<TokenSummaryDto> {
+    return this.http.get<TokenSummaryDto>(`${this.base}/traces/summary?runId=${runId}`);
   }
 }

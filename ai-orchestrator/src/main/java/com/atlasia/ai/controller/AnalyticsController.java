@@ -64,7 +64,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/traces/summary")
-    public ResponseEntity<Map<String, Object>> getTracesSummary(
+    public ResponseEntity<TokenSummaryDto> getTracesSummary(
             @RequestParam("runId") UUID runId) {
         List<TraceEventEntity> events = traceEventRepository.findByRunIdOrderByStartTimeAsc(runId);
 
@@ -77,24 +77,13 @@ public class AnalyticsController {
                 .filter(e -> "LLM_CALL".equals(e.getEventType()))
                 .count();
 
-        long totalDuration = events.stream()
-                .filter(e -> e.getDurationMs() != null && "STEP".equals(e.getEventType()))
-                .mapToLong(TraceEventEntity::getDurationMs)
-                .sum();
-
         Map<String, Long> tokensByAgent = events.stream()
                 .filter(e -> e.getTokensUsed() != null && e.getAgentName() != null)
                 .collect(Collectors.groupingBy(
                         TraceEventEntity::getAgentName,
                         Collectors.summingLong(TraceEventEntity::getTokensUsed)));
 
-        Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("runId", runId);
-        summary.put("totalSpans", events.size());
-        summary.put("totalTokens", totalTokens);
-        summary.put("llmCalls", llmCalls);
-        summary.put("totalDurationMs", totalDuration);
-        summary.put("tokensByAgent", tokensByAgent);
+        TokenSummaryDto summary = new TokenSummaryDto(totalTokens, llmCalls, tokensByAgent);
 
         return ResponseEntity.ok(summary);
     }
