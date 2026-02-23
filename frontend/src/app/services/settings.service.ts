@@ -1,15 +1,28 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { GitProvider, UsageData, RateLimitConfig, AIPreferences } from '../models/orchestrator.model';
 
+export interface GitProviderWithId extends GitProvider {
+    id: string;
+    status?: 'connected' | 'disconnected' | 'error';
+}
+
+export interface UsageHistory {
+    timestamp: string;
+    tokens: number;
+}
+
 @Injectable({
     providedIn: 'root'
 })
 export class SettingsService {
     private readonly STORAGE_PREFIX = 'settings_';
     private readonly GIT_PROVIDER_KEY = `${this.STORAGE_PREFIX}git_provider`;
+    private readonly GIT_PROVIDERS_KEY = `${this.STORAGE_PREFIX}git_providers`;
     private readonly USAGE_DATA_KEY = `${this.STORAGE_PREFIX}usage_data`;
+    private readonly USAGE_HISTORY_KEY = `${this.STORAGE_PREFIX}usage_history`;
     private readonly RATE_LIMIT_KEY = `${this.STORAGE_PREFIX}rate_limit`;
     private readonly AI_PREFERENCES_KEY = `${this.STORAGE_PREFIX}ai_preferences`;
+    private readonly MONTHLY_REQUESTS_KEY = `${this.STORAGE_PREFIX}monthly_requests`;
 
     private readonly defaultGitProvider: GitProvider = {
         provider: null,
@@ -35,7 +48,10 @@ export class SettingsService {
     };
 
     readonly gitProvider = signal<GitProvider>(this.loadGitProvider());
+    readonly gitProviders = signal<GitProviderWithId[]>(this.loadGitProviders());
     readonly usageData = signal<UsageData>(this.loadUsageData());
+    readonly usageHistory = signal<UsageHistory[]>(this.loadUsageHistory());
+    readonly monthlyRequests = signal<number>(this.loadMonthlyRequests());
     readonly rateLimitConfig = signal<RateLimitConfig>(this.loadRateLimitConfig());
     readonly aiPreferences = signal<AIPreferences>(this.loadAIPreferences());
 
@@ -113,6 +129,42 @@ export class SettingsService {
         return this.defaultAIPreferences;
     }
 
+    private loadGitProviders(): GitProviderWithId[] {
+        const stored = localStorage.getItem(this.GIT_PROVIDERS_KEY);
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    private loadUsageHistory(): UsageHistory[] {
+        const stored = localStorage.getItem(this.USAGE_HISTORY_KEY);
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch {
+                return [];
+            }
+        }
+        return [];
+    }
+
+    private loadMonthlyRequests(): number {
+        const stored = localStorage.getItem(this.MONTHLY_REQUESTS_KEY);
+        if (stored) {
+            try {
+                return parseInt(stored, 10);
+            } catch {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
     updateGitProvider(provider: Partial<GitProvider>): void {
         const updated = { ...this.gitProvider(), ...provider };
         this.gitProvider.set(updated);
@@ -186,5 +238,49 @@ export class SettingsService {
         const rules = [...current.oversightRules];
         rules[index] = rule;
         this.updateAIPreferences({ oversightRules: rules });
+    }
+
+    addGitProvider(provider: Omit<GitProviderWithId, 'id'>): void {
+        const newProvider: GitProviderWithId = {
+            ...provider,
+            id: `provider_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            status: provider.status || 'connected'
+        };
+        const updated = [...this.gitProviders(), newProvider];
+        this.gitProviders.set(updated);
+        localStorage.setItem(this.GIT_PROVIDERS_KEY, JSON.stringify(updated));
+    }
+
+    updateGitProviderById(id: string, updates: Partial<GitProviderWithId>): void {
+        const updated = this.gitProviders().map(p => p.id === id ? { ...p, ...updates } : p);
+        this.gitProviders.set(updated);
+        localStorage.setItem(this.GIT_PROVIDERS_KEY, JSON.stringify(updated));
+    }
+
+    removeGitProvider(id: string): void {
+        const updated = this.gitProviders().filter(p => p.id !== id);
+        this.gitProviders.set(updated);
+        localStorage.setItem(this.GIT_PROVIDERS_KEY, JSON.stringify(updated));
+    }
+
+    addUsageHistoryPoint(tokens: number): void {
+        const newPoint: UsageHistory = {
+            timestamp: new Date().toISOString(),
+            tokens
+        };
+        const history = [...this.usageHistory(), newPoint].slice(-30);
+        this.usageHistory.set(history);
+        localStorage.setItem(this.USAGE_HISTORY_KEY, JSON.stringify(history));
+    }
+
+    incrementMonthlyRequests(count: number = 1): void {
+        const newCount = this.monthlyRequests() + count;
+        this.monthlyRequests.set(newCount);
+        localStorage.setItem(this.MONTHLY_REQUESTS_KEY, newCount.toString());
+    }
+
+    resetMonthlyRequests(): void {
+        this.monthlyRequests.set(0);
+        localStorage.removeItem(this.MONTHLY_REQUESTS_KEY);
     }
 }
