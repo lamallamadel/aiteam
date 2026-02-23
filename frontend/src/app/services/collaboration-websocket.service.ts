@@ -109,7 +109,7 @@ export class CollaborationWebSocketService implements OnDestroy {
         
         this.subscription = this.client!.subscribe(
           `/topic/runs/${runId}/collaboration`,
-          (message) => {
+          (message: any) => {
             const event = JSON.parse(message.body) as CollaborationEvent;
             this.handleIncomingEvent(event);
             
@@ -125,7 +125,7 @@ export class CollaborationWebSocketService implements OnDestroy {
         this.startLatencyChecks();
       },
 
-      onStompError: (frame) => {
+      onStompError: (frame: any) => {
         console.error('WebSocket error:', frame);
         this.connectedSubject.next(false);
         this.handleConnectionFailure(runId);
