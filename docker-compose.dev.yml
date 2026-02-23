@@ -64,6 +64,7 @@ services:
     environment:
       NG_CLI_ANALYTICS: ci
       ANGULAR_ENVIRONMENT: development
+      NODE_OPTIONS: "--max-old-space-size=4096"
     ports:
       - "4200:4200"
     volumes:
