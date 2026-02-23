@@ -36,7 +36,7 @@ const GRAFTABLE_AGENTS = [
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="pipeline-container glass-panel">
+    <div class="pipeline-container">
       <div class="pipeline-header">
         <span class="header-label">
           <span class="pulse-dot" [class.live]="isLive()"></span>
@@ -68,11 +68,6 @@ const GRAFTABLE_AGENTS = [
                  (mouseenter)="onNodeHover(step.id)"
                  (mouseleave)="hoveredNode = null">
 
-              <!-- Status ring -->
-              <div class="status-ring" [ngClass]="nodeClass(step.id)">
-                <div *ngIf="getStatus(step.id) === 'active'" class="ring-pulse"></div>
-              </div>
-
               <!-- Icon -->
               <div class="node-icon">{{ step.icon }}</div>
 
@@ -81,6 +76,9 @@ const GRAFTABLE_AGENTS = [
               <div class="node-duration" *ngIf="getDuration(step.id) as dur">
                 {{ formatDuration(dur) }}
               </div>
+
+              <!-- Status bar (bottom accent) -->
+              <div class="status-bar" [ngClass]="nodeClass(step.id)"></div>
 
               <!-- Interaction buttons (interactive mode only) -->
               <div class="node-actions" *ngIf="interactive && hoveredNode === step.id">
@@ -165,7 +163,7 @@ const GRAFTABLE_AGENTS = [
     .pipeline-container {
       padding: 14px 16px;
       margin-bottom: 16px;
-      background: rgba(15, 23, 42, 0.5);
+      background: var(--surface);
       flex-shrink: 0;
     }
     .pipeline-header {
@@ -206,7 +204,8 @@ const GRAFTABLE_AGENTS = [
       align-items: center;
       overflow-x: auto;
       padding-bottom: 6px;
-      gap: 0;
+      gap: 1px;
+      background: var(--border);
     }
 
     /* ── Node ────────────────────────────────────────────────────── */
@@ -221,48 +220,44 @@ const GRAFTABLE_AGENTS = [
       position: relative;
       width: 72px;
       padding: 10px 6px 8px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.07);
-      background: rgba(255,255,255,0.02);
+      border-radius: 0;
+      border: none;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 4px;
       cursor: default;
-      transition: border-color 0.2s, background 0.2s;
+      transition: background 0.2s;
+    }
+    .pipeline-node:first-child {
+      border-left: 1px solid var(--border);
     }
 
     /* Status variants */
-    .pipeline-node.status-pending  { border-color: rgba(255,255,255,0.06); }
-    .pipeline-node.status-active   { border-color: rgba(56,189,248,0.5); background: rgba(56,189,248,0.08); }
-    .pipeline-node.status-done     { border-color: rgba(34,197,94,0.35); background: rgba(34,197,94,0.05); }
-    .pipeline-node.status-failed   { border-color: rgba(239,68,68,0.4);  background: rgba(239,68,68,0.06); }
-    .pipeline-node.status-flagged  { border-color: rgba(234,179,8,0.5);  background: rgba(234,179,8,0.07); }
-    .pipeline-node.status-pruned   { border-color: rgba(100,116,139,0.2); opacity: 0.45; }
+    .pipeline-node.status-pending  { background: var(--surface); }
+    .pipeline-node.status-active   { background: rgba(56,189,248,0.08); }
+    .pipeline-node.status-done     { background: rgba(34,197,94,0.05); }
+    .pipeline-node.status-failed   { background: rgba(239,68,68,0.06); }
+    .pipeline-node.status-flagged  { background: rgba(234,179,8,0.07); }
+    .pipeline-node.status-pruned   { opacity: 0.45; }
 
-    /* Status ring (top-right dot) */
-    .status-ring {
+    /* Status bar (bottom accent - 2px) */
+    .status-bar {
       position: absolute;
-      top: -4px; right: -4px;
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      border: 2px solid rgba(15,23,42,1);
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: transparent;
     }
-    .status-ring.status-pending  { background: #1e293b; border-color: #334155; }
-    .status-ring.status-active   { background: #38bdf8; }
-    .status-ring.status-done     { background: #22c55e; }
-    .status-ring.status-failed   { background: #ef4444; }
-    .status-ring.status-flagged  { background: #eab308; }
-    .status-ring.status-pruned   { background: #475569; }
-
-    .ring-pulse {
-      position: absolute;
-      inset: -3px;
-      border-radius: 50%;
-      border: 2px solid #38bdf8;
-      animation: ripple 1.5s infinite;
-    }
-    @keyframes ripple { 0% { transform:scale(1); opacity:0.8; } 100% { transform:scale(2.2); opacity:0; } }
+    .status-bar.status-pending  { background: transparent; }
+    .status-bar.status-active   { background: #38bdf8; }
+    .status-bar.status-done     { background: #22c55e; }
+    .status-bar.status-failed   { background: #ef4444; }
+    .status-bar.status-flagged  { background: #eab308; }
+    .status-bar.status-pruned   { background: #475569; }
 
     .node-icon { font-size: 1.1rem; line-height: 1; }
     .node-label { font-size: 0.68rem; font-weight: 700; color: rgba(255,255,255,0.7); text-align: center; }
@@ -273,7 +268,8 @@ const GRAFTABLE_AGENTS = [
 
     .node-duration {
       font-size: 0.6rem;
-      font-family: monospace;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
       color: rgba(255,255,255,0.3);
     }
     .status-done .node-duration { color: rgba(34,197,94,0.6); }
@@ -343,20 +339,21 @@ const GRAFTABLE_AGENTS = [
       display: flex;
       align-items: center;
       flex-shrink: 0;
-      width: 28px;
+      width: 0;
+      visibility: hidden;
     }
     .connector-line {
       height: 2px;
       width: 100%;
-      background: rgba(255,255,255,0.08);
+      background: var(--border);
       transition: background 0.3s;
     }
-    .connector-line.conn-active { background: rgba(56,189,248,0.4); }
+    .connector-line.conn-active { background: var(--border); }
     .connector-line.conn-done   {
-      background: rgba(34,197,94,0.4);
+      background: var(--border);
       animation: flow 2s linear infinite;
       background-size: 200% 100%;
-      background-image: linear-gradient(90deg, rgba(34,197,94,0.2) 0%, rgba(34,197,94,0.6) 50%, rgba(34,197,94,0.2) 100%);
+      background-image: linear-gradient(90deg, var(--border) 0%, rgba(34,197,94,0.6) 50%, var(--border) 100%);
     }
     @keyframes flow { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 

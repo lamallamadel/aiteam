@@ -41,7 +41,7 @@ export interface IntentConfirmation {
         </div>
 
         <!-- Run summary -->
-        <div class="run-summary glass-panel">
+        <div class="run-summary">
           <div class="summary-field">
             <span class="field-label">Repository</span>
             <span class="field-value mono">{{ request.repo }}</span>
@@ -122,7 +122,7 @@ export interface IntentConfirmation {
         <!-- Footer actions -->
         <div class="modal-footer">
           <button class="btn-cancel" (click)="cancel()">Cancel</button>
-          <button class="btn-start accent-gradient" (click)="confirm()">
+          <button class="btn-start" (click)="confirm()">
             Launch {{ request.mode === 'PLANNING' ? 'Planning' : 'Execution' }}
           </button>
         </div>
@@ -153,6 +153,8 @@ export interface IntentConfirmation {
       flex-direction: column;
       gap: 20px;
       border: 1px solid rgba(56,189,248,0.2);
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(16px);
     }
 
     /* ── Header ─────────────────────────────────────────────────── */
@@ -195,6 +197,8 @@ export interface IntentConfirmation {
       padding: 12px 16px;
       border-radius: 10px;
       flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
     }
     .summary-field { display: flex; align-items: center; gap: 8px; }
     .field-label { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
@@ -243,8 +247,8 @@ export interface IntentConfirmation {
     }
     .pipeline-step {
       padding: 10px 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
       display: flex;
       flex-direction: column;
@@ -342,6 +346,7 @@ export interface IntentConfirmation {
       padding: 10px 28px;
       border: none;
       border-radius: 8px;
+      background: var(--accent-active);
       color: white;
       font-size: 0.9rem;
       font-weight: 700;

@@ -1,43 +1,25 @@
 :root {
-  --primary-bg: #0f172a;
-  --secondary-bg: #1e293b;
-  --accent-color: #38bdf8;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: blur(12px);
+  --background: rgb(10, 10, 10);
+  --surface: rgb(23, 23, 23);
+  --surface-elevated: rgb(38, 38, 38);
+  --border: rgb(64, 64, 64);
+  --text-primary: rgb(248, 250, 252);
+  --text-muted: rgb(148, 163, 184);
+  --accent-active: rgb(56, 189, 248);
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: var(--primary-bg);
-  color: var(--text-main);
+  background-color: var(--background);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
 }
 
 .glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-.premium-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.premium-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(56, 189, 248, 0.1);
-}
-
-.accent-gradient {
-  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  background: rgba(20, 20, 20, 0.6);
+  backdrop-filter: blur(16px);
 }
 
 * {
@@ -67,14 +49,14 @@ input, select, textarea {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.3);
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.5);
+  background: var(--accent-active);
 }
