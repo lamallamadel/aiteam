@@ -75,8 +75,6 @@ services:
       - ./frontend/tsconfig.spec.json:/app/tsconfig.spec.json
       - ./frontend/nginx.conf:/app/nginx.conf
       - ./frontend/proxy.conf.json:/app/proxy.conf.json
-      # Named volume for node_modules (prevent sync from host)
-      - frontend_node_modules:/app/node_modules
     depends_on:
       ai-orchestrator:
         condition: service_healthy
@@ -86,31 +84,12 @@ services:
       - full
       - frontend
 
-  # Optional: Redis for caching/sessions (uncomment if needed)
-  # ai-redis:
-  #   image: redis:7-alpine
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - ai_redis_data:/data
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - ai_dev_network
-  #   profiles:
-  #     - full
-
 networks:
   ai_dev_network:
     driver: bridge
 
 volumes:
   ai_db_dev_data:
-    driver: local
-  frontend_node_modules:
     driver: local
   # ai_redis_data:
   #   driver: local
