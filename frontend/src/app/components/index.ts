@@ -10,3 +10,7 @@ export { ConfidenceSignalComponent } from './confidence-signal.component';
 export { IntentPreviewModalComponent } from './intent-preview-modal.component';
 export { GraftManagementComponent } from './graft-management.component';
 export { NeuralTraceComponent } from './neural-trace.component';
+export { TimeTravelControlsComponent } from './time-travel-controls.component';
+export { EventSourcingVizComponent } from './event-sourcing-viz.component';
+export { CollaborationAnalyticsDashboardComponent } from './collaboration-analytics-dashboard.component';
+export { TimeTravelDemoComponent } from './time-travel-demo.component';

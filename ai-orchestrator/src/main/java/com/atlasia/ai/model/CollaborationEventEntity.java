@@ -7,7 +7,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "collaboration_events")
+@Table(name = "collaboration_events", indexes = {
+    @Index(name = "idx_run_timestamp", columnList = "run_id,timestamp"),
+    @Index(name = "idx_run_user", columnList = "run_id,user_id"),
+    @Index(name = "idx_run_event_type", columnList = "run_id,event_type")
+})
 public class CollaborationEventEntity {
 
     @Id
@@ -30,6 +34,14 @@ public class CollaborationEventEntity {
 
     @Column(name = "timestamp", nullable = false)
     private Instant timestamp;
+    
+    @Column(name = "state_before", columnDefinition = "jsonb")
+    @Type(JsonBinaryType.class)
+    private String stateBefore;
+    
+    @Column(name = "state_after", columnDefinition = "jsonb")
+    @Type(JsonBinaryType.class)
+    private String stateAfter;
 
     protected CollaborationEventEntity() {}
 
@@ -47,4 +59,9 @@ public class CollaborationEventEntity {
     public String getEventType() { return eventType; }
     public String getEventData() { return eventData; }
     public Instant getTimestamp() { return timestamp; }
+    public String getStateBefore() { return stateBefore; }
+    public String getStateAfter() { return stateAfter; }
+    
+    public void setStateBefore(String stateBefore) { this.stateBefore = stateBefore; }
+    public void setStateAfter(String stateAfter) { this.stateAfter = stateAfter; }
 }

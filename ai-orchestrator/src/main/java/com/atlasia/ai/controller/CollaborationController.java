@@ -1,8 +1,11 @@
 package com.atlasia.ai.controller;
 
-import com.atlasia.ai.model.PersistedCollaborationMessage;
+import com.atlasia.ai.model.*;
 import com.atlasia.ai.service.CollaborationService;
+import com.atlasia.ai.service.TimeTravelService;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -11,6 +14,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -18,11 +22,14 @@ import java.util.stream.Collectors;
 public class CollaborationController {
 
     private final CollaborationService collaborationService;
+    private final TimeTravelService timeTravelService;
     private final OrchestratorMetrics metrics;
 
     public CollaborationController(CollaborationService collaborationService,
+                                  TimeTravelService timeTravelService,
                                   OrchestratorMetrics metrics) {
         this.collaborationService = collaborationService;
+        this.timeTravelService = timeTravelService;
         this.metrics = metrics;
     }
 
@@ -167,5 +174,60 @@ public class CollaborationController {
         response.put("totalEvents", eventsList.size());
         
         return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/api/runs/{runId}/collaboration/history")
+    @ResponseBody
+    public ResponseEntity<List<TimeTravelSnapshot>> getEventHistory(
+            @PathVariable UUID runId,
+            @RequestParam(required = false) Long startTimestamp,
+            @RequestParam(required = false) Long endTimestamp) {
+        
+        List<TimeTravelSnapshot> history;
+        
+        if (startTimestamp != null && endTimestamp != null) {
+            Instant start = Instant.ofEpochMilli(startTimestamp);
+            Instant end = Instant.ofEpochMilli(endTimestamp);
+            history = timeTravelService.getEventHistoryInRange(runId, start, end);
+        } else {
+            history = timeTravelService.getEventHistory(runId);
+        }
+        
+        return ResponseEntity.ok(history);
+    }
+    
+    @GetMapping("/api/runs/{runId}/collaboration/analytics")
+    @ResponseBody
+    public ResponseEntity<CollaborationAnalytics> getAnalytics(@PathVariable UUID runId) {
+        CollaborationAnalytics analytics = timeTravelService.getAnalytics(runId);
+        return ResponseEntity.ok(analytics);
+    }
+    
+    @GetMapping("/api/runs/{runId}/collaboration/export/json")
+    @ResponseBody
+    public ResponseEntity<String> exportAsJson(@PathVariable UUID runId) {
+        String json = timeTravelService.exportEventsAsJson(runId);
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setContentDispositionFormData("attachment", "collaboration-" + runId + ".json");
+        
+        return ResponseEntity.ok()
+            .headers(headers)
+            .body(json);
+    }
+    
+    @GetMapping("/api/runs/{runId}/collaboration/export/csv")
+    @ResponseBody
+    public ResponseEntity<String> exportAsCsv(@PathVariable UUID runId) {
+        String csv = timeTravelService.exportEventsAsCsv(runId);
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv"));
+        headers.setContentDispositionFormData("attachment", "collaboration-" + runId + ".csv");
+        
+        return ResponseEntity.ok()
+            .headers(headers)
+            .body(csv);
     }
 }

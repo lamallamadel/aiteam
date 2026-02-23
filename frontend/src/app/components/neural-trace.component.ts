@@ -682,6 +682,8 @@ export class NeuralTraceComponent implements OnChanges {
   @Input() showPresence = false;
   @Input() activeUsers: string[] = [];
   @Input() cursorPositions: Map<string, string> = new Map();
+  @Input() showTimeTravelControls = false;
+  @Input() runId?: string;
   @Output() flagged  = new EventEmitter<string>();
   @Output() pruned   = new EventEmitter<string>();
   @Output() grafted  = new EventEmitter<GraftEvent>();
