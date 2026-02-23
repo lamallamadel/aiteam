@@ -20,27 +20,27 @@ Chart.register(...registerables);
 
       <!-- KPI row ─────────────────────────────────────────────────────── -->
       <div class="metrics-grid">
-        <div class="metric-card glass-panel">
+        <div class="metric-card">
           <div class="metric-label">Total Bolts</div>
           <div class="metric-value">{{ summary()?.totalRuns ?? '—' }}</div>
         </div>
-        <div class="metric-card glass-panel success">
+        <div class="metric-card success">
           <div class="metric-label">Success Rate</div>
           <div class="metric-value">{{ formatPercent(summary()?.successRate) }}</div>
         </div>
-        <div class="metric-card glass-panel warning">
+        <div class="metric-card warning">
           <div class="metric-label">Escalation Rate</div>
           <div class="metric-value">{{ formatPercent(summary()?.escalationRate) }}</div>
         </div>
-        <div class="metric-card glass-panel danger">
+        <div class="metric-card danger">
           <div class="metric-label">Failure Rate</div>
           <div class="metric-value">{{ formatPercent(summary()?.failureRate) }}</div>
         </div>
-        <div class="metric-card glass-panel">
+        <div class="metric-card">
           <div class="metric-label">Avg CI Loops</div>
           <div class="metric-value">{{ fixLoops()?.averageCiIterations?.toFixed(1) ?? '—' }}</div>
         </div>
-        <div class="metric-card glass-panel">
+        <div class="metric-card">
           <div class="metric-label">Avg E2E Loops</div>
           <div class="metric-value">{{ fixLoops()?.averageE2eIterations?.toFixed(1) ?? '—' }}</div>
         </div>
@@ -50,7 +50,7 @@ Chart.register(...registerables);
       <div class="charts-grid">
 
         <!-- Status distribution donut -->
-        <div class="chart-card glass-panel">
+        <div class="chart-card">
           <h3>Status Distribution</h3>
           <div class="chart-wrapper">
             <canvas baseChart
@@ -62,7 +62,7 @@ Chart.register(...registerables);
         </div>
 
         <!-- Agent avg duration bar -->
-        <div class="chart-card glass-panel">
+        <div class="chart-card">
           <h3>Agent Avg Duration (ms)</h3>
           <div class="chart-wrapper">
             <canvas baseChart
@@ -74,7 +74,7 @@ Chart.register(...registerables);
         </div>
 
         <!-- Latency trend bar -->
-        <div class="chart-card glass-panel">
+        <div class="chart-card">
           <h3>LLM Latency by Agent (ms)</h3>
           <div class="chart-wrapper">
             <canvas baseChart
@@ -86,7 +86,7 @@ Chart.register(...registerables);
         </div>
 
         <!-- Persona findings -->
-        <div class="chart-card glass-panel">
+        <div class="chart-card">
           <h3>Persona Findings</h3>
           <div class="persona-list">
             @if (personasFindings()?.personaStatistics?.length) {
@@ -113,7 +113,7 @@ Chart.register(...registerables);
       </div>
 
       <!-- Agent performance table ──────────────────────────────────────── -->
-      <div class="table-card glass-panel" *ngIf="agentPerformance()?.agentMetrics?.length">
+      <div class="table-card" *ngIf="agentPerformance()?.agentMetrics?.length">
         <h3>Agent Performance</h3>
         <table class="perf-table">
           <thead>
@@ -142,7 +142,7 @@ Chart.register(...registerables);
       </div>
 
       <!-- Fix loop patterns ────────────────────────────────────────────── -->
-      <div class="table-card glass-panel" *ngIf="fixLoops()?.patterns?.length">
+      <div class="table-card" *ngIf="fixLoops()?.patterns?.length">
         <h3>Fix Loop Patterns (recent {{ fixLoops()!.patterns.length }} runs)</h3>
         <table class="perf-table">
           <thead>
@@ -187,28 +187,38 @@ Chart.register(...registerables);
     .metrics-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
+      gap: 1px;
+      background: var(--border);
     }
     .metric-card {
       padding: 18px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 0;
+      border: none;
+      background: var(--surface);
     }
-    .metric-card.success { border-color: rgba(34,197,94,0.3); }
-    .metric-card.warning { border-color: rgba(251,191,36,0.3); }
-    .metric-card.danger  { border-color: rgba(239,68,68,0.3); }
+    .metric-card.success { border-left: 2px solid rgba(34,197,94,0.5); }
+    .metric-card.warning { border-left: 2px solid rgba(251,191,36,0.5); }
+    .metric-card.danger  { border-left: 2px solid rgba(239,68,68,0.5); }
     .metric-label { font-size: 0.78rem; color: #94a3b8; margin-bottom: 8px; }
-    .metric-value { font-size: 1.9rem; font-weight: 700; color: white; }
+    .metric-value { 
+      font-size: 1.9rem; 
+      font-weight: 700; 
+      color: white;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
 
     .charts-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-      gap: 20px;
+      gap: 1px;
+      background: var(--border);
     }
     .chart-card {
       padding: 20px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 0;
+      border: none;
+      background: var(--surface);
     }
     .chart-card h3, .table-card h3 {
       margin: 0 0 16px 0;
@@ -254,8 +264,9 @@ Chart.register(...registerables);
     /* Tables */
     .table-card {
       padding: 20px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 0;
+      border: none;
+      background: var(--surface);
     }
     .perf-table {
       width: 100%;
@@ -269,18 +280,28 @@ Chart.register(...registerables);
       font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
+      border-bottom: 1px solid var(--border);
     }
     .perf-table td {
       padding: 9px 12px;
       color: rgba(255,255,255,0.7);
-      border-bottom: 1px solid rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
     }
     .perf-table tr:last-child td { border-bottom: none; }
     .perf-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
     .agent-name { font-weight: 600; color: #38bdf8; }
-    .success-cell { color: #22c55e; font-weight: 600; }
-    .error-cell { color: #ef4444; }
+    .success-cell { 
+      color: #22c55e; 
+      font-weight: 600;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .error-cell { 
+      color: #ef4444;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
     .pattern-cell { font-family: monospace; font-size: 0.72rem; color: rgba(255,255,255,0.45); }
     .status-chip {
       padding: 2px 8px;
