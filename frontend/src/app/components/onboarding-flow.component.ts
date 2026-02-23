@@ -684,7 +684,9 @@ Let's get you set up in just a few quick steps.`;
         if (this.typingInterval) {
           clearInterval(this.typingInterval);
         }
-        this.isTypingComplete = true;
+        setTimeout(() => {
+          this.isTypingComplete = true;
+        });
       }
     }, 15);
   }

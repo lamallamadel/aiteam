@@ -25,7 +25,11 @@ export class App implements OnInit {
 
   ngOnInit() {
     this.orchestratorService.getPersonas().subscribe(
-      p => this.personas = p
+      p => {
+        setTimeout(() => {
+          this.personas = p;
+        });
+      }
     );
   }
 }
