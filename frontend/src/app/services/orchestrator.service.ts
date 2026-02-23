@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus } from '../models/orchestrator.model';
 import { CollaborationEventEntity } from '../models/collaboration.model';
 
 export interface OversightInterruptRule {
@@ -116,5 +116,30 @@ export class OrchestratorService {
 
     getActiveUsers(runId: string): Observable<string[]> {
         return this.http.get<string[]>(`${this.apiUrl}/${runId}/collaboration/users`);
+    }
+
+    // Graft management endpoints
+    getGraftExecutions(runId?: string, agentName?: string, limit: number = 100): Observable<GraftExecution[]> {
+        let params: any = { limit: limit.toString() };
+        if (runId) params.runId = runId;
+        if (agentName) params.agentName = agentName;
+        return this.http.get<GraftExecution[]>('/api/grafts/executions', { params });
+    }
+
+    getGraftExecution(id: string): Observable<GraftExecution> {
+        return this.http.get<GraftExecution>(`/api/grafts/executions/${id}`);
+    }
+
+    getCircuitBreakerStatus(agentName?: string): Observable<CircuitBreakerStatus[]> {
+        const params: Record<string, string> = agentName ? { agentName } : {};
+        return this.http.get<CircuitBreakerStatus[]>('/api/grafts/circuit-breaker/status', { params });
+    }
+
+    resetCircuitBreaker(agentName: string): Observable<void> {
+        return this.http.post<void>(`/api/grafts/circuit-breaker/${agentName}/reset`, {});
+    }
+
+    getAvailableGraftAgents(): Observable<string[]> {
+        return this.http.get<string[]>('/api/grafts/agents');
     }
 }

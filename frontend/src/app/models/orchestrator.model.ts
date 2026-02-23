@@ -101,7 +101,10 @@ export type WorkflowEventType =
     | 'LLM_CALL_END'
     | 'SCHEMA_VALIDATION'
     | 'WORKFLOW_ERROR'
-    | 'ESCALATION_RAISED';
+    | 'ESCALATION_RAISED'
+    | 'GRAFT_START'
+    | 'GRAFT_COMPLETE'
+    | 'GRAFT_FAILED';
 
 export interface WorkflowEvent {
     runId: string;
@@ -129,4 +132,42 @@ export interface WorkflowEvent {
     errorType?: string;
     message?: string;
     reason?: string;
+    // Graft
+    graftId?: string;
+    checkpointAfter?: string;
+    artifactId?: string;
+}
+
+export interface GraftExecution {
+    id: string;
+    runId: string;
+    graftId: string;
+    agentName: string;
+    checkpointAfter: string;
+    startedAt: string;
+    completedAt: string | null;
+    status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT' | 'CIRCUIT_OPEN';
+    outputArtifactId: string | null;
+    errorMessage: string | null;
+    retryCount: number;
+    timeoutMs: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CircuitBreakerStatus {
+    agentName: string;
+    state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+    failureCount: number;
+    lastFailureTime: string | null;
+    successfulExecutions: number;
+    failedExecutions: number;
+    recentFailures: FailureRecord[];
+    failureRate: number;
+}
+
+export interface FailureRecord {
+    graftId: string;
+    timestamp: string;
+    errorMessage: string;
 }

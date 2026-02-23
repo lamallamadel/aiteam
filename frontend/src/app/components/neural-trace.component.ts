@@ -23,6 +23,14 @@ export type NodeStatus = 'pending' | 'active' | 'done' | 'failed' | 'flagged' | 
 
 export interface GraftEvent { after: PipelineId; agentName: string; }
 
+export interface GraftProgress {
+  graftId: string;
+  agentName: string;
+  checkpointAfter: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT' | 'CIRCUIT_OPEN';
+  startedAt?: string;
+}
+
 // Available agents for grafting (matches A2A registry)
 const GRAFTABLE_AGENTS = [
   'pm-v1', 'qualifier-v1', 'architect-v1', 'developer-v1',
@@ -44,6 +52,9 @@ const GRAFTABLE_AGENTS = [
         </span>
         <div class="header-right">
           <span class="step-count">{{ doneCount() }}/{{ PIPELINE.length }} complete</span>
+          <span *ngIf="activeGrafts().length > 0" class="graft-count">
+            <span class="graft-icon">🔀</span> {{ activeGrafts().length }} graft(s)
+          </span>
           <div class="presence-indicator" *ngIf="showPresence && activeUsers.length > 0">
             <span class="presence-icon">👥</span>
             <span class="presence-count">{{ activeUsers.length }}</span>
@@ -126,10 +137,20 @@ const GRAFTABLE_AGENTS = [
             <button *ngIf="interactive"
                     class="graft-btn"
                     [class.open]="graftPickerAt === step.id"
+                    [class.has-graft]="hasGraftAfter(step.id)"
                     (click)="openGraftPicker(step.id)"
                     title="Inject step here">
-              +
+              <span *ngIf="!hasGraftAfter(step.id)">+</span>
+              <span *ngIf="hasGraftAfter(step.id)" class="graft-active-icon">🔀</span>
             </button>
+
+            <!-- Active graft indicator -->
+            <div *ngIf="getGraftAfter(step.id) as graft" class="graft-indicator">
+              <div class="graft-badge" [ngClass]="'graft-' + graft.status.toLowerCase()">
+                <span class="graft-status-icon">{{ getGraftStatusIcon(graft.status) }}</span>
+                <span class="graft-agent">{{ graft.agentName }}</span>
+              </div>
+            </div>
 
             <!-- Graft picker -->
             <div *ngIf="graftPickerAt === step.id" class="graft-picker glass-panel">
@@ -197,6 +218,23 @@ const GRAFTABLE_AGENTS = [
     }
     @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
     .step-count { font-size: 0.65rem; color: #64748b; font-weight: 600; }
+    
+    .graft-count {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      background: rgba(139,92,246,0.1);
+      border: 1px solid rgba(139,92,246,0.2);
+      border-radius: 12px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #a78bfa;
+    }
+    
+    .graft-icon {
+      font-size: 0.8rem;
+    }
 
     /* ── Track ───────────────────────────────────────────────────── */
     .pipeline-track {
@@ -380,8 +418,94 @@ const GRAFTABLE_AGENTS = [
       padding: 0;
     }
     .connector-wrap:hover .graft-btn,
+    .connector-wrap:hover .graft-btn,
     .graft-btn.open { opacity: 1; border-color: #38bdf8; color: #38bdf8; }
     .graft-btn.open { background: rgba(56,189,248,0.15); }
+    .graft-btn.has-graft { 
+      opacity: 1; 
+      border-color: rgba(139,92,246,0.5);
+      background: rgba(139,92,246,0.15);
+      color: #a78bfa;
+    }
+    .graft-active-icon {
+      animation: pulse-graft 2s infinite;
+    }
+    @keyframes pulse-graft {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+    }
+
+    /* Graft indicator */
+    .graft-indicator {
+      position: absolute;
+      top: -40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+
+    .graft-badge {
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      border: 1px solid;
+      animation: graft-slide-in 0.3s ease-out;
+    }
+
+    @keyframes graft-slide-in {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .graft-badge.graft-running {
+      background: rgba(56,189,248,0.15);
+      border-color: rgba(56,189,248,0.4);
+      color: #38bdf8;
+    }
+
+    .graft-badge.graft-completed {
+      background: rgba(34,197,94,0.15);
+      border-color: rgba(34,197,94,0.4);
+      color: #22c55e;
+    }
+
+    .graft-badge.graft-failed, .graft-badge.graft-timeout {
+      background: rgba(239,68,68,0.15);
+      border-color: rgba(239,68,68,0.4);
+      color: #ef4444;
+    }
+
+    .graft-badge.graft-pending {
+      background: rgba(100,116,139,0.15);
+      border-color: rgba(100,116,139,0.3);
+      color: #64748b;
+    }
+
+    .graft-badge.graft-circuit_open {
+      background: rgba(234,179,8,0.15);
+      border-color: rgba(234,179,8,0.4);
+      color: #eab308;
+    }
+
+    .graft-status-icon {
+      font-size: 0.9rem;
+    }
+
+    .graft-agent {
+      font-family: monospace;
+      font-size: 0.68rem;
+    }
 
     /* Graft picker */
     .graft-picker {
@@ -577,6 +701,12 @@ export class NeuralTraceComponent implements OnChanges {
   // Derived state from steps input
   private statusMap = signal<Map<string, NodeStatus>>(new Map());
   private durationMap = signal<Map<string, number>>(new Map());
+  private graftProgressMap = signal<Map<string, GraftProgress>>(new Map());
+
+  activeGrafts = computed(() => {
+    const grafts = Array.from(this.graftProgressMap().values());
+    return grafts.filter(g => g.status === 'RUNNING' || g.status === 'PENDING');
+  });
 
   isLive = computed(() =>
     this.steps.some(s => s?.eventType === 'STEP_START' && !this.steps.some(
@@ -601,6 +731,7 @@ export class NeuralTraceComponent implements OnChanges {
   private buildMaps() {
     const statusMap = new Map<string, NodeStatus>();
     const durationMap = new Map<string, number>();
+    const graftProgressMap = new Map<string, GraftProgress>();
 
     for (const event of this.steps) {
       if (!event) continue;
@@ -609,9 +740,34 @@ export class NeuralTraceComponent implements OnChanges {
       const agentRaw: string = event.agentName || event.orchestrationStep || '';
       const agentName = agentRaw.toUpperCase();
       const pipelineId = this.normalizeAgent(agentName);
+      
+      const type = event.eventType;
+
+      // Handle graft events
+      if (type === 'GRAFT_START') {
+        const graft: GraftProgress = {
+          graftId: event.graftId || '',
+          agentName: event.agentName || '',
+          checkpointAfter: event.checkpointAfter || '',
+          status: 'RUNNING',
+          startedAt: event.timestamp
+        };
+        graftProgressMap.set(event.graftId || '', graft);
+      } else if (type === 'GRAFT_COMPLETE') {
+        const existing = graftProgressMap.get(event.graftId || '');
+        if (existing) {
+          existing.status = 'COMPLETED';
+        }
+      } else if (type === 'GRAFT_FAILED') {
+        const existing = graftProgressMap.get(event.graftId || '');
+        if (existing) {
+          existing.status = event.errorType === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED';
+        }
+      }
+
+      // Handle pipeline events
       if (!pipelineId) continue;
 
-      const type = event.eventType;
       if (type === 'STEP_START') {
         if (!statusMap.has(pipelineId) || statusMap.get(pipelineId) === 'pending') {
           statusMap.set(pipelineId, 'active');
@@ -634,6 +790,7 @@ export class NeuralTraceComponent implements OnChanges {
 
     this.statusMap.set(statusMap);
     this.durationMap.set(durationMap);
+    this.graftProgressMap.set(graftProgressMap);
   }
 
   private normalizeAgent(agent: string): PipelineId | null {
@@ -740,5 +897,37 @@ export class NeuralTraceComponent implements OnChanges {
 
   getUserInitial(userId: string): string {
     return userId.substring(0, 1).toUpperCase();
+  }
+
+  hasGraftAfter(nodeId: string): boolean {
+    for (const graft of this.graftProgressMap().values()) {
+      if (graft.checkpointAfter === nodeId && 
+          (graft.status === 'RUNNING' || graft.status === 'PENDING')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getGraftAfter(nodeId: string): GraftProgress | null {
+    for (const graft of this.graftProgressMap().values()) {
+      if (graft.checkpointAfter === nodeId && 
+          (graft.status === 'RUNNING' || graft.status === 'PENDING')) {
+        return graft;
+      }
+    }
+    return null;
+  }
+
+  getGraftStatusIcon(status: string): string {
+    switch (status) {
+      case 'RUNNING': return '⚡';
+      case 'COMPLETED': return '✓';
+      case 'FAILED': return '✗';
+      case 'TIMEOUT': return '⏱';
+      case 'CIRCUIT_OPEN': return '🔌';
+      case 'PENDING': return '⏳';
+      default: return '•';
+    }
   }
 }

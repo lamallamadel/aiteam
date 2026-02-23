@@ -459,4 +459,31 @@ public class GraftExecutionService {
     }
 
     private record GraftExecutionResult(boolean success, UUID artifactId, String status, String errorMessage) {}
+
+    public String getCircuitBreakerState(String agentName) {
+        CircuitBreakerState state = circuitBreakers.get(agentName);
+        if (state == null) {
+            return "CLOSED";
+        }
+        return state.state.name();
+    }
+
+    public int getCircuitBreakerFailureCount(String agentName) {
+        CircuitBreakerState state = circuitBreakers.get(agentName);
+        return state != null ? state.failureCount : 0;
+    }
+
+    public Instant getCircuitBreakerLastFailureTime(String agentName) {
+        CircuitBreakerState state = circuitBreakers.get(agentName);
+        return state != null ? state.lastFailureTime : null;
+    }
+
+    public void resetCircuitBreaker(String agentName) {
+        CircuitBreakerState state = circuitBreakers.get(agentName);
+        if (state != null) {
+            state.state = CircuitState.CLOSED;
+            state.failureCount = 0;
+            log.info("GRAFT: circuit breaker manually RESET for agent={}", agentName);
+        }
+    }
 }

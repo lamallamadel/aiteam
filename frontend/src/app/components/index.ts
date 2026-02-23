@@ -8,3 +8,5 @@ export { ConversationListComponent } from './conversation-list.component';
 export { ArtifactRendererComponent } from './artifact-renderer.component';
 export { ConfidenceSignalComponent } from './confidence-signal.component';
 export { IntentPreviewModalComponent } from './intent-preview-modal.component';
+export { GraftManagementComponent } from './graft-management.component';
+export { NeuralTraceComponent } from './neural-trace.component';

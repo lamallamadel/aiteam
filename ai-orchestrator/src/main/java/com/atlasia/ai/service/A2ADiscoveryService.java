@@ -265,6 +265,13 @@ public class A2ADiscoveryService {
         return new RegistryStats(total, active, degraded, inactive);
     }
 
+    /**
+     * List all agents in the registry.
+     */
+    public List<AgentCard> listAllAgents() {
+        return new ArrayList<>(registry.values());
+    }
+
     // --- Scoring ---
 
     /**
