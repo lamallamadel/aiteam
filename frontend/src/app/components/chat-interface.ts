@@ -1,8 +1,21 @@
-import { Component, Input, OnChanges, SimpleChanges, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
+import {
+  Component,
+  Input,
+  OnChanges,
+  SimpleChanges,
+  ViewChild,
+  ElementRef,
+  AfterViewChecked,
+  ChangeDetectorRef,
+  signal,
+  OnInit,
+  HostListener,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorService } from '../services/orchestrator.service';
-import { RunResponse, RunRequest } from '../models/orchestrator.model';
+import { SettingsService } from '../services/settings.service';
+import { RunResponse, RunRequest, Persona } from '../models/orchestrator.model';
 import { NeuralTraceComponent } from './neural-trace.component';
 import { SandboxComponent } from './sandbox.component';
 import { IntentPreviewModalComponent, IntentConfirmation } from './intent-preview-modal.component';
@@ -18,7 +31,13 @@ interface Message {
 @Component({
   selector: 'app-chat-interface',
   standalone: true,
-  imports: [CommonModule, FormsModule, NeuralTraceComponent, SandboxComponent, IntentPreviewModalComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    NeuralTraceComponent,
+    SandboxComponent,
+    IntentPreviewModalComponent,
+  ],
   template: `
     <div class="chat-wrapper">
       <!-- Chat Header -->
@@ -28,21 +47,32 @@ interface Message {
             {{ selectedPersona ? '💎' : '🚀' }}
           </span>
           <div class="header-text">
-            <h3>{{ selectedPersona ? (selectedPersona | uppercase) : (isDuelMode ? 'Gem Duel' : 'Orchestration Run') }}</h3>
+            <h3>
+              {{
+                selectedPersona
+                  ? (selectedPersona | uppercase)
+                  : isDuelMode
+                    ? 'Gem Duel'
+                    : 'Orchestration Run'
+              }}
+            </h3>
             <p *ngIf="selectedRun">{{ selectedRun.repo }} #{{ selectedRun.issueNumber }}</p>
             <p *ngIf="selectedPersona">Interactive AI Gem Expertise</p>
             <p *ngIf="isDuelMode">Multi-AI Collaborative Session</p>
           </div>
         </div>
         <div class="header-actions">
-            <button class="voice-toggle-btn" [class.enabled]="isVoiceEnabled" 
-                    (click)="isVoiceEnabled = !isVoiceEnabled" 
-                    [title]="isVoiceEnabled ? 'Disable Voice' : 'Enable Voice'">
-              {{ isVoiceEnabled ? '🔊' : '🔇' }}
-            </button>
-            <span class="status-badge" [ngClass]="selectedPersona ? 'gem' : 'run'">
-                {{ selectedPersona ? 'Direct Chat' : selectedRun?.status }}
-            </span>
+          <button
+            class="voice-toggle-btn"
+            [class.enabled]="isVoiceEnabled"
+            (click)="isVoiceEnabled = !isVoiceEnabled"
+            [title]="isVoiceEnabled ? 'Disable Voice' : 'Enable Voice'"
+          >
+            {{ isVoiceEnabled ? '🔊' : '🔇' }}
+          </button>
+          <span class="status-badge" [ngClass]="selectedPersona ? 'gem' : 'run'">
+            {{ selectedPersona ? 'Direct Chat' : selectedRun?.status }}
+          </span>
         </div>
       </header>
 
@@ -54,11 +84,11 @@ interface Message {
         <h2>Start New Orchestration</h2>
         <div class="form-group">
           <label>Repository</label>
-          <input type="text" [(ngModel)]="newRequest.repo" placeholder="owner/repo">
+          <input type="text" [(ngModel)]="newRequest.repo" placeholder="owner/repo" />
         </div>
         <div class="form-group">
           <label>Issue Number</label>
-          <input type="number" [(ngModel)]="newRequest.issueNumber">
+          <input type="number" [(ngModel)]="newRequest.issueNumber" />
         </div>
         <div class="form-group">
           <label>Mode</label>
@@ -67,7 +97,9 @@ interface Message {
             <option value="EXECUTION">Execution</option>
           </select>
         </div>
-        <button class="accent-gradient start-btn" (click)="openPreview()">Launch Orchestrator</button>
+        <button class="accent-gradient start-btn" (click)="openPreview()">
+          Launch Orchestrator
+        </button>
       </div>
 
       <!-- Intent Preview Modal -->
@@ -75,7 +107,8 @@ interface Message {
         [visible]="showPreview"
         [request]="newRequest"
         (confirmed)="startRun($event)"
-        (cancelled)="showPreview = false">
+        (cancelled)="showPreview = false"
+      >
       </app-intent-preview-modal>
 
       <!-- Messages List - Document-centric flow -->
@@ -85,28 +118,37 @@ interface Message {
             <span class="message-sender" *ngIf="msg.senderName || msg.role === 'user'">
               {{ msg.senderName || (msg.role === 'user' ? 'YOU' : 'ASSISTANT') }}
             </span>
-            <span class="message-timestamp">{{ msg.timestamp | date:'HH:mm:ss' }}</span>
+            <span class="message-timestamp">{{ msg.timestamp | date: 'HH:mm:ss' }}</span>
           </div>
-          
+
           <div class="message-body">
             <div class="message-text">{{ msg.text }}</div>
-            
+
             <!-- Visionary Run Button -->
-            <button *ngIf="msg.role === 'assistant' && hasCode(msg.text)" 
-                    class="visionary-btn" (click)="openVisionary(msg.text)">
+            <button
+              *ngIf="msg.role === 'assistant' && hasCode(msg.text)"
+              class="visionary-btn"
+              (click)="openVisionary(msg.text)"
+            >
               ⚡ RUN CODE
             </button>
 
             <div *ngIf="msg.orchestrationStep" class="step-indicator">
-              <span class="pulse"></span> <span class="agent-name">{{ msg.orchestrationStep }}</span>
+              <span class="pulse"></span>
+              <span class="agent-name">{{ msg.orchestrationStep }}</span>
             </div>
-            
-            <button *ngIf="msg.role === 'assistant'" class="copy-btn" (click)="copyToClipboard(msg.text)" title="Copy message">
-                📋 Copy
+
+            <button
+              *ngIf="msg.role === 'assistant'"
+              class="copy-btn"
+              (click)="copyToClipboard(msg.text)"
+              title="Copy message"
+            >
+              📋 Copy
             </button>
           </div>
         </div>
-        
+
         <div *ngIf="isTyping" class="message-document assistant typing">
           <div class="message-header">
             <span class="message-sender">
@@ -129,274 +171,680 @@ interface Message {
           <button (click)="errorMessage = ''">✕</button>
         </div>
       </div>
-      
+
       <!-- Floating Command Bar -->
       <div *ngIf="selectedRun || selectedPersona || isDuelMode" class="command-bar">
-        <button class="voice-btn" [class.recording]="isRecording" (click)="toggleRecord()" 
-                [title]="isRecording ? 'Stop Recording' : 'Voice Command'">
+        <button
+          class="voice-btn"
+          [class.recording]="isRecording"
+          (click)="toggleRecord()"
+          [title]="isRecording ? 'Stop Recording' : 'Voice Command'"
+        >
           <span class="mic-icon">🎤</span>
           <div *ngIf="isRecording" class="pulse-ring"></div>
         </button>
-        <input type="text" placeholder="Type a message..." 
-               [(ngModel)]="feedbackText" (keyup.enter)="sendFeedback()">
+
+        <!-- Agent Picker Button -->
+        <div class="agent-picker-container">
+          <button class="agent-picker-btn" (click)="toggleAgentPicker($event)" #agentPickerBtn>
+            <span class="agent-icon">💎</span>
+            <span class="agent-label">{{ selectedAgent()?.role || 'Select Agent' }}</span>
+            <span class="dropdown-arrow">▾</span>
+          </button>
+
+          <!-- Agent Picker Popover -->
+          <div class="agent-popover" *ngIf="isAgentPopoverOpen" #agentPopover>
+            <div class="popover-header">
+              <h4>Select Agent Role</h4>
+            </div>
+            <div class="agent-list">
+              <div
+                class="agent-item"
+                *ngFor="let agent of availableAgents"
+                (click)="selectAgent(agent)"
+                [class.selected]="selectedAgent()?.name === agent.name"
+              >
+                <div class="agent-item-header">
+                  <span class="agent-name">{{ agent.name }}</span>
+                  <span class="agent-role-chip">{{ agent.role }}</span>
+                </div>
+                <div class="agent-focus">
+                  <span class="focus-label">Focus:</span>
+                  <span class="focus-areas">{{ agent.focusAreas.join(', ') }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <input
+          type="text"
+          placeholder="Type a message..."
+          [(ngModel)]="feedbackText"
+          (keyup.enter)="sendFeedback()"
+        />
         <button class="send-btn" [disabled]="isTyping" (click)="sendFeedback()">
           {{ isTyping ? '⋯' : 'Send' }}
         </button>
       </div>
 
       <!-- Visionary Sandbox -->
-      <app-sandbox [code]="sandboxCode" [isOpen]="isSandboxOpen" (onClose)="isSandboxOpen = false"></app-sandbox>
+      <app-sandbox
+        [code]="sandboxCode"
+        [isOpen]="isSandboxOpen"
+        (onClose)="isSandboxOpen = false"
+      ></app-sandbox>
     </div>
   `,
-  styles: [`
-    :host { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
-    .chat-wrapper { display: flex; flex-direction: column; flex: 1; padding: 20px; background: var(--background); border-radius: 0; overflow: hidden; min-height: 0; width: 100%; }
-    
-    .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; margin-bottom: 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
-    .header-info { display: flex; align-items: center; gap: 16px; }
-    .header-icon { width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
-    .header-icon.gem { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
-    .header-text h3 { margin: 0; font-size: 1.1rem; color: #f8fafc; }
-    .header-text p { margin: 2px 0 0; font-size: 0.85rem; color: #94a3b8; }
-    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; background: rgba(255,255,255,0.05); color: #94a3b8; font-variant-numeric: tabular-nums; }
-    .status-badge.gem { background: #38bdf8; color: white; }
-    
-    .new-run-form { max-width: 500px; margin: auto; padding: 40px; display: flex; flex-direction: column; gap: 20px; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-    .new-run-form h2 { margin: 0; color: #38bdf8; text-align: center; font-size: 1.5rem; }
-    .form-group { display: flex; flex-direction: column; gap: 8px; }
-    .form-group label { color: #94a3b8; font-size: 0.9rem; font-weight: 500; }
-    .form-group input, .form-group select { padding: 12px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: white; border-radius: 8px; outline: none; transition: border-color 0.2s; }
-    .form-group input:focus { border-color: #38bdf8; }
-    .start-btn { padding: 16px; margin-top: 20px; font-size: 1.1rem; }
-    
-    app-neural-trace { flex-shrink: 0; min-height: 120px; }
-    
-    .message-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 0; min-height: 0; background: var(--border); }
-    
-    /* Document-centric message blocks */
-    .message-document { 
-      display: flex; 
-      flex-direction: column;
-      background: var(--surface); 
-      border-left: 3px solid transparent;
-      padding: 16px 20px;
-    }
-    .message-document.user { 
-      border-left-color: #38bdf8;
-      background: rgba(56, 189, 248, 0.05);
-    }
-    .message-document.assistant { 
-      border-left-color: #8b5cf6;
-    }
-    .message-document.typing {
-      border-left-color: #fbbf24;
-    }
-    
-    .message-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    .message-sender { 
-      font-size: 0.7rem; 
-      font-weight: 800; 
-      color: #38bdf8; 
-      text-transform: uppercase; 
-      letter-spacing: 0.08em; 
-      font-family: var(--font-mono);
-    }
-    .message-timestamp { 
-      font-size: 0.7rem; 
-      color: #64748b; 
-      font-family: var(--font-mono); 
-      font-variant-numeric: tabular-nums;
-    }
-    
-    .message-body { 
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .message-text { 
-      line-height: 1.6; 
-      white-space: pre-wrap; 
-      font-size: 0.95rem; 
-      word-break: break-word; 
-      color: #e2e8f0;
-    }
-    .message-text pre { 
-      background: rgba(0,0,0,0.4); 
-      padding: 12px; 
-      border-radius: 8px; 
-      overflow-x: auto; 
-      margin: 10px 0; 
-      border: 1px solid var(--border);
-    }
-    .message-text code { font-family: var(--font-mono); font-size: 0.85rem; }
-    
-    .copy-btn { 
-      align-self: flex-start;
-      background: rgba(255,255,255,0.05); 
-      border: 1px solid var(--border); 
-      cursor: pointer; 
-      font-size: 0.75rem; 
-      padding: 6px 12px;
-      border-radius: 6px;
-      transition: all 0.2s; 
-      color: #94a3b8;
-      font-family: var(--font-mono);
-    }
-    .copy-btn:hover { background: rgba(255,255,255,0.1); color: white; }
-    
-    .step-indicator { 
-      padding: 8px 12px; 
-      background: rgba(56, 189, 248, 0.1); 
-      border-radius: 6px; 
-      font-size: 0.8rem; 
-      color: #38bdf8; 
-      display: flex; 
-      align-items: center; 
-      gap: 8px;
-      border: 1px solid rgba(56, 189, 248, 0.2);
-    }
-    .step-indicator .agent-name { font-family: var(--font-mono); }
-    .pulse { width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); } }
-    
-    .typing-content { padding: 0; }
-    .typing-indicator { display: flex; gap: 4px; }
-    .typing-indicator span { width: 6px; height: 6px; background: #64748b; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
-    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-    @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+  styles: [
+    `
+      :host {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        overflow: hidden;
+      }
+      .chat-wrapper {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        padding: 20px;
+        background: var(--background);
+        border-radius: 0;
+        overflow: hidden;
+        min-height: 0;
+        width: 100%;
+      }
 
-    .error-banner { 
-      margin: 10px; padding: 12px 16px; background: rgba(239, 68, 68, 0.1); 
-      border-left: 4px solid #ef4444; border-radius: 8px; display: flex; align-items: center; gap: 12px;
-    }
-    .error-banner .icon { font-size: 1.2rem; }
-    .error-banner .error-text p { margin: 2px 0 0; font-size: 0.8rem; opacity: 0.8; }
-    .error-banner button { margin-left: auto; background: transparent; border: none; color: white; cursor: pointer; }
-    
-    /* Floating Command Bar */
-    .command-bar { 
-      margin-top: 16px;
-      display: flex; 
-      gap: 12px; 
-      padding: 12px 16px; 
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px; 
-      flex-shrink: 0; 
-      align-items: center;
-    }
-    .command-bar input { 
-      flex: 1; 
-      padding: 12px; 
-      background: rgba(0,0,0,0.3); 
-      border: 1px solid var(--border);
-      color: white; 
-      border-radius: 8px;
-      outline: none; 
-      font-size: 0.95rem;
-      transition: border-color 0.2s;
-    }
-    .command-bar input:focus { border-color: #38bdf8; }
-    .command-bar .send-btn { 
-      padding: 12px 24px; 
-      border: none; 
-      border-radius: 8px; 
-      background: var(--accent-active); 
-      color: white; 
-      font-weight: 600; 
-      cursor: pointer; 
-      transition: all 0.2s;
-      font-family: var(--font-mono);
-      font-variant-numeric: tabular-nums;
-    }
-    .command-bar .send-btn:hover:not(:disabled) { opacity: 0.9; }
-    .command-bar .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .chat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 24px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+        background: var(--surface);
+      }
+      .header-info {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .header-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.05);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+      }
+      .header-icon.gem {
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+      }
+      .header-text h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        color: #f8fafc;
+      }
+      .header-text p {
+        margin: 2px 0 0;
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+      .status-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        font-variant-numeric: tabular-nums;
+      }
+      .status-badge.gem {
+        background: #38bdf8;
+        color: white;
+      }
 
-    .voice-btn {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border);
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      transition: all 0.3s;
-      flex-shrink: 0;
-    }
-    .voice-btn:hover { background: rgba(56, 189, 248, 0.1); border-color: #38bdf8; }
-    .voice-btn.recording { background: #ef4444; border-color: #ef4444; color: white; }
-    .mic-icon { font-size: 1.2rem; z-index: 2; }
-    
-    .pulse-ring {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      background: #ef4444;
-      animation: mic-pulse 1.5s infinite;
-      z-index: 1;
-    }
-    @keyframes mic-pulse {
-      0% { transform: scale(1); opacity: 0.6; }
-      100% { transform: scale(2.5); opacity: 0; }
-    }
+      .new-run-form {
+        max-width: 500px;
+        margin: auto;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .new-run-form h2 {
+        margin: 0;
+        color: #38bdf8;
+        text-align: center;
+        font-size: 1.5rem;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .form-group label {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      .form-group input,
+      .form-group select {
+        padding: 12px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+        color: white;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .form-group input:focus {
+        border-color: #38bdf8;
+      }
+      .start-btn {
+        padding: 16px;
+        margin-top: 20px;
+        font-size: 1.1rem;
+      }
 
-    .visionary-btn {
-      align-self: flex-start;
-      padding: 8px 16px;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      background: rgba(56, 189, 248, 0.1);
-      color: #38bdf8;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      font-weight: 800;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.2s;
-    }
-    .visionary-btn:hover { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
+      app-neural-trace {
+        flex-shrink: 0;
+        min-height: 120px;
+      }
 
-    .voice-toggle-btn {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border);
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-right: 12px;
-      transition: all 0.2s;
-      font-size: 1rem;
-    }
-    .voice-toggle-btn:hover { background: rgba(255,255,255,0.1); }
-    .voice-toggle-btn.enabled { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; }
-  `]
+      .message-list {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding: 0;
+        min-height: 0;
+        background: var(--border);
+      }
+
+      /* Document-centric message blocks */
+      .message-document {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border-left: 3px solid transparent;
+        padding: 16px 20px;
+      }
+      .message-document.user {
+        border-left-color: #38bdf8;
+        background: rgba(56, 189, 248, 0.05);
+      }
+      .message-document.assistant {
+        border-left-color: #8b5cf6;
+      }
+      .message-document.typing {
+        border-left-color: #fbbf24;
+      }
+
+      .message-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .message-sender {
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: #38bdf8;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-family: var(--font-mono);
+      }
+      .message-timestamp {
+        font-size: 0.7rem;
+        color: #64748b;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .message-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .message-text {
+        line-height: 1.6;
+        white-space: pre-wrap;
+        font-size: 0.95rem;
+        word-break: break-word;
+        color: #e2e8f0;
+      }
+      .message-text pre {
+        background: rgba(0, 0, 0, 0.4);
+        padding: 12px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 10px 0;
+        border: 1px solid var(--border);
+      }
+      .message-text code {
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+      }
+
+      .copy-btn {
+        align-self: flex-start;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border);
+        cursor: pointer;
+        font-size: 0.75rem;
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: all 0.2s;
+        color: #94a3b8;
+        font-family: var(--font-mono);
+      }
+      .copy-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+      }
+
+      .step-indicator {
+        padding: 8px 12px;
+        background: rgba(56, 189, 248, 0.1);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: #38bdf8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid rgba(56, 189, 248, 0.2);
+      }
+      .step-indicator .agent-name {
+        font-family: var(--font-mono);
+      }
+      .pulse {
+        width: 8px;
+        height: 8px;
+        background: #38bdf8;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7);
+        }
+        70% {
+          transform: scale(1);
+          box-shadow: 0 0 0 10px rgba(56, 189, 248, 0);
+        }
+        100% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(56, 189, 248, 0);
+        }
+      }
+
+      .typing-content {
+        padding: 0;
+      }
+      .typing-indicator {
+        display: flex;
+        gap: 4px;
+      }
+      .typing-indicator span {
+        width: 6px;
+        height: 6px;
+        background: #64748b;
+        border-radius: 50%;
+        animation: bounce 1.4s infinite ease-in-out both;
+      }
+      .typing-indicator span:nth-child(1) {
+        animation-delay: -0.32s;
+      }
+      .typing-indicator span:nth-child(2) {
+        animation-delay: -0.16s;
+      }
+      @keyframes bounce {
+        0%,
+        80%,
+        100% {
+          transform: scale(0);
+        }
+        40% {
+          transform: scale(1);
+        }
+      }
+
+      .error-banner {
+        margin: 10px;
+        padding: 12px 16px;
+        background: rgba(239, 68, 68, 0.1);
+        border-left: 4px solid #ef4444;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .error-banner .icon {
+        font-size: 1.2rem;
+      }
+      .error-banner .error-text p {
+        margin: 2px 0 0;
+        font-size: 0.8rem;
+        opacity: 0.8;
+      }
+      .error-banner button {
+        margin-left: auto;
+        background: transparent;
+        border: none;
+        color: white;
+        cursor: pointer;
+      }
+
+      /* Floating Command Bar */
+      .command-bar {
+        margin-top: 16px;
+        display: flex;
+        gap: 12px;
+        padding: 12px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        flex-shrink: 0;
+        align-items: center;
+      }
+      .command-bar input {
+        flex: 1;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--border);
+        color: white;
+        border-radius: 8px;
+        outline: none;
+        font-size: 0.95rem;
+        transition: border-color 0.2s;
+      }
+      .command-bar input:focus {
+        border-color: #38bdf8;
+      }
+      .command-bar .send-btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        background: var(--accent-active);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .command-bar .send-btn:hover:not(:disabled) {
+        opacity: 0.9;
+      }
+      .command-bar .send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .voice-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border);
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        transition: all 0.3s;
+        flex-shrink: 0;
+      }
+      .voice-btn:hover {
+        background: rgba(56, 189, 248, 0.1);
+        border-color: #38bdf8;
+      }
+      .voice-btn.recording {
+        background: #ef4444;
+        border-color: #ef4444;
+        color: white;
+      }
+      .mic-icon {
+        font-size: 1.2rem;
+        z-index: 2;
+      }
+
+      .pulse-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: #ef4444;
+        animation: mic-pulse 1.5s infinite;
+        z-index: 1;
+      }
+      @keyframes mic-pulse {
+        0% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        100% {
+          transform: scale(2.5);
+          opacity: 0;
+        }
+      }
+
+      .visionary-btn {
+        align-self: flex-start;
+        padding: 8px 16px;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        background: rgba(56, 189, 248, 0.1);
+        color: #38bdf8;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+      }
+      .visionary-btn:hover {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: #38bdf8;
+      }
+
+      .voice-toggle-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border);
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        transition: all 0.2s;
+        font-size: 1rem;
+      }
+      .voice-toggle-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .voice-toggle-btn.enabled {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: #38bdf8;
+      }
+
+      /* Agent Picker Styles */
+      .agent-picker-container {
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .agent-picker-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        border-radius: 8px;
+        color: #38bdf8;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .agent-picker-btn:hover {
+        background: rgba(56, 189, 248, 0.15);
+        border-color: #38bdf8;
+      }
+
+      .agent-icon {
+        font-size: 1.1rem;
+      }
+
+      .agent-label {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .dropdown-arrow {
+        font-size: 0.7rem;
+        opacity: 0.7;
+      }
+
+      .agent-popover {
+        position: absolute;
+        bottom: calc(100% + 12px);
+        left: 0;
+        min-width: 400px;
+        max-width: 500px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(16px);
+        z-index: 1000;
+        overflow: hidden;
+      }
+
+      .popover-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .popover-header h4 {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #38bdf8;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .agent-list {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .agent-item {
+        padding: 16px 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .agent-item:last-child {
+        border-bottom: none;
+      }
+
+      .agent-item:hover {
+        background: rgba(56, 189, 248, 0.05);
+      }
+
+      .agent-item.selected {
+        background: rgba(56, 189, 248, 0.1);
+        border-left: 3px solid #38bdf8;
+      }
+
+      .agent-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+
+      .agent-name {
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #f8fafc;
+      }
+
+      .agent-role-chip {
+        padding: 4px 10px;
+        background: rgba(56, 189, 248, 0.15);
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        border-radius: 12px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: #38bdf8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+      }
+
+      .agent-focus {
+        display: flex;
+        gap: 8px;
+        font-size: 0.8rem;
+      }
+
+      .focus-label {
+        color: #94a3b8;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      .focus-areas {
+        color: #cbd5e1;
+        line-height: 1.4;
+      }
+    `,
+  ],
 })
-export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
-  Array = Array; // Allow using Array.from in template
+export class ChatInterfaceComponent implements OnChanges, AfterViewChecked, OnInit {
+  Array = Array;
   @Input() selectedRun?: RunResponse;
   @Input() selectedPersona?: string;
 
   @ViewChild('scrollMe') private myScrollContainer!: ElementRef;
+  @ViewChild('agentPickerBtn') private agentPickerBtn!: ElementRef;
+  @ViewChild('agentPopover') private agentPopover!: ElementRef;
 
   messages: Message[] = [];
   get assistantMessages() {
-    return this.messages.filter(m => m.role === 'assistant');
+    return this.messages.filter((m) => m.role === 'assistant');
   }
   newRequest: RunRequest = { repo: 'lamallamadel/orchistrateur', issueNumber: 1, mode: 'PLANNING' };
   feedbackText: string = '';
@@ -414,11 +862,20 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   isRecording = false;
   private recognition: any;
 
+  selectedAgent = signal<Persona | null>(null);
+  availableAgents: Persona[] = [];
+  isAgentPopoverOpen = false;
+
   constructor(
     private orchestratorService: OrchestratorService,
-    private cdr: ChangeDetectorRef
+    private settingsService: SettingsService,
+    private cdr: ChangeDetectorRef,
   ) {
     this.initSpeechRecognition();
+  }
+
+  ngOnInit() {
+    this.loadAvailableAgents();
   }
 
   ngOnChanges(changes: SimpleChanges) {
@@ -436,6 +893,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
       this.typingPersonas.clear();
       this.activePersonaCount = 0;
       this.initPersonaChat();
+      this.syncSelectedAgentFromPersona();
     } else if (!this.selectedRun && !this.selectedPersona) {
       this.messages = [];
       this.isDuelMode = false;
@@ -453,22 +911,78 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     }
   }
 
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    if (!this.isAgentPopoverOpen) return;
+
+    const target = event.target as HTMLElement;
+    const clickedInside =
+      this.agentPickerBtn?.nativeElement?.contains(target) ||
+      this.agentPopover?.nativeElement?.contains(target);
+
+    if (!clickedInside) {
+      this.isAgentPopoverOpen = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  loadAvailableAgents() {
+    this.orchestratorService.getPersonas().subscribe({
+      next: (personas) => {
+        this.availableAgents = personas;
+        if (personas.length > 0 && !this.selectedAgent()) {
+          this.selectedAgent.set(personas[0]);
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Failed to load personas', err);
+      },
+    });
+  }
+
+  syncSelectedAgentFromPersona() {
+    if (this.selectedPersona) {
+      const agent = this.availableAgents.find(
+        (a) => a.name.toLowerCase() === this.selectedPersona?.toLowerCase(),
+      );
+      if (agent) {
+        this.selectedAgent.set(agent);
+      }
+    }
+  }
+
+  toggleAgentPicker(event: Event) {
+    event.stopPropagation();
+    this.isAgentPopoverOpen = !this.isAgentPopoverOpen;
+  }
+
+  selectAgent(agent: Persona) {
+    this.selectedAgent.set(agent);
+    this.selectedPersona = agent.name;
+    this.isAgentPopoverOpen = false;
+    this.cdr.detectChanges();
+  }
+
   scrollToBottom(): void {
     try {
       if (this.myScrollContainer) {
         setTimeout(() => {
-          this.myScrollContainer.nativeElement.scrollTop = this.myScrollContainer.nativeElement.scrollHeight;
+          this.myScrollContainer.nativeElement.scrollTop =
+            this.myScrollContainer.nativeElement.scrollHeight;
         }, 50);
       }
-    } catch (err) { }
+    } catch (err) {}
   }
 
   initPersonaChat() {
-    this.messages = [{
-      role: 'assistant',
-      text: `Hello! I am ${this.selectedPersona?.toUpperCase()}, your specialized AI Gem. How can I help you today?`,
-      timestamp: new Date().toISOString()
-    }];
+    this.messages = [
+      {
+        role: 'assistant',
+        text: `Hello! I am ${this.selectedPersona?.toUpperCase()}, your specialized AI Gem. How can I help you today?`,
+        timestamp: new Date().toISOString(),
+      },
+    ];
     this.speak(this.messages[0].text);
   }
 
@@ -483,18 +997,18 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
             role: 'assistant',
             text: a.payload,
             orchestrationStep: a.agentName,
-            timestamp: a.createdAt
+            timestamp: a.createdAt,
           }));
 
         this.messages.unshift({
           role: 'user',
           text: `Starting orchestration for ${this.selectedRun?.repo} #${this.selectedRun?.issueNumber}`,
-          timestamp: this.selectedRun!.createdAt
+          timestamp: this.selectedRun!.createdAt,
         });
         this.shouldScroll = true;
         this.cdr.detectChanges();
       },
-      error: (err) => this.handleError(err)
+      error: (err) => this.handleError(err),
     });
   }
 
@@ -512,7 +1026,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
         this.selectedRun = run;
         this.loadMessages();
       },
-      error: (err) => this.handleError(err)
+      error: (err) => this.handleError(err),
     });
   }
 
@@ -522,12 +1036,12 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
     const userMsg: Message = {
       role: 'user',
       text: this.feedbackText,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
     this.messages.push(userMsg);
     const textToChat = this.feedbackText;
     const mentions = this.feedbackText.match(/@(\w+)/g);
-    const mentionedPersonas = mentions ? mentions.map(m => m.substring(1).toLowerCase()) : [];
+    const mentionedPersonas = mentions ? mentions.map((m) => m.substring(1).toLowerCase()) : [];
 
     this.feedbackText = '';
     this.shouldScroll = true;
@@ -538,7 +1052,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
       this.isTyping = true;
       this.errorMessage = '';
 
-      mentionedPersonas.forEach(personaName => {
+      mentionedPersonas.forEach((personaName) => {
         this.typingPersonas.add(personaName);
         this.orchestratorService.chat(personaName, textToChat).subscribe({
           next: (res) => {
@@ -546,7 +1060,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
               role: 'assistant',
               text: res.response,
               senderName: personaName.charAt(0).toUpperCase() + personaName.slice(1),
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
             });
 
             this.typingPersonas.delete(personaName);
@@ -561,7 +1075,7 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
             this.typingPersonas.delete(personaName);
             this.activePersonaCount--;
             this.handleError(err);
-          }
+          },
         });
       });
     } else if (this.selectedPersona) {
@@ -577,13 +1091,13 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
             role: 'assistant',
             text: res.response,
             senderName: this.selectedPersona,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
           this.speak(res.response);
           this.shouldScroll = true;
           this.cdr.detectChanges();
         },
-        error: (err) => this.handleError(err)
+        error: (err) => this.handleError(err),
       });
     }
   }
@@ -600,7 +1114,8 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   }
 
   private initSpeechRecognition() {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = false;
@@ -642,29 +1157,23 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked {
   speak(text: string) {
     if (!window.speechSynthesis || !this.isVoiceEnabled) return;
 
-    // Stop existing speech if any
     window.speechSynthesis.cancel();
 
-    // Clean text for speech:
-    // 1. Remove code blocks
-    // 2. Remove inline code
-    // 3. Remove markdown headers, bold, italics, asterisks
     const cleanText = text
       .replace(/```[\s\S]*?```/g, '')
       .replace(/`[^`]*`/g, '')
-      .replace(/[#*_\-~\[\]\(\)]/g, '') // Remove markdown special chars
+      .replace(/[#*_\-~\[\]\(\)]/g, '')
       .trim();
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = 1;
     utterance.pitch = 1;
 
-    // Try to find a nice voice
     const voices = window.speechSynthesis.getVoices();
     if (this.selectedPersona?.toLowerCase() === 'morgan') {
-      utterance.pitch = 0.8; // Deeper voice
+      utterance.pitch = 0.8;
     } else if (this.selectedPersona?.toLowerCase() === 'code-quality-engineer') {
-      utterance.rate = 1.2; // Faster voice
+      utterance.rate = 1.2;
     }
 
     window.speechSynthesis.speak(utterance);
