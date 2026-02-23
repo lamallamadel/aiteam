@@ -16,7 +16,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
     <app-collaboration-notifications></app-collaboration-notifications>
     <div class="run-detail-container" *ngIf="run()">
       <div class="header">
-        <button (click)="goBack()" class="btn-back glass-panel">← Back to Runs</button>
+        <button (click)="goBack()" class="btn-back">← Back to Runs</button>
         <div class="header-title">
           <h2>{{ run()?.repo }} <span class="issue-num">#{{ run()?.issueNumber }}</span></h2>
           <span class="status-badge" [ngClass]="getStatusClass(run()?.status)">
@@ -24,10 +24,10 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
           </span>
         </div>
         <div class="header-actions">
-          <a [routerLink]="['/runs', run()?.id, 'trace']" class="btn-action glass-panel">
+          <a [routerLink]="['/runs', run()?.id, 'trace']" class="btn-action">
             Waterfall Trace
           </a>
-          <a [routerLink]="['/runs', run()?.id, 'log']" class="btn-action glass-panel">
+          <a [routerLink]="['/runs', run()?.id, 'log']" class="btn-action">
             Activity Log
           </a>
           <button
@@ -54,7 +54,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       </app-neural-trace>
 
       <!-- Pending grafts notice -->
-      <div class="grafts-panel glass-panel" *ngIf="pendingGrafts().length > 0">
+      <div class="grafts-panel" *ngIf="pendingGrafts().length > 0">
         <span class="grafts-label">⊕ Pending Grafts</span>
         <div class="graft-chips">
           <span *ngFor="let g of pendingGrafts()" class="graft-chip">
@@ -64,7 +64,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       </div>
 
       <!-- Live progress bar -->
-      <div class="progress-bar-wrap glass-panel" *ngIf="streamStore.isStreaming()">
+      <div class="progress-bar-wrap" *ngIf="streamStore.isStreaming()">
         <div class="progress-label">
           <span class="pulse-dot"></span>
           <span>{{ streamStore.currentAgent() || 'Initializing' }}</span>
@@ -81,7 +81,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       </div>
 
       <!-- Escalation banner -->
-      <div class="escalation-banner glass-panel" *ngIf="run()?.status === 'ESCALATED'">
+      <div class="escalation-banner" *ngIf="run()?.status === 'ESCALATED'">
         <span class="escalation-icon">⚠</span>
         <div class="escalation-text">
           <strong>Human decision required</strong>
@@ -92,7 +92,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
 
       <div class="detail-grid">
         <!-- Run info -->
-        <div class="info-card glass-panel">
+        <div class="info-card">
           <h3>Run Information</h3>
           <div class="info-row">
             <span class="label">ID</span>
@@ -146,7 +146,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
         </div>
 
         <!-- Artifacts -->
-        <div class="artifacts-card glass-panel">
+        <div class="artifacts-card">
           <h3>Artifacts ({{ allArtifacts().length }})</h3>
           <div class="artifacts-list">
             <div *ngFor="let artifact of allArtifacts()" class="artifact-item"
@@ -171,7 +171,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       </div>
 
       <!-- Token monitor row -->
-      <div class="token-row glass-panel" *ngIf="streamStore.tokenConsumption() > 0">
+      <div class="token-row" *ngIf="streamStore.tokenConsumption() > 0">
         <div class="token-stat">
           <span class="token-label">Total Tokens</span>
           <span class="token-value">{{ streamStore.tokenConsumption() | number }}</span>
@@ -198,7 +198,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
 
     <div class="error-state" *ngIf="error()">
       <p>{{ error() }}</p>
-      <button (click)="goBack()" class="btn-back glass-panel">Back to Runs</button>
+      <button (click)="goBack()" class="btn-back">Back to Runs</button>
     </div>
   `,
   styles: [`
@@ -227,9 +227,9 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
     .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .btn-back, .btn-action {
       padding: 8px 16px;
-      border: none;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: rgba(255,255,255,0.05);
+      background: var(--surface);
       color: white;
       cursor: pointer;
       text-decoration: none;
@@ -259,6 +259,9 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       display: flex;
       flex-direction: column;
       gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
     .progress-label {
       display: flex;
@@ -303,6 +306,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       padding: 16px;
       border: 1px solid rgba(234,179,8,0.3);
       background: rgba(234,179,8,0.08);
+      border-radius: 12px;
     }
     .escalation-icon { font-size: 1.5rem; color: #eab308; }
     .escalation-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
@@ -324,7 +328,12 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       grid-template-columns: 1fr 1fr;
       gap: 16px;
     }
-    .info-card, .artifacts-card { padding: 20px; border-radius: 12px; }
+    .info-card, .artifacts-card {
+      padding: 20px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
     .info-card h3, .artifacts-card h3 {
       margin: 0 0 16px 0;
       color: white;
@@ -342,7 +351,7 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
     .info-row:last-child { border-bottom: none; }
     .label { color: #94a3b8; font-size: 0.85rem; white-space: nowrap; }
     .value { color: white; font-weight: 500; font-size: 0.85rem; text-align: right; }
-    .mono { font-family: monospace; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .agent-chip {
       background: rgba(56,189,248,0.15);
       color: #38bdf8;
@@ -442,6 +451,9 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
     .grafts-label {
       font-size: 0.75rem;
@@ -465,10 +477,13 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
       display: flex;
       justify-content: space-around;
       padding: 14px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
     .token-stat { text-align: center; }
     .token-label { display: block; font-size: 0.72rem; color: rgba(255,255,255,0.4); margin-bottom: 4px; }
-    .token-value { font-size: 1.1rem; font-weight: 700; color: white; font-family: monospace; }
+    .token-value { font-size: 1.1rem; font-weight: 700; color: white; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* Loading / error */
     .loading-state, .error-state {

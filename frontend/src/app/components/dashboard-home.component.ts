@@ -22,7 +22,7 @@ interface QuickStats {
       </div>
 
       <div class="quick-stats-grid">
-        <div class="stat-card glass-panel" (click)="navigateTo('/runs')">
+        <div class="stat-card" (click)="navigateTo('/runs')">
           <div class="stat-icon">📊</div>
           <div class="stat-content">
             <div class="stat-value">{{ quickStats().totalRuns }}</div>
@@ -30,7 +30,7 @@ interface QuickStats {
           </div>
         </div>
 
-        <div class="stat-card glass-panel success">
+        <div class="stat-card success">
           <div class="stat-icon">✓</div>
           <div class="stat-content">
             <div class="stat-value">{{ formatPercent(quickStats().successRate) }}</div>
@@ -38,7 +38,7 @@ interface QuickStats {
           </div>
         </div>
 
-        <div class="stat-card glass-panel info">
+        <div class="stat-card info">
           <div class="stat-icon">⚡</div>
           <div class="stat-content">
             <div class="stat-value">{{ quickStats().activeRuns }}</div>
@@ -46,7 +46,7 @@ interface QuickStats {
           </div>
         </div>
 
-        <div class="stat-card glass-panel warning" (click)="navigateTo('/analytics')">
+        <div class="stat-card warning" (click)="navigateTo('/analytics')">
           <div class="stat-icon">⚠️</div>
           <div class="stat-content">
             <div class="stat-value">{{ quickStats().escalations }}</div>
@@ -56,28 +56,28 @@ interface QuickStats {
       </div>
 
       <div class="actions-grid">
-        <div class="action-card glass-panel" (click)="navigateTo('/runs')">
+        <div class="action-card" (click)="navigateTo('/runs')">
           <h3>📋 View All Bolts</h3>
           <p>Browse and filter through your run history</p>
         </div>
 
-        <div class="action-card glass-panel" (click)="navigateTo('/analytics')">
+        <div class="action-card" (click)="navigateTo('/analytics')">
           <h3>📈 Analytics Dashboard</h3>
           <p>Deep dive into performance metrics and insights</p>
         </div>
 
-        <div class="action-card glass-panel">
+        <div class="action-card">
           <h3>🤖 Agent Performance</h3>
           <p>Monitor individual agent effectiveness</p>
         </div>
 
-        <div class="action-card glass-panel">
+        <div class="action-card">
           <h3>🎭 Persona Configuration</h3>
           <p>Optimize persona settings based on learning</p>
         </div>
       </div>
 
-      <div class="recent-activity glass-panel">
+      <div class="recent-activity">
         <h3>Recent Activity</h3>
         <div class="activity-list">
           <div class="activity-item">
@@ -146,11 +146,13 @@ interface QuickStats {
       gap: 16px;
       cursor: pointer;
       transition: all 0.2s;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
 
     .stat-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.3);
     }
 
     .stat-card.success {
@@ -179,6 +181,7 @@ interface QuickStats {
       color: white;
       line-height: 1;
       margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
     }
 
     .stat-label {
@@ -196,11 +199,13 @@ interface QuickStats {
       padding: 24px;
       cursor: pointer;
       transition: all 0.2s;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
 
     .action-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.3);
       background: rgba(56, 189, 248, 0.05);
     }
 
@@ -218,6 +223,9 @@ interface QuickStats {
 
     .recent-activity {
       padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
     }
 
     .recent-activity h3 {

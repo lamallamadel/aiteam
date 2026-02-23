@@ -26,7 +26,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
         </div>
         <div class="header-right">
           <div class="filters">
-          <select [ngModel]="statusFilter()" (ngModelChange)="onStatusFilterChange($event)" class="filter-select glass-panel">
+          <select [ngModel]="statusFilter()" (ngModelChange)="onStatusFilterChange($event)" class="filter-select">
             <option value="">All Statuses</option>
             <option value="DONE">Done</option>
             <option value="FAILED">Failed</option>
@@ -38,10 +38,10 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
             [ngModel]="searchTerm()"
             (ngModelChange)="onSearchTermChange($event)"
             placeholder="Search by repo..."
-            class="search-input glass-panel"
+            class="search-input"
           />
           </div>
-          <button class="btn-new-bolt accent-gradient" (click)="openNewBolt()">+ New Bolt</button>
+          <button class="btn-new-bolt" (click)="openNewBolt()">+ New Bolt</button>
         </div>
       </div>
 
@@ -100,11 +100,11 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       <div class="footer-row">
         <span class="total-label">{{ filteredRuns().length }} runs</span>
         <div class="pagination">
-          <button (click)="previousPage()" [disabled]="currentPage() === 0" class="btn-pagination glass-panel">
+          <button (click)="previousPage()" [disabled]="currentPage() === 0" class="btn-pagination">
             ‹ Prev
           </button>
           <span class="page-info">{{ currentPage() + 1 }} / {{ totalPages() }}</span>
-          <button (click)="nextPage()" [disabled]="currentPage() >= totalPages() - 1" class="btn-pagination glass-panel">
+          <button (click)="nextPage()" [disabled]="currentPage() >= totalPages() - 1" class="btn-pagination">
             Next ›
           </button>
         </div>
@@ -131,6 +131,7 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       padding: 9px 18px;
       border: none;
       border-radius: 8px;
+      background: var(--accent-active);
       color: white;
       font-size: 0.88rem;
       font-weight: 700;
@@ -161,9 +162,9 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     .filters { display: flex; gap: 12px; }
     .filter-select, .search-input {
       padding: 8px 12px;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: rgba(255,255,255,0.05);
+      background: var(--surface);
       color: white;
       outline: none;
     }
@@ -171,7 +172,8 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
 
     .run-table {
       flex: 1;
-      background: rgba(255,255,255,0.03);
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
       display: flex;
@@ -194,12 +196,12 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     }
     .table-body { flex: 1; overflow-y: auto; }
     .table-row {
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid var(--border);
       cursor: pointer;
       transition: background 0.15s;
     }
     .table-row:hover { background: rgba(56,189,248,0.07); }
-    .mono { font-family: monospace; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .dim { color: rgba(255,255,255,0.35); }
 
     .status-badge {
@@ -239,6 +241,8 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
       color: #38bdf8;
       border-radius: 4px;
       font-size: 0.7rem;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
     .fix-count.e2e { background: rgba(139,92,246,0.12); color: #8b5cf6; }
 
@@ -251,9 +255,9 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     .pagination { display: flex; align-items: center; gap: 10px; }
     .btn-pagination {
       padding: 6px 14px;
-      border: none;
+      border: 1px solid var(--border);
       border-radius: 6px;
-      background: rgba(255,255,255,0.05);
+      background: var(--surface);
       color: white;
       cursor: pointer;
       font-size: 0.82rem;
