@@ -11,6 +11,16 @@ interface OversightRule {
   level: 'full_auto' | 'supervised' | 'manual';
 }
 
+// Default rule catalogue (descriptions live only in the frontend)
+const DEFAULT_RULES: OversightRule[] = [
+  { id: 'pre-commit',      name: 'Pre-Commit Review',        description: 'Require human approval before developer commits code',          enabled: true,  level: 'supervised' },
+  { id: 'security-scan',   name: 'Security Scan Gate',       description: 'Escalate if static analysis detects vulnerabilities',           enabled: true,  level: 'full_auto'  },
+  { id: 'test-failure',    name: 'Test Failure Escalation',   description: 'Escalate after fix loop limit is exceeded',                    enabled: true,  level: 'supervised' },
+  { id: 'pr-merge',        name: 'PR Merge Approval',        description: 'Require human approval before merging pull requests',           enabled: true,  level: 'manual'     },
+  { id: 'schema-mismatch', name: 'Schema Validation Failure', description: 'Escalate when agent output does not match expected schema',    enabled: false, level: 'supervised' },
+  { id: 'token-overrun',   name: 'Token Budget Exceeded',    description: 'Escalate when an agent exceeds its token budget',               enabled: true,  level: 'supervised' },
+];
+
 @Component({
   selector: 'app-oversight-config',
   standalone: true,
@@ -195,16 +205,6 @@ interface OversightRule {
     .save-feedback.err { color: #ef4444; }
   `]
 })
-// Default rule catalogue (descriptions live only in the frontend)
-const DEFAULT_RULES: OversightRule[] = [
-  { id: 'pre-commit',      name: 'Pre-Commit Review',        description: 'Require human approval before developer commits code',          enabled: true,  level: 'supervised' },
-  { id: 'security-scan',   name: 'Security Scan Gate',       description: 'Escalate if static analysis detects vulnerabilities',           enabled: true,  level: 'full_auto'  },
-  { id: 'test-failure',    name: 'Test Failure Escalation',   description: 'Escalate after fix loop limit is exceeded',                    enabled: true,  level: 'supervised' },
-  { id: 'pr-merge',        name: 'PR Merge Approval',        description: 'Require human approval before merging pull requests',           enabled: true,  level: 'manual'     },
-  { id: 'schema-mismatch', name: 'Schema Validation Failure', description: 'Escalate when agent output does not match expected schema',    enabled: false, level: 'supervised' },
-  { id: 'token-overrun',   name: 'Token Budget Exceeded',    description: 'Escalate when an agent exceeds its token budget',               enabled: true,  level: 'supervised' },
-];
-
 export class OversightConfigComponent implements OnInit {
   private orchestratorService = inject(OrchestratorService);
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { OrchestratorService } from '../services/orchestrator.service';
@@ -503,6 +503,17 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   envCheckpointTime = signal<string | null>(null);
   prunedSteps = signal<string[]>([]);
   pendingGrafts = signal<{ after: string; agentName: string }[]>([]);
+
+  constructor() {
+    // Reload artifacts whenever a new step completes during a live run
+    effect(() => {
+      const count = this.streamStore.completedSteps();
+      if (count > 0) {
+        const id = this.run()?.id;
+        if (id) this.loadArtifacts(id);
+      }
+    });
+  }
 
   // Artifacts from REST (includes artifacts added before the stream connected)
   private restArtifacts = signal<ArtifactResponse[]>([]);

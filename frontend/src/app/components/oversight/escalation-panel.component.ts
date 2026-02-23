@@ -110,7 +110,7 @@ const GUIDANCE_TEMPLATES: Record<string, string[]> = {
             </ng-container>
             <ng-container *ngIf="env.architectureNotes">
               <span class="env-key">Arch notes</span>
-              <span class="env-val arch-notes">{{ env.architectureNotes | slice:0:200 }}{{ (env.architectureNotes?.length ?? 0) > 200 ? '…' : '' }}</span>
+              <span class="env-val arch-notes">{{ env.architectureNotes | slice:0:200 }}{{ env.architectureNotes.length > 200 ? '…' : '' }}</span>
             </ng-container>
           </div>
         </div>
