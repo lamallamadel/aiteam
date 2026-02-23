@@ -7,7 +7,7 @@ import { CommonModule } from '@angular/common';
   imports: [CommonModule],
   template: `
     <div class="sandbox-overlay" *ngIf="isOpen" (click)="close()">
-      <div class="sandbox-slide-panel glass-panel" (click)="$event.stopPropagation()">
+      <div class="sandbox-slide-panel" (click)="$event.stopPropagation()">
         <header class="sandbox-header">
           <div class="header-main">
             <span class="icon">⚡</span>
@@ -48,14 +48,14 @@ import { CommonModule } from '@angular/common';
               </div>
             </div>
             
-            <button class="accent-gradient run-btn" [disabled]="isRunning" (click)="execute()">
+            <button class="run-btn" [disabled]="isRunning" (click)="execute()">
               {{ isRunning ? 'EXECUTING...' : 'RUN CODE' }}
             </button>
           </div>
 
           <div class="section-container preview-section" *ngIf="hasHTML()">
             <div class="label">LIVE PREVIEW</div>
-            <div class="preview-frame glass-panel">
+            <div class="preview-frame">
               <iframe #preview [srcdoc]="code" frameborder="0"></iframe>
             </div>
           </div>
@@ -84,8 +84,9 @@ import { CommonModule } from '@angular/common';
       flex-direction: column;
       transform: translateX(100%);
       animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      border-left: 1px solid rgba(56, 189, 248, 0.2);
+      border-left: 1px solid var(--border);
       border-radius: 0;
+      background: var(--surface-elevated);
     }
     @keyframes slideIn { to { transform: translateX(0); } }
     
@@ -94,7 +95,7 @@ import { CommonModule } from '@angular/common';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid var(--border);
       background: rgba(15, 23, 42, 0.4);
     }
     .header-main { display: flex; gap: 16px; align-items: center; }
@@ -123,7 +124,7 @@ import { CommonModule } from '@angular/common';
       background: rgba(0,0,0,0.4);
       padding: 16px;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
       max-height: 200px;
       overflow: auto;
     }
@@ -135,9 +136,8 @@ import { CommonModule } from '@angular/common';
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      border: 1px solid var(--border);
       height: 250px;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
     }
     .terminal-header {
       padding: 10px 16px;
@@ -145,7 +145,7 @@ import { CommonModule } from '@angular/common';
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid var(--border);
     }
     .controls { display: flex; gap: 6px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -179,16 +179,16 @@ import { CommonModule } from '@angular/common';
       padding: 14px;
       border: none;
       border-radius: 12px;
+      background: var(--accent-active);
       color: white;
       font-weight: 800;
       letter-spacing: 0.1em;
       cursor: pointer;
       font-size: 0.85rem;
       transition: all 0.3s;
-      box-shadow: 0 4px 15px -3px rgba(56, 189, 248, 0.4);
     }
-    .run-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px -3px rgba(56, 189, 248, 0.5); }
-    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+    .run-btn:hover:not(:disabled) { transform: translateY(-2px); opacity: 0.9; }
+    .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .preview-frame {
       flex: 1;
@@ -196,6 +196,7 @@ import { CommonModule } from '@angular/common';
       border-radius: 8px;
       overflow: hidden;
       margin-top: 4px;
+      border: 1px solid var(--border);
     }
     iframe { width: 100%; height: 100%; }
   `]
