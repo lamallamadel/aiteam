@@ -558,8 +558,8 @@ export class CollaborationAnalyticsDashboardComponent implements OnInit {
   }
 
   hasHeatmaps(): boolean {
-    return this.analytics?.userActivityHeatmaps && 
-           Object.keys(this.analytics.userActivityHeatmaps).length > 0;
+    return !!(this.analytics?.userActivityHeatmaps && 
+           Object.keys(this.analytics.userActivityHeatmaps).length > 0);
   }
 
   getHeatmapData(): Array<any> {

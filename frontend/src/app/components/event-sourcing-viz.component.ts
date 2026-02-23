@@ -312,7 +312,7 @@ export class EventSourcingVizComponent implements OnChanges {
   }
 
   hasDiff(): boolean {
-    return this.snapshot?.diff && Object.keys(this.snapshot.diff).length > 0;
+    return !!(this.snapshot?.diff && Object.keys(this.snapshot.diff).length > 0);
   }
 
   getDiffKeys(): string[] {

@@ -24,14 +24,14 @@ import { ConnectionHealth } from '../services/collaboration-websocket.service';
           <span class="metric-value">{{ (health?.messageDeliveryRate || 1) * 100 | number:'1.0-1' }}%</span>
         </div>
         
-        <div class="metric" *ngIf="health?.reconnectionCount && health.reconnectionCount > 0">
+        <div class="metric" *ngIf="(health?.reconnectionCount ?? 0) > 0">
           <span class="metric-label">Reconnections</span>
-          <span class="metric-value">{{ health.reconnectionCount }}</span>
+          <span class="metric-value">{{ health?.reconnectionCount }}</span>
         </div>
         
         <div class="metric" *ngIf="health?.qualityScore !== undefined">
           <span class="metric-label">Quality</span>
-          <span class="metric-value">{{ health.qualityScore | number:'1.0-0' }}/100</span>
+          <span class="metric-value">{{ health?.qualityScore | number:'1.0-0' }}/100</span>
         </div>
         
         <div class="metric" *ngIf="queuedMessages > 0">
