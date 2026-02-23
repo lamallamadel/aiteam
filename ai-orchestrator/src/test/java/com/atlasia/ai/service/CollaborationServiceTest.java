@@ -4,6 +4,7 @@ import com.atlasia.ai.model.CollaborationEventEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.CollaborationEventRepository;
+import com.atlasia.ai.persistence.PersistedCollaborationMessageRepository;
 import com.atlasia.ai.persistence.RunRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,10 +30,16 @@ class CollaborationServiceTest {
     private CollaborationEventRepository eventRepository;
 
     @Mock
+    private PersistedCollaborationMessageRepository messageRepository;
+
+    @Mock
     private RunRepository runRepository;
 
     @Mock
     private SimpMessagingTemplate messagingTemplate;
+
+    @Mock
+    private WebSocketConnectionMonitor connectionMonitor;
 
     private CollaborationService collaborationService;
     private ObjectMapper objectMapper;
@@ -40,8 +47,10 @@ class CollaborationServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
+        lenient().when(messageRepository.findMaxSequenceNumberByRunId(any())).thenReturn(0L);
         collaborationService = new CollaborationService(
-                eventRepository, runRepository, messagingTemplate, objectMapper);
+                eventRepository, messageRepository, runRepository, 
+                messagingTemplate, objectMapper, connectionMonitor);
     }
 
     @Test

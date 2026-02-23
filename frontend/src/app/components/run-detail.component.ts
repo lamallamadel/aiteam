@@ -7,11 +7,12 @@ import { NeuralTraceComponent, GraftEvent } from './neural-trace.component';
 import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/orchestrator.model';
 import { ArtifactRendererComponent } from './artifact-renderer.component';
 import { CollaborationNotificationsComponent } from './collaboration-notifications.component';
+import { ConnectionHealthComponent } from './connection-health.component';
 
 @Component({
   selector: 'app-run-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, NeuralTraceComponent, ArtifactRendererComponent, CollaborationNotificationsComponent],
+  imports: [CommonModule, RouterModule, NeuralTraceComponent, ArtifactRendererComponent, CollaborationNotificationsComponent, ConnectionHealthComponent],
   template: `
     <app-collaboration-notifications></app-collaboration-notifications>
     <div class="run-detail-container" *ngIf="run()">
@@ -39,6 +40,14 @@ import { CollaborationNotificationsComponent } from './collaboration-notificatio
           </button>
         </div>
       </div>
+
+      <!-- Connection health -->
+      <app-connection-health
+        *ngIf="streamStore.isCollaborationConnected() || streamStore.usingFallback()"
+        [health]="streamStore.connectionHealth()"
+        [queuedMessages]="streamStore.queuedMessageCount()"
+        [usingFallback]="streamStore.usingFallback()">
+      </app-connection-health>
 
       <!-- Live neural trace — feeds directly from SSE stream -->
       <app-neural-trace

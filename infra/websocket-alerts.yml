@@ -1,0 +1,113 @@
+groups:
+  - name: websocket_health
+    interval: 30s
+    rules:
+      - alert: HighWebSocketLatency
+        expr: histogram_quantile(0.95, rate(orchestrator_websocket_message_latency_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "High WebSocket message latency detected"
+          description: "95th percentile WebSocket message latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+          
+      - alert: CriticalWebSocketLatency
+        expr: histogram_quantile(0.95, rate(orchestrator_websocket_message_latency_bucket[5m])) > 1000
+        for: 3m
+        labels:
+          severity: critical
+          component: websocket
+        annotations:
+          summary: "Critical WebSocket message latency detected"
+          description: "95th percentile WebSocket message latency is {{ $value | humanizeDuration }} (threshold: 1000ms)"
+          
+      - alert: LowMessageDeliveryRate
+        expr: orchestrator_websocket_message_delivery_rate < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "Low WebSocket message delivery rate detected"
+          description: "Message delivery rate is {{ $value | humanizePercentage }} (threshold: 95%)"
+          
+      - alert: CriticalMessageDeliveryRate
+        expr: orchestrator_websocket_message_delivery_rate < 0.80
+        for: 3m
+        labels:
+          severity: critical
+          component: websocket
+        annotations:
+          summary: "Critical WebSocket message delivery rate detected"
+          description: "Message delivery rate is {{ $value | humanizePercentage }} (threshold: 80%)"
+          
+      - alert: HighReconnectionRate
+        expr: rate(orchestrator_websocket_reconnections_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "High WebSocket reconnection rate detected"
+          description: "Reconnection rate is {{ $value | humanize }}/sec (threshold: 0.1/sec)"
+          
+      - alert: HttpPollingFallbackActive
+        expr: rate(orchestrator_websocket_fallback_http_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "WebSocket fallback to HTTP polling is active"
+          description: "HTTP polling fallback rate is {{ $value | humanize }} events/sec"
+          
+      - alert: HighMessageFailureRate
+        expr: rate(orchestrator_websocket_message_failures_total[5m]) / rate(orchestrator_websocket_messages_out_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "High WebSocket message failure rate detected"
+          description: "Message failure rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+          
+      - alert: ConnectionQualityDegraded
+        expr: orchestrator_websocket_connection_quality < 80 and orchestrator_websocket_connection_quality >= 50
+        for: 5m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "WebSocket connection quality is degraded"
+          description: "Connection quality score is {{ $value }} (threshold: 80)"
+          
+      - alert: ConnectionQualityUnhealthy
+        expr: orchestrator_websocket_connection_quality < 50
+        for: 3m
+        labels:
+          severity: critical
+          component: websocket
+        annotations:
+          summary: "WebSocket connection quality is unhealthy"
+          description: "Connection quality score is {{ $value }} (threshold: 50)"
+          
+      - alert: NoActiveWebSocketConnections
+        expr: (orchestrator_websocket_connections_total - orchestrator_websocket_disconnections_total) == 0
+        for: 10m
+        labels:
+          severity: info
+          component: websocket
+        annotations:
+          summary: "No active WebSocket connections"
+          description: "There have been no active WebSocket connections for 10 minutes"
+          
+      - alert: WebSocketConnectionSpike
+        expr: rate(orchestrator_websocket_connections_total[1m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "Spike in WebSocket connections detected"
+          description: "Connection rate is {{ $value | humanize }}/sec (threshold: 10/sec)"

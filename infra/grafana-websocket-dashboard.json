@@ -1,0 +1,316 @@
+{
+  "dashboard": {
+    "title": "WebSocket Connection Health",
+    "tags": ["websocket", "collaboration", "health"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active WebSocket Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "orchestrator_websocket_connections_total - orchestrator_websocket_disconnections_total",
+            "legendFormat": "Active Connections"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Connection Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_connections_total[5m])",
+            "legendFormat": "Connections/sec"
+          },
+          {
+            "expr": "rate(orchestrator_websocket_disconnections_total[5m])",
+            "legendFormat": "Disconnections/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Message Throughput",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_messages_in_total[1m])",
+            "legendFormat": "Messages In/sec"
+          },
+          {
+            "expr": "rate(orchestrator_websocket_messages_out_total[1m])",
+            "legendFormat": "Messages Out/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Message Delivery Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_messages_out_total[5m]) / (rate(orchestrator_websocket_messages_out_total[5m]) + rate(orchestrator_websocket_message_failures_total[5m]))",
+            "legendFormat": "Delivery Rate (Calculated)"
+          },
+          {
+            "expr": "orchestrator_websocket_message_delivery_rate",
+            "legendFormat": "Delivery Rate (Reported)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "min": 0,
+            "max": 1
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 5,
+        "title": "Message Latency (Percentiles)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(orchestrator_websocket_message_latency_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.90, rate(orchestrator_websocket_message_latency_bucket[5m]))",
+            "legendFormat": "p90"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(orchestrator_websocket_message_latency_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(orchestrator_websocket_message_latency_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+      },
+      {
+        "id": 6,
+        "title": "Reconnection Frequency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_reconnections_total[5m])",
+            "legendFormat": "Reconnections/sec"
+          },
+          {
+            "expr": "increase(orchestrator_websocket_reconnections_total[1h])",
+            "legendFormat": "Reconnections/hour"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+      },
+      {
+        "id": 7,
+        "title": "HTTP Polling Fallback Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_fallback_http_total[5m])",
+            "legendFormat": "Fallback Events/sec"
+          },
+          {
+            "expr": "increase(orchestrator_websocket_fallback_http_total[1h])",
+            "legendFormat": "Fallback Events/hour"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+      },
+      {
+        "id": 8,
+        "title": "Message Failures",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_message_failures_total[5m])",
+            "legendFormat": "Failures/sec"
+          },
+          {
+            "expr": "increase(orchestrator_websocket_message_failures_total[1h])",
+            "legendFormat": "Failures/hour"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
+      },
+      {
+        "id": 9,
+        "title": "Connection Quality Score",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "orchestrator_websocket_connection_quality",
+            "legendFormat": "Quality Score"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 50, "color": "yellow" },
+                { "value": 80, "color": "green" }
+              ]
+            },
+            "unit": "none"
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 32 }
+      },
+      {
+        "id": 10,
+        "title": "Average Message Latency",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(orchestrator_websocket_message_latency_sum[5m]) / rate(orchestrator_websocket_message_latency_count[5m])",
+            "legendFormat": "Avg Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 100, "color": "yellow" },
+                { "value": 500, "color": "red" }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 32 }
+      },
+      {
+        "id": 11,
+        "title": "Total Reconnections",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "orchestrator_websocket_reconnections_total",
+            "legendFormat": "Total"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "none",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 10, "color": "yellow" },
+                { "value": 50, "color": "red" }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 32 }
+      },
+      {
+        "id": 12,
+        "title": "Active Connections by Run",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "orchestrator_websocket_connections_total - orchestrator_websocket_disconnections_total",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 32 }
+      },
+      {
+        "id": 13,
+        "title": "Connection Health Status Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "count(orchestrator_websocket_connection_quality >= 80)",
+            "legendFormat": "Healthy (>=80)"
+          },
+          {
+            "expr": "count(orchestrator_websocket_connection_quality >= 50 < 80)",
+            "legendFormat": "Degraded (50-79)"
+          },
+          {
+            "expr": "count(orchestrator_websocket_connection_quality < 50)",
+            "legendFormat": "Unhealthy (<50)"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 }
+      },
+      {
+        "id": 14,
+        "title": "Message Delivery Rate Over Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "orchestrator_websocket_message_delivery_rate",
+            "legendFormat": "Delivery Rate"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "min": 0,
+            "max": 1
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [0.95],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "Low Message Delivery Rate",
+          "noDataState": "no_data",
+          "notifications": []
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 }
+      }
+    ],
+    "refresh": "5s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "schemaVersion": 36
+  }
+}

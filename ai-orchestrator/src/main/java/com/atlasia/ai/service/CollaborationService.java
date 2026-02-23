@@ -1,8 +1,10 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.CollaborationEventEntity;
+import com.atlasia.ai.model.PersistedCollaborationMessage;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.persistence.CollaborationEventRepository;
+import com.atlasia.ai.persistence.PersistedCollaborationMessageRepository;
 import com.atlasia.ai.persistence.RunRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,30 +15,38 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class CollaborationService {
 
     private final CollaborationEventRepository eventRepository;
+    private final PersistedCollaborationMessageRepository messageRepository;
     private final RunRepository runRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
+    private final WebSocketConnectionMonitor connectionMonitor;
     
-    // Track active users per run for presence
     private final Map<UUID, Set<String>> activeUsers = new ConcurrentHashMap<>();
-    
-    // Track cursor positions: runId -> userId -> nodeId
     private final Map<UUID, Map<String, String>> cursorPositions = new ConcurrentHashMap<>();
+    private final Map<UUID, AtomicLong> sequenceCounters = new ConcurrentHashMap<>();
+    
+    private static final int MAX_PERSISTED_MESSAGES_PER_RUN = 1000;
+    private static final Set<String> CRITICAL_EVENT_TYPES = Set.of("GRAFT", "PRUNE", "FLAG");
 
     public CollaborationService(
             CollaborationEventRepository eventRepository,
+            PersistedCollaborationMessageRepository messageRepository,
             RunRepository runRepository,
             SimpMessagingTemplate messagingTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            WebSocketConnectionMonitor connectionMonitor) {
         this.eventRepository = eventRepository;
+        this.messageRepository = messageRepository;
         this.runRepository = runRepository;
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
+        this.connectionMonitor = connectionMonitor;
     }
 
     @Transactional
@@ -120,6 +130,38 @@ public class CollaborationService {
         broadcastEvent(runId, "CURSOR_MOVE", userId, cursorData);
     }
 
+    public void handlePing(UUID runId, String userId, String sessionId, Long clientTimestamp) {
+        long serverTimestamp = System.currentTimeMillis();
+        
+        Map<String, Object> pongData = new HashMap<>();
+        pongData.put("clientTimestamp", clientTimestamp);
+        pongData.put("serverTimestamp", serverTimestamp);
+        
+        messagingTemplate.convertAndSend(
+            "/topic/runs/" + runId + "/collaboration", 
+            createPongMessage(userId, clientTimestamp, serverTimestamp)
+        );
+        
+        if (clientTimestamp != null) {
+            long latency = serverTimestamp - clientTimestamp;
+            connectionMonitor.recordMessageLatency(sessionId, latency);
+        }
+    }
+
+    private Map<String, Object> createPongMessage(String userId, Long clientTimestamp, long serverTimestamp) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("eventType", "PONG");
+        message.put("userId", userId);
+        message.put("timestamp", serverTimestamp);
+        
+        Map<String, Object> data = new HashMap<>();
+        data.put("clientTimestamp", clientTimestamp);
+        data.put("serverTimestamp", serverTimestamp);
+        message.put("data", data);
+        
+        return message;
+    }
+
     public List<CollaborationEventEntity> getRecentEvents(UUID runId, int limit) {
         return eventRepository.findTop100ByRunIdOrderByTimestampDesc(runId)
                 .stream()
@@ -139,10 +181,57 @@ public class CollaborationService {
         Map<String, Object> message = new HashMap<>();
         message.put("eventType", eventType);
         message.put("userId", userId);
-        message.put("timestamp", Instant.now().toEpochMilli());
+        Instant now = Instant.now();
+        message.put("timestamp", now.toEpochMilli());
         message.put("data", data);
 
+        long sequenceNumber = getNextSequenceNumber(runId);
+        message.put("sequenceNumber", sequenceNumber);
+
+        boolean isCritical = CRITICAL_EVENT_TYPES.contains(eventType);
+        if (isCritical) {
+            persistMessage(runId, userId, eventType, data, now, sequenceNumber, true);
+        }
+
         messagingTemplate.convertAndSend("/topic/runs/" + runId + "/collaboration", message);
+    }
+    
+    private long getNextSequenceNumber(UUID runId) {
+        return sequenceCounters.computeIfAbsent(runId, k -> {
+            Long maxSeq = messageRepository.findMaxSequenceNumberByRunId(runId);
+            return new AtomicLong(maxSeq != null ? maxSeq : 0L);
+        }).incrementAndGet();
+    }
+    
+    private void persistMessage(UUID runId, String userId, String eventType, 
+                               Map<String, Object> data, Instant timestamp, 
+                               long sequenceNumber, boolean isCritical) {
+        String messageData = serializeEventData(data);
+        PersistedCollaborationMessage message = new PersistedCollaborationMessage(
+            runId, userId, eventType, messageData, timestamp, sequenceNumber, isCritical
+        );
+        messageRepository.save(message);
+        
+        cleanupOldMessages(runId);
+    }
+    
+    private void cleanupOldMessages(UUID runId) {
+        List<PersistedCollaborationMessage> messages = 
+            messageRepository.findByRunIdOrderBySequenceNumberDesc(runId);
+        if (messages.size() > MAX_PERSISTED_MESSAGES_PER_RUN) {
+            messageRepository.deleteOldMessagesKeepingLatest(runId, MAX_PERSISTED_MESSAGES_PER_RUN);
+        }
+    }
+    
+    public List<PersistedCollaborationMessage> getPersistedMessages(UUID runId, Long afterSequence) {
+        if (afterSequence == null) {
+            return messageRepository.findByRunIdOrderBySequenceNumberDesc(runId);
+        }
+        return messageRepository.findByRunIdAfterSequence(runId, afterSequence);
+    }
+    
+    public List<PersistedCollaborationMessage> getCriticalMessages(UUID runId) {
+        return messageRepository.findCriticalMessagesByRunId(runId);
     }
 
     private void applyGraftToRun(UUID runId, Map<String, Object> graftData) {

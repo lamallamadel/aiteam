@@ -27,6 +27,14 @@ export class WorkflowStreamStore {
   readonly activeUsers = signal<string[]>([]);
   readonly cursorPositions = signal<Map<string, string>>(new Map());
   readonly isCollaborationConnected = signal<boolean>(false);
+  readonly connectionHealth = signal<{
+    latency: number;
+    reconnectionCount: number;
+    messageDeliveryRate: number;
+    isHealthy: boolean;
+  }>({ latency: 0, reconnectionCount: 0, messageDeliveryRate: 1.0, isHealthy: false });
+  readonly queuedMessageCount = signal<number>(0);
+  readonly usingFallback = signal<boolean>(false);
 
   // Computed signals
   readonly stepTimeline = computed(() =>
@@ -85,6 +93,17 @@ export class WorkflowStreamStore {
     this.collaborationService.connected$.subscribe(connected => {
       this.isCollaborationConnected.set(connected);
     });
+
+    // Subscribe to health metrics
+    this.collaborationService.health$.subscribe(health => {
+      this.connectionHealth.set(health);
+    });
+
+    // Poll queue and fallback status
+    setInterval(() => {
+      this.queuedMessageCount.set(this.collaborationService.getQueuedMessageCount());
+      this.usingFallback.set(this.collaborationService.isUsingFallback());
+    }, 1000);
   }
 
   connectToRun(runId: string, enableCollaboration: boolean = true): void {

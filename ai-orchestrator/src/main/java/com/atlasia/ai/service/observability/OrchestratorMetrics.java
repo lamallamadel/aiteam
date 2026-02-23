@@ -276,6 +276,48 @@ public class OrchestratorMetrics {
         this.graftDuration = Timer.builder("orchestrator.graft.duration")
                 .description("Duration of graft executions")
                 .register(meterRegistry);
+
+        this.websocketConnectionsTotal = Counter.builder("orchestrator.websocket.connections.total")
+                .description("Total number of WebSocket connections established")
+                .register(meterRegistry);
+
+        this.websocketDisconnectionsTotal = Counter.builder("orchestrator.websocket.disconnections.total")
+                .description("Total number of WebSocket disconnections")
+                .register(meterRegistry);
+
+        this.websocketReconnectionsTotal = Counter.builder("orchestrator.websocket.reconnections.total")
+                .description("Total number of WebSocket reconnection attempts")
+                .register(meterRegistry);
+
+        this.websocketMessagesInTotal = Counter.builder("orchestrator.websocket.messages.in.total")
+                .description("Total number of incoming WebSocket messages")
+                .register(meterRegistry);
+
+        this.websocketMessagesOutTotal = Counter.builder("orchestrator.websocket.messages.out.total")
+                .description("Total number of outgoing WebSocket messages")
+                .register(meterRegistry);
+
+        this.websocketMessageFailuresTotal = Counter.builder("orchestrator.websocket.message.failures.total")
+                .description("Total number of failed message deliveries")
+                .register(meterRegistry);
+
+        this.websocketMessageLatency = Timer.builder("orchestrator.websocket.message.latency")
+                .description("WebSocket message round-trip latency")
+                .register(meterRegistry);
+
+        this.websocketFallbackToHttpTotal = Counter.builder("orchestrator.websocket.fallback.http.total")
+                .description("Total number of fallbacks to HTTP polling")
+                .register(meterRegistry);
+
+        this.websocketConnectionQuality = DistributionSummary.builder("orchestrator.websocket.connection.quality")
+                .description("WebSocket connection quality score (0-100)")
+                .baseUnit("score")
+                .register(meterRegistry);
+
+        this.websocketMessageDeliveryRate = DistributionSummary.builder("orchestrator.websocket.message.delivery.rate")
+                .description("WebSocket message delivery success rate (0-1)")
+                .baseUnit("rate")
+                .register(meterRegistry);
     }
 
     public void recordGitHubApiCall(String endpoint, long duration) {
@@ -512,5 +554,56 @@ public class OrchestratorMetrics {
 
     public Timer getGraftDuration() {
         return graftDuration;
+    }
+
+    private final Counter websocketConnectionsTotal;
+    private final Counter websocketDisconnectionsTotal;
+    private final Counter websocketReconnectionsTotal;
+    private final Counter websocketMessagesInTotal;
+    private final Counter websocketMessagesOutTotal;
+    private final Counter websocketMessageFailuresTotal;
+    private final Timer websocketMessageLatency;
+    private final Counter websocketFallbackToHttpTotal;
+    private final DistributionSummary websocketConnectionQuality;
+    private final DistributionSummary websocketMessageDeliveryRate;
+
+    public void recordWebSocketConnection() {
+        websocketConnectionsTotal.increment();
+    }
+
+    public void recordWebSocketDisconnection() {
+        websocketDisconnectionsTotal.increment();
+    }
+
+    public void recordWebSocketReconnection() {
+        websocketReconnectionsTotal.increment();
+    }
+
+    public void recordWebSocketMessageIn() {
+        websocketMessagesInTotal.increment();
+    }
+
+    public void recordWebSocketMessageOut() {
+        websocketMessagesOutTotal.increment();
+    }
+
+    public void recordWebSocketMessageFailure() {
+        websocketMessageFailuresTotal.increment();
+    }
+
+    public void recordWebSocketMessageLatency(long latencyMs) {
+        websocketMessageLatency.record(latencyMs, TimeUnit.MILLISECONDS);
+    }
+
+    public void recordWebSocketFallbackToHttp() {
+        websocketFallbackToHttpTotal.increment();
+    }
+
+    public void recordWebSocketConnectionQuality(double quality) {
+        websocketConnectionQuality.record(quality);
+    }
+
+    public void recordWebSocketMessageDeliveryRate(double rate) {
+        websocketMessageDeliveryRate.record(rate);
     }
 }

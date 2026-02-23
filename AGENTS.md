@@ -37,6 +37,9 @@ Real-time WebSocket-based collaboration for workflow runs:
 - **WebSocket Endpoint**: `/ws/runs/{runId}/collaboration` (STOMP over SockJS)
 - **Features**: Live graft/prune/flag mutations, presence indicators, cursor tracking, operational transformation
 - **Audit**: All events stored in `collaboration_events` table with full history
+- **Health Monitoring**: Connection quality metrics (latency, reconnections, delivery rate), Prometheus/Grafana dashboards
+- **Resilience**: Client-side message queuing, automatic HTTP polling fallback, server-side message persistence
+- **Admin API**: `/api/admin/websocket/*` endpoints for monitoring active connections and metrics
 - **Docs**: See `docs/COLLABORATION.md` and `docs/COLLABORATION_EXAMPLES.md`
 
 ## Code Style
