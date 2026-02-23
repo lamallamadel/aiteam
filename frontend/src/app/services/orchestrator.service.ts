@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus, PendingInterrupt, InterruptDecisionRequest } from '../models/orchestrator.model';
 import { CollaborationEventEntity } from '../models/collaboration.model';
 
 export interface OversightInterruptRule {
@@ -141,5 +141,13 @@ export class OrchestratorService {
 
     getAvailableGraftAgents(): Observable<string[]> {
         return this.http.get<string[]>('/api/grafts/agents');
+    }
+
+    getPendingInterrupts(): Observable<PendingInterrupt[]> {
+        return this.http.get<PendingInterrupt[]>('/api/oversight/interrupts/pending');
+    }
+
+    resolveInterrupt(runId: string, request: InterruptDecisionRequest): Observable<void> {
+        return this.http.post<void>(`/api/oversight/runs/${runId}/interrupt-decision`, request);
     }
 }

@@ -194,3 +194,18 @@ export interface AIPreferences {
     oversightRules: string[];
     systemInstructions: string | null;
 }
+
+export interface PendingInterrupt {
+    runId: string;
+    agentName: string;
+    ruleName: string;
+    tier: string;
+    message: string;
+    createdAt: string;
+}
+
+export interface InterruptDecisionRequest {
+    decision: string;
+    decidedBy: string;
+    reason: string;
+}
