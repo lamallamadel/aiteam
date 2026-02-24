@@ -59,3 +59,10 @@ bootstrap-secrets.yml
 # File upload artifacts
 /app/artifacts/
 artifacts/
+
+# Trivy security scanning
+trivy-cache/
+*.sarif
+trivy-results.json
+trivy-results.txt
+security-reports/

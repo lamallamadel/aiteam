@@ -53,6 +53,15 @@ Real-time WebSocket-based collaboration for workflow runs:
 - **Admin API**: `/api/admin/websocket/*` endpoints for monitoring active connections and metrics
 - **Docs**: See `docs/COLLABORATION.md` and `docs/COLLABORATION_EXAMPLES.md`
 
+## Container Security
+- **Trivy Scanning**: Automated vulnerability scanning in CI/CD pipeline
+- **Non-root Users**: All containers run as unprivileged users
+- **Runtime Hardening**: Read-only filesystems, dropped capabilities, resource limits
+- **Build-time Checks**: Secrets detection, misconfiguration scanning
+- **Deployment Blocking**: CRITICAL vulnerabilities prevent deployment
+- **Config**: `infra/trivy-config.yaml` for suppression rules
+- **Docs**: See `docs/CONTAINER_SECURITY.md` for detailed security hardening guide
+
 ## Code Style
 - Java: Package structure `com.atlasia.ai.{controller,model,persistence,api,config}`
 - No secrets/tokens committed; bearer token auth for `/runs` endpoint

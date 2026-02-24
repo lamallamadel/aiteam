@@ -1,0 +1,96 @@
+name: Container Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan-backend:
+    name: Scan AI Orchestrator Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend Docker image
+        run: |
+          cd ai-orchestrator
+          docker build -t ai-orchestrator:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ai-orchestrator:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-backend-results.sarif'
+          category: 'container-backend'
+
+      - name: Run Trivy for blocking on CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ai-orchestrator:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+
+  scan-frontend:
+    name: Scan Frontend Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build frontend Docker image
+        run: |
+          cd frontend
+          docker build -t frontend:${{ github.sha }} .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: frontend:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-frontend-results.sarif'
+          category: 'container-frontend'
+
+      - name: Run Trivy for blocking on CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: frontend:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'

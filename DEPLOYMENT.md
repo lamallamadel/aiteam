@@ -303,6 +303,9 @@ sudo systemctl enable certbot.timer
 - [ ] Enable database backups (daily)
 - [ ] Monitor logs for suspicious activity
 - [ ] Keep Docker/system packages updated
+- [ ] Enable user namespace remapping (see Container Security)
+- [ ] Review Trivy scan results regularly
+- [ ] Verify containers run as non-root users
 
 ### Firewall Rules
 
@@ -313,6 +316,392 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw enable
 ```
+
+---
+
+## 🛡️ Container Security Hardening
+
+### Overview
+
+Atlasia implements defense-in-depth container security using:
+- **Trivy vulnerability scanning** - Automated scanning for OS and library vulnerabilities
+- **Non-root users** - All containers run as unprivileged users
+- **Minimal images** - Alpine-based images with unnecessary packages removed
+- **Runtime restrictions** - Read-only filesystems, dropped capabilities, resource limits
+- **User namespace remapping** - Host-level isolation (optional but recommended)
+
+### Vulnerability Scanning with Trivy
+
+#### Automated Scanning
+
+Trivy scans run automatically in the CI/CD pipeline:
+- **On every PR and push** to main/develop branches
+- **Daily at 2 AM UTC** for continuous monitoring
+- **Blocks deployment** on CRITICAL vulnerabilities
+
+```bash
+# View scan results in GitHub Security tab
+# Settings > Security > Code scanning alerts
+```
+
+#### Manual Scanning
+
+Run Trivy locally before committing:
+
+```bash
+# Scan backend image
+docker build -t ai-orchestrator:test ./ai-orchestrator
+trivy image --config infra/trivy-config.yaml ai-orchestrator:test
+
+# Scan frontend image
+docker build -t frontend:test ./frontend
+trivy image --config infra/trivy-config.yaml frontend:test
+
+# Scan for HIGH and CRITICAL only
+trivy image --severity HIGH,CRITICAL ai-orchestrator:test
+
+# Generate SARIF report for GitHub
+trivy image --format sarif --output results.sarif ai-orchestrator:test
+```
+
+#### Trivy Configuration
+
+Configuration file: `infra/trivy-config.yaml`
+
+Key settings:
+- **Severity threshold**: HIGH and CRITICAL vulnerabilities reported
+- **Blocking**: CRITICAL vulnerabilities fail the build
+- **Scanners**: OS packages, libraries, secrets, misconfigurations
+- **Auto-update**: Vulnerability database refreshed before each scan
+- **Suppression rules**: Documented exceptions for accepted risks
+
+#### Managing Vulnerability Exceptions
+
+Add suppression rules in `infra/trivy-config.yaml`:
+
+```yaml
+vulnerability:
+  ignore:
+    CVE-2024-12345:
+      - package-name: "example-package"
+        reason: "No fix available, mitigated by network isolation"
+        expiry: "2025-12-31"  # Mandatory expiry date
+```
+
+**Requirements for suppressions:**
+- Document business justification
+- Set expiry date for review
+- Requires CTO approval for CRITICAL CVEs
+- Review quarterly during security audit
+
+### Container Image Hardening
+
+#### Non-Root Users
+
+All containers run as non-root users:
+
+**Backend (ai-orchestrator):**
+```dockerfile
+USER appuser  # UID 1000, GID 1000
+```
+
+**Frontend (nginx):**
+```dockerfile
+USER nginx  # UID 101, GID 101
+```
+
+**Database (postgres):**
+```dockerfile
+USER postgres  # UID 999, GID 999
+```
+
+Verify:
+```bash
+docker-compose -f infra/docker-compose.ai.yml exec ai-orchestrator id
+# Expected: uid=1000(appuser) gid=1000(appgroup)
+```
+
+#### Minimal Image Size
+
+Images use Alpine Linux with unnecessary packages removed:
+
+```dockerfile
+# Remove package manager after installation
+RUN apk del --purge apk-tools && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+```
+
+**Image sizes:**
+- `ai-orchestrator`: ~250MB (JRE + application)
+- `frontend`: ~45MB (nginx + static files)
+- `postgres`: ~240MB (official image)
+
+### Runtime Security
+
+#### Read-Only Filesystems
+
+Containers run with read-only root filesystems where possible:
+
+```yaml
+read_only: true
+tmpfs:
+  - /tmp:noexec,nosuid,size=100m
+  - /app/logs:noexec,nosuid,size=500m
+```
+
+**Benefits:**
+- Prevents malware from writing to filesystem
+- Stops unauthorized file modifications
+- Limits exploit persistence
+
+**Writable tmpfs volumes:**
+- `/tmp` - Temporary files (100MB limit)
+- `/app/logs` - Application logs (500MB limit)
+- Both mounted with `noexec` (prevents script execution)
+
+#### Dropped Capabilities
+
+All unnecessary Linux capabilities are dropped:
+
+```yaml
+cap_drop:
+  - ALL  # Drop all capabilities
+cap_add:
+  - NET_BIND_SERVICE  # Only add what's needed (bind to port 80/8080)
+```
+
+**Database capabilities** (minimal set):
+```yaml
+cap_add:
+  - CHOWN          # Change file ownership
+  - DAC_OVERRIDE   # Bypass file permission checks
+  - FOWNER         # Bypass ownership checks
+  - SETGID         # Set group ID
+  - SETUID         # Set user ID
+```
+
+Verify capabilities:
+```bash
+docker inspect atlasia-vault | grep -A 10 "CapAdd"
+```
+
+#### Security Options
+
+Additional security hardening:
+
+```yaml
+security_opt:
+  - no-new-privileges:true  # Prevent privilege escalation
+```
+
+**no-new-privileges:**
+- Blocks setuid/setgid binaries
+- Prevents gaining additional privileges via execve()
+- Mitigates container breakout attempts
+
+#### Resource Limits
+
+CPU and memory limits prevent DoS attacks:
+
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '2.0'      # Max 2 CPU cores
+      memory: 2G       # Max 2GB RAM
+    reservations:
+      cpus: '0.5'      # Guaranteed 0.5 CPU cores
+      memory: 512M     # Guaranteed 512MB RAM
+```
+
+**Per-service limits:**
+- **ai-orchestrator**: 2 CPU / 2GB RAM (max), 0.5 CPU / 512MB RAM (reserved)
+- **ai-db**: 2 CPU / 2GB RAM (max), 0.5 CPU / 256MB RAM (reserved)
+- **vault**: 1 CPU / 512MB RAM (max), 0.25 CPU / 128MB RAM (reserved)
+
+Monitor resource usage:
+```bash
+docker stats --no-stream
+```
+
+### User Namespace Remapping
+
+User namespace remapping provides host-level isolation by mapping container UIDs to unprivileged host UIDs.
+
+**Example:** Container root (UID 0) maps to host UID 100000, preventing container root from accessing host resources.
+
+#### Enable User Namespace Remapping
+
+1. **Edit Docker daemon configuration:**
+   ```bash
+   sudo nano /etc/docker/daemon.json
+   ```
+
+2. **Add configuration:**
+   ```json
+   {
+     "userns-remap": "default",
+     "log-driver": "json-file",
+     "log-opts": {
+       "max-size": "10m",
+       "max-file": "3"
+     }
+   }
+   ```
+
+3. **Restart Docker daemon:**
+   ```bash
+   sudo systemctl restart docker
+   ```
+
+4. **Verify remapping:**
+   ```bash
+   # Check subuid/subgid mappings
+   cat /etc/subuid
+   cat /etc/subgid
+   
+   # Run container and verify UID mapping
+   docker run --rm alpine id
+   # Container sees: uid=0(root)
+   
+   # Check from host
+   ps aux | grep [p]rocess-in-container
+   # Host sees: uid=100000
+   ```
+
+**Important notes:**
+- Existing volumes may need ownership updates
+- Not compatible with some Docker features (host networking, privileged mode)
+- Recommended for production but optional for development
+
+#### Volume Ownership After Remapping
+
+Update volume ownership to match remapped UIDs:
+
+```bash
+# Find remapped UID range
+grep dockremap /etc/subuid
+# Output: dockremap:100000:65536
+
+# Update PostgreSQL volume
+sudo chown -R 100999:100999 /var/lib/docker/volumes/ai_db/_data
+
+# Update Vault volume
+sudo chown -R 100100:100100 /var/lib/docker/volumes/vault_data/_data
+```
+
+### Security Monitoring
+
+#### Check Container Security Status
+
+```bash
+# Verify non-root users
+for svc in ai-orchestrator ai-db vault; do
+  echo "=== $svc ==="
+  docker-compose -f infra/docker-compose.ai.yml exec $svc id
+done
+
+# Check capabilities
+docker inspect $(docker ps -qf "name=ai-orchestrator") | \
+  jq '.[0].HostConfig.CapDrop, .[0].HostConfig.CapAdd'
+
+# Verify read-only filesystem
+docker inspect $(docker ps -qf "name=ai-orchestrator") | \
+  jq '.[0].HostConfig.ReadonlyRootfs'
+
+# Check resource limits
+docker stats --no-stream --format \
+  "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
+```
+
+#### Scan Running Containers
+
+```bash
+# Scan running container for vulnerabilities
+trivy image $(docker inspect --format='{{.Image}}' atlasia-ai-orchestrator)
+
+# Scan for secrets in running container
+trivy image --scanners secret $(docker inspect --format='{{.Image}}' atlasia-ai-orchestrator)
+```
+
+#### Security Audit Checklist
+
+Run quarterly:
+
+- [ ] Review Trivy scan results in GitHub Security tab
+- [ ] Update suppression rules (remove expired exceptions)
+- [ ] Verify all containers run as non-root (`docker exec <container> id`)
+- [ ] Check for unnecessary capabilities (`docker inspect | grep Cap`)
+- [ ] Review resource usage and adjust limits if needed
+- [ ] Update base images (Alpine, JRE, nginx, postgres)
+- [ ] Test user namespace remapping in staging
+- [ ] Audit secrets in images (`trivy image --scanners secret`)
+- [ ] Review and update `infra/trivy-config.yaml`
+- [ ] Document any new suppression rules
+
+### Incident Response
+
+**If CRITICAL vulnerability detected:**
+
+1. **Assess impact:**
+   ```bash
+   # Check affected images
+   trivy image --severity CRITICAL ai-orchestrator:latest
+   ```
+
+2. **Immediate mitigation:**
+   - Check if suppression is acceptable (network isolation, etc.)
+   - If not, take containers offline until patched
+
+3. **Remediation:**
+   ```bash
+   # Update base image in Dockerfile
+   # FROM eclipse-temurin:17.0.X-jre-alpine  # New version
+   
+   # Rebuild and test
+   docker-compose -f infra/docker-compose.ai.yml build
+   trivy image ai-orchestrator:latest
+   
+   # Deploy fix
+   docker-compose -f infra/docker-compose.ai.yml up -d
+   ```
+
+4. **Verification:**
+   ```bash
+   # Confirm vulnerability resolved
+   trivy image --severity CRITICAL ai-orchestrator:latest
+   # Expected: No vulnerabilities found
+   ```
+
+5. **Documentation:**
+   - Update CHANGELOG.md
+   - Notify stakeholders
+   - Document in incident log
+
+### Best Practices Summary
+
+✅ **DO:**
+- Run Trivy scans before every deployment
+- Keep base images updated (alpine, temurin, nginx, postgres)
+- Review GitHub Security alerts weekly
+- Document all vulnerability suppressions with expiry dates
+- Use read-only filesystems where possible
+- Drop all capabilities except required ones
+- Set resource limits on all services
+- Enable user namespace remapping in production
+- Rotate secrets quarterly
+- Monitor resource usage regularly
+
+❌ **DON'T:**
+- Suppress CRITICAL vulnerabilities without CTO approval
+- Run containers as root user
+- Use `:latest` tags in production
+- Ignore HIGH severity vulnerabilities for >30 days
+- Add unnecessary capabilities
+- Disable security features for convenience
+- Share credentials between environments
+- Commit secrets to git
+- Skip Trivy scans to speed up deployment
 
 ---
 
@@ -349,8 +738,11 @@ Before going live:
 - [ ] SSL certificate installed (/etc/letsencrypt/live/domain/)
 - [ ] GitHub Actions workflow passing (build-and-push.yml)
 - [ ] Images pushed to GHCR
+- [ ] Trivy security scans passing (no CRITICAL vulnerabilities)
+- [ ] Container security verified (run `scripts/security-check.sh`)
 - [ ] Server specs confirmed (2+ vCPU, 4+ GB RAM)
 - [ ] Docker & Docker Compose installed
+- [ ] User namespace remapping enabled (production only)
 - [ ] Firewall configured (80/443 open)
 - [ ] Backup strategy in place
 - [ ] Monitoring/logs accessible
@@ -367,6 +759,9 @@ Before going live:
 - [PostgreSQL Backups](https://www.postgresql.org/docs/16/backup-dump.html)
 - [nginx Best Practices](https://nginx.org/en/docs/)
 - [Docker Security Best Practices](https://docs.docker.com/engine/security/)
+- [Container Security Hardening Guide](docs/CONTAINER_SECURITY.md) - Atlasia-specific security documentation
+- [Trivy Security Scanner](https://aquasecurity.github.io/trivy/)
+- [NIST Container Security Guidelines](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-190.pdf)
 
 ---
 

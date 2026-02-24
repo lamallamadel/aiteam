@@ -19,6 +19,10 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
+# Remove unnecessary packages to minimize attack surface
+RUN apk del --purge apk-tools && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+
 # Create non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 

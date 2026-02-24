@@ -52,9 +52,86 @@ jobs:
           cd frontend
           npm test -- --watch=false
 
-  e2e:
+  container-scan:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build backend Docker image
+        run: |
+          cd ai-orchestrator
+          docker build -t ai-orchestrator:${{ github.sha }} .
+      
+      - name: Build frontend Docker image
+        run: |
+          cd frontend
+          docker build -t frontend:${{ github.sha }} .
+      
+      - name: Run Trivy on backend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ai-orchestrator:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+      
+      - name: Upload backend Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-backend-results.sarif'
+          category: 'container-backend'
+      
+      - name: Run Trivy on frontend image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: frontend:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+      
+      - name: Upload frontend Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-frontend-results.sarif'
+          category: 'container-frontend'
+      
+      - name: Block on CRITICAL vulnerabilities (backend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ai-orchestrator:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+      
+      - name: Block on CRITICAL vulnerabilities (frontend)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: frontend:${{ github.sha }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL'
+          vuln-type: 'os,library'
+          scanners: 'vuln,secret,misconfig'
+          trivy-config: 'infra/trivy-config.yaml'
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend, container-scan]
     if: github.event_name == 'pull_request'
     defaults:
       run:

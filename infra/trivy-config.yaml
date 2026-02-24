@@ -1,0 +1,138 @@
+# Trivy Configuration for Atlasia Container Security Scanning
+# Defines vulnerability database update policy, severity thresholds, and suppression rules
+
+# Vulnerability Database Configuration
+db:
+  # Auto-update vulnerability database before each scan
+  auto-refresh: true
+  # Repository for vulnerability database
+  repository: "ghcr.io/aquasecurity/trivy-db"
+
+# Scan Configuration
+scan:
+  # Security checks to enable
+  security-checks:
+    - vuln      # Vulnerabilities in OS packages and application dependencies
+    - secret    # Secrets and sensitive data in images
+    - config    # Misconfigurations (e.g., exposed ports, insecure settings)
+  
+  # Types of vulnerabilities to scan
+  vuln-type:
+    - os        # Operating system packages
+    - library   # Application libraries and dependencies
+
+# Severity Configuration
+severity:
+  # Minimum severity level to report
+  # Options: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL
+  default: "HIGH"
+  
+  # Exit with error code on these severities (blocks CI/CD pipeline)
+  exit-on:
+    - CRITICAL
+
+# Vulnerability Suppression Rules
+# Define accepted risks and false positives that should be ignored
+vulnerability:
+  ignore:
+    # Example: Alpine package manager (apk) - known issue with no fix available
+    # CVE-2023-XXXXX:
+    #   - package-name: "apk-tools"
+    #     reason: "No fix available, mitigated by network isolation"
+    #     expiry: "2025-12-31"
+    
+    # PostgreSQL client library - development/test only
+    # CVE-2024-XXXXX:
+    #   - package-name: "postgresql-client"
+    #     reason: "Used only in development, not in production runtime"
+    #     expiry: "2025-06-30"
+
+  # Ignore unfixed vulnerabilities (no patch available yet)
+  ignore-unfixed: false
+  
+  # Skip vulnerability checks for specific files/paths
+  skip-files:
+    - "**/.git/**"
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/*.test.js"
+    - "**/*.spec.ts"
+
+# Secret Scanning Configuration
+secret:
+  # Skip secret detection in these paths
+  skip-paths:
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/*.test.js"
+    - "**/*.spec.ts"
+    - "**/node_modules/**"
+
+# Misconfiguration Scanning
+misconfig:
+  # Skip misconfiguration checks in these paths
+  skip-paths:
+    - "**/node_modules/**"
+    - "**/test/**"
+
+# Output Configuration
+output:
+  # Suppress progress output
+  quiet: false
+  
+  # Show debug information
+  debug: false
+  
+  # Output format (table, json, sarif, cyclonedx, spdx)
+  format: "table"
+
+# Timeout Configuration
+timeout:
+  # Timeout for scanning (in seconds)
+  scan: 300
+
+# Cache Configuration
+cache:
+  # Directory for caching vulnerability database
+  dir: "/tmp/trivy-cache"
+  
+  # TTL for cache (in hours)
+  ttl: 24
+
+# Registry Configuration (for private registries)
+registry:
+  # Skip certificate verification for private registries
+  insecure: false
+
+# Policy Configuration
+policy:
+  # Custom policy file path (Rego policies for advanced filtering)
+  # policy: "path/to/policy.rego"
+  
+  # Trace policy evaluation
+  trace: false
+
+# Platform-specific Configuration
+platform:
+  # Target platform for multi-platform images
+  # Examples: "linux/amd64", "linux/arm64"
+  # auto-detect if not specified
+  # platform: "linux/amd64"
+
+# Offline Mode
+# Use offline mode when vulnerability DB is pre-downloaded
+offline: false
+
+# Skip Update Check
+# Skip checking for Trivy updates
+skip-update: false
+
+# Additional Notes:
+# 1. Update suppression rules quarterly during security review
+# 2. All ignored CVEs must have documented business justification
+# 3. Expiry dates are mandatory for all suppressions
+# 4. CRITICAL vulnerabilities should never be suppressed without CTO approval
+# 5. Review and update this config file whenever:
+#    - New vulnerability classes emerge
+#    - Deployment architecture changes
+#    - Security policy updates

@@ -264,6 +264,64 @@ Vault metrics are exposed via the actuator endpoint when enabled:
 
 Monitor Vault health and secret access patterns using the provided Grafana dashboards.
 
+## Container Security
+
+### Trivy Configuration
+
+The `trivy-config.yaml` file defines security scanning policies for container images.
+
+**Key features:**
+- **Automated vulnerability scanning** for OS packages and application libraries
+- **Secrets detection** to prevent accidental credential exposure
+- **Misconfiguration checks** for Docker/Kubernetes security best practices
+- **Severity thresholds** with CRITICAL vulnerabilities blocking deployment
+- **Suppression rules** for documented accepted risks
+
+**Configuration file:** `infra/trivy-config.yaml`
+
+**Usage in CI/CD:**
+```bash
+# Scan backend image
+trivy image --config infra/trivy-config.yaml ai-orchestrator:latest
+
+# Scan frontend image
+trivy image --config infra/trivy-config.yaml frontend:latest
+```
+
+**Managing suppressions:**
+Add CVE exceptions with business justification and expiry date:
+```yaml
+vulnerability:
+  ignore:
+    CVE-2024-12345:
+      - package-name: "example-package"
+        reason: "No fix available, mitigated by network isolation"
+        expiry: "2025-12-31"
+```
+
+**Automated scanning:**
+- Runs on every PR and push to main/develop
+- Daily scheduled scan at 2 AM UTC
+- Results uploaded to GitHub Security tab
+- CRITICAL vulnerabilities block deployment
+
+For detailed container security documentation, see [docs/CONTAINER_SECURITY.md](../docs/CONTAINER_SECURITY.md).
+
+### Runtime Security (docker-compose.ai.yml)
+
+The Docker Compose configuration includes runtime security hardening:
+
+**Security features:**
+- **Non-root users**: All containers run as unprivileged users
+- **Read-only filesystems**: Prevents malware persistence
+- **Dropped capabilities**: Minimal Linux capabilities (CAP_DROP ALL)
+- **Resource limits**: CPU and memory limits prevent DoS
+- **Security options**: no-new-privileges prevents privilege escalation
+- **Tmpfs mounts**: Writable directories with noexec/nosuid flags
+
+**User namespace remapping** (optional but recommended for production):
+Configure Docker daemon to remap container UIDs to unprivileged host UIDs for additional isolation. See comments in `docker-compose.ai.yml` for setup instructions.
+
 ## Security Best Practices
 
 1. **Never commit secrets to version control**
@@ -276,6 +334,10 @@ Monitor Vault health and secret access patterns using the provided Grafana dashb
 8. **Backup Vault data** regularly
 9. **Monitor Vault access logs** for suspicious activity
 10. **Use separate Vault instances** for different environments
+11. **Run Trivy scans before deployment** to detect vulnerabilities
+12. **Review GitHub Security alerts weekly** for container issues
+13. **Enable user namespace remapping** in production Docker hosts
+14. **Keep base images updated** (Alpine, JRE, nginx, postgres)
 
 ## References
 
