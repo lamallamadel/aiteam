@@ -292,30 +292,342 @@ sudo systemctl enable certbot.timer
 
 ---
 
-## 🔐 Security Checklist
+## 🔐 Security Hardening
 
-- [ ] Change all default passwords in `.env.prod`
-- [ ] Store `.env.prod` in secure vault (not in Git)
-- [ ] Enable SSH key-based auth only (disable password)
-- [ ] Configure firewall (allow only 80/443)
-- [ ] Enable automatic SSL renewal (certbot)
-- [ ] Rotate secrets quarterly
-- [ ] Enable database backups (daily)
-- [ ] Monitor logs for suspicious activity
-- [ ] Keep Docker/system packages updated
-- [ ] Enable user namespace remapping (see Container Security)
-- [ ] Review Trivy scan results regularly
-- [ ] Verify containers run as non-root users
+### Pre-Deployment Security Steps
 
-### Firewall Rules
+Before deploying to production, complete the comprehensive security checklist in `docs/SECURITY_CHECKLIST.md`. Critical items include:
+
+#### 1. HashiCorp Vault Setup
+
+**CRITICAL**: All secrets must be stored in HashiCorp Vault, not in environment variables or config files.
+
+```bash
+# Start Vault in production mode (not dev mode)
+docker run -d --cap-add=IPC_LOCK --name=vault \
+  -p 8200:8200 \
+  -v /opt/vault/data:/vault/data \
+  -v /opt/vault/config:/vault/config \
+  hashicorp/vault:latest server
+
+# Initialize Vault (first time only)
+export VAULT_ADDR='http://localhost:8200'
+vault operator init -key-shares=5 -key-threshold=3
+
+# Save unseal keys and root token in separate secure locations
+# Distribute unseal keys to 5 different custodians
+
+# Unseal Vault (requires 3 of 5 keys)
+vault operator unseal <key1>
+vault operator unseal <key2>
+vault operator unseal <key3>
+
+# Initialize all secrets
+cd infra && chmod +x vault-init.sh && ./vault-init.sh
+
+# Enable audit logging
+vault audit enable file file_path=/var/log/vault/audit.log
+
+# Configure AppRole authentication (production)
+vault auth enable approle
+vault policy write atlasia-read - <<EOF
+path "secret/data/atlasia/*" {
+  capabilities = ["read", "list"]
+}
+EOF
+
+vault write auth/approle/role/atlasia-orchestrator \
+  token_policies="atlasia-read" \
+  token_ttl=1h \
+  bind_secret_id=true
+
+# Get role credentials
+ROLE_ID=$(vault read -field=role_id auth/approle/role/atlasia-orchestrator/role-id)
+SECRET_ID=$(vault write -field=secret_id -f auth/approle/role/atlasia-orchestrator/secret-id)
+```
+
+**Update `.env.prod` with Vault credentials:**
+```bash
+VAULT_ADDR=http://localhost:8200
+SPRING_CLOUD_VAULT_ENABLED=true
+SPRING_CLOUD_VAULT_AUTHENTICATION=APPROLE
+SPRING_CLOUD_VAULT_APP_ROLE_ROLE_ID=${ROLE_ID}
+SPRING_CLOUD_VAULT_APP_ROLE_SECRET_ID=${SECRET_ID}
+```
+
+See `docs/VAULT_SETUP.md` for complete Vault setup guide.
+
+#### 2. TLS/SSL Configuration
+
+**CRITICAL**: Enable TLS 1.3 for all services.
+
+```bash
+# Application Server TLS
+# Store keystore in Vault
+vault kv put secret/atlasia/ssl-keystore-path value=file:/etc/ssl/certs/keystore.p12
+vault kv put secret/atlasia/ssl-keystore-password value=$(openssl rand -base64 32)
+
+# Update application.yml
+cat >> ai-orchestrator/src/main/resources/application.yml <<EOF
+server:
+  ssl:
+    enabled: true
+    key-store: \${vault.secret.data.atlasia.ssl-keystore-path}
+    key-store-password: \${vault.secret.data.atlasia.ssl-keystore-password}
+    key-store-type: PKCS12
+    enabled-protocols: TLSv1.3
+    ciphers: TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256
+EOF
+
+# PostgreSQL TLS
+# Update docker-compose.prod.yml
+command: >
+  postgres
+  -c ssl=on
+  -c ssl_cert_file=/var/lib/postgresql/certs/server.crt
+  -c ssl_key_file=/var/lib/postgresql/certs/server.key
+  -c ssl_min_protocol_version=TLSv1.3
+```
+
+See `docs/SECURITY.md` for complete TLS setup guide.
+
+#### 3. Secret Rotation Schedule
+
+**CRITICAL**: Establish automated secret rotation.
+
+| Secret | Rotation Frequency | Automation |
+|--------|-------------------|------------|
+| JWT Signing Key | Monthly | SecretRotationScheduler |
+| Database Password | Quarterly | Manual |
+| OAuth2 Secrets | Quarterly | Manual (update in provider console) |
+| Encryption Key | Quarterly | Manual with re-encryption |
+| SSL Certificates | 30 days before expiry | certbot (automated) |
+
+```bash
+# Schedule monthly JWT rotation (runs automatically via @Scheduled)
+# Check logs: grep "JWT secret rotation" /var/log/ai-orchestrator/application.log
+
+# Rotate database password (quarterly)
+NEW_DB_PASS=$(openssl rand -base64 32)
+vault kv put secret/atlasia/db-password value="${NEW_DB_PASS}"
+# Update PostgreSQL: ALTER USER aiteam WITH PASSWORD '${NEW_DB_PASS}';
+# Restart application to pick up new password
+
+# Rotate encryption key (quarterly)
+cd ai-orchestrator
+mvn exec:java -Dexec.mainClass="com.atlasia.ai.migration.EncryptionKeyRotation"
+```
+
+#### 4. Container Security Hardening
+
+**CRITICAL**: Verify all container security controls are in place.
+
+```bash
+# Verify non-root users
+docker-compose -f docker-compose.prod.yml exec ai-orchestrator id
+# Expected: uid=1000(appuser) gid=1000(appgroup)
+
+# Verify read-only filesystem
+docker inspect $(docker ps -qf "name=ai-orchestrator") | jq '.[0].HostConfig.ReadonlyRootfs'
+# Expected: true
+
+# Verify dropped capabilities
+docker inspect $(docker ps -qf "name=ai-orchestrator") | jq '.[0].HostConfig.CapDrop'
+# Expected: ["ALL"]
+
+# Verify security options
+docker inspect $(docker ps -qf "name=ai-orchestrator") | jq '.[0].HostConfig.SecurityOpt'
+# Expected: ["no-new-privileges:true"]
+
+# Enable user namespace remapping (production only)
+sudo nano /etc/docker/daemon.json
+# Add: {"userns-remap": "default"}
+sudo systemctl restart docker
+```
+
+See `docs/CONTAINER_SECURITY.md` for complete container hardening guide.
+
+#### 5. Vulnerability Scanning
+
+**CRITICAL**: Scan all images before deployment.
+
+```bash
+# Scan backend image
+trivy image --config infra/trivy-config.yaml ghcr.io/your-org/ai-orchestrator:production
+# Expected: No CRITICAL vulnerabilities
+
+# Scan frontend image
+trivy image --config infra/trivy-config.yaml ghcr.io/your-org/frontend:production
+
+# Scan for secrets
+trivy image --scanners secret ghcr.io/your-org/ai-orchestrator:production
+# Expected: No secrets found
+
+# OWASP Dependency Check
+cd ai-orchestrator && mvn dependency-check:check
+# Expected: No HIGH/CRITICAL vulnerabilities
+
+# NPM Audit
+cd frontend && npm audit --audit-level=moderate
+# Expected: No vulnerabilities
+```
+
+#### 6. Network Security
+
+**CRITICAL**: Configure firewall and rate limiting.
 
 ```bash
 # Allow SSH, HTTP, HTTPS only
 sudo ufw allow 22/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw deny 5432/tcp  # Block PostgreSQL from internet
+sudo ufw deny 8200/tcp  # Block Vault from internet
 sudo ufw enable
+
+# Verify firewall status
+sudo ufw status verbose
+
+# Test external access (should fail)
+nmap -p 5432 your-public-ip  # PostgreSQL should be closed
+nmap -p 8200 your-public-ip  # Vault should be closed
 ```
+
+**Rate Limiting**: Configured in application (see `RateLimitService.java`)
+- Login attempts: Limited by BruteForceProtectionService (5 attempts → lockout)
+- File downloads: 10 requests per minute per user
+- WebSocket connections: Configurable limits per user
+- API endpoints: Configurable rate limits (future)
+
+#### 7. Audit Logging
+
+**CRITICAL**: Verify audit logging is enabled.
+
+```bash
+# Check database audit tables exist
+psql -U aiteam -d ai -c "SELECT tablename FROM pg_tables WHERE tablename LIKE '%audit%';"
+
+# Expected tables:
+# - auth_audit_logs
+# - collaboration_events
+# - (future: download_audit_logs)
+
+# Verify Vault audit logging
+cat /var/log/vault/audit.log | tail -n 10
+
+# Configure log retention (90 days minimum)
+# Update logrotate configuration
+sudo nano /etc/logrotate.d/ai-orchestrator
+```
+
+```
+/var/log/ai-orchestrator/*.log {
+    daily
+    rotate 90
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 appuser appgroup
+}
+```
+
+#### 8. Database Security
+
+**CRITICAL**: Enable database encryption and access controls.
+
+```bash
+# Enable column-level encryption
+# Verify encrypted columns in database
+psql -U aiteam -d ai -c "\d+ oauth2_accounts" | grep encrypted
+# Expected: access_token_encrypted, refresh_token_encrypted
+
+# Verify encryption key in Vault
+vault kv get secret/atlasia/encryption-key
+
+# Enable encrypted volume for database (optional but recommended)
+# AWS: Use EBS encryption
+# GCP: Use disk encryption
+# On-prem: Use LUKS
+sudo cryptsetup luksFormat /dev/sdb
+sudo cryptsetup luksOpen /dev/sdb postgres_encrypted
+sudo mkfs.ext4 /dev/mapper/postgres_encrypted
+sudo mount /dev/mapper/postgres_encrypted /var/lib/postgresql/data
+```
+
+See `docs/SECURITY.md` for database encryption guide.
+
+#### 9. Monitoring & Alerting
+
+**RECOMMENDED**: Set up security monitoring.
+
+```bash
+# Enable Prometheus metrics
+curl http://localhost:8080/actuator/prometheus | grep orchestrator_
+
+# Configure Grafana dashboards
+# Import: infra/grafana-websocket-dashboard.json
+
+# Set up alerting rules (example)
+cat > prometheus-alerts.yml <<EOF
+groups:
+  - name: security_alerts
+    rules:
+      - alert: HighAuthenticationFailureRate
+        expr: rate(orchestrator_auth_failures_total[5m]) > 10
+        for: 5m
+        annotations:
+          summary: "High authentication failure rate detected"
+      
+      - alert: UnauthorizedAccessAttempt
+        expr: rate(orchestrator_authorization_failures_total[5m]) > 5
+        for: 5m
+        annotations:
+          summary: "Unauthorized access attempts detected"
+EOF
+```
+
+#### 10. Incident Response Plan
+
+**CRITICAL**: Document incident response procedures.
+
+**Security Contact**: security@atlasia.ai
+
+**Incident Response Steps**:
+1. **Detect**: Monitor logs, alerts, user reports
+2. **Contain**: Isolate affected systems, revoke compromised credentials
+3. **Assess**: Determine scope, impact, and root cause
+4. **Remediate**: Fix vulnerability, rotate secrets, restore from backup
+5. **Notify**: Inform stakeholders per disclosure policy (90-day)
+6. **Document**: Update incident log and lessons learned
+7. **Review**: Update threat model and security controls
+
+See `SECURITY.md` (root level) for vulnerability reporting process.
+
+### Security Checklist (Quick Reference)
+
+- [ ] Vault configured with AppRole authentication
+- [ ] All secrets stored in Vault (no secrets in .env or config files)
+- [ ] TLS 1.3 enabled for application and database
+- [ ] SSL certificates valid and auto-renewal configured
+- [ ] Secret rotation schedule established
+- [ ] Trivy scan passing (no CRITICAL vulnerabilities)
+- [ ] OWASP Dependency-Check passing
+- [ ] NPM Audit passing
+- [ ] Containers run as non-root users
+- [ ] Read-only root filesystem enabled
+- [ ] Capabilities dropped (CAP_DROP ALL)
+- [ ] User namespace remapping enabled (production)
+- [ ] Firewall configured (only 22, 80, 443 open)
+- [ ] Database port not exposed to internet
+- [ ] Vault port not exposed to internet
+- [ ] Audit logging enabled (Vault, application, database)
+- [ ] Database encryption enabled (column-level, volume)
+- [ ] Backups encrypted and tested
+- [ ] Monitoring and alerting configured
+- [ ] Incident response plan documented
+
+**For complete checklist, see `docs/SECURITY_CHECKLIST.md`**
 
 ---
 
