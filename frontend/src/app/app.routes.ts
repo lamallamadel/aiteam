@@ -20,12 +20,16 @@ import { OAuth2CallbackComponent } from './components/oauth2-callback.component'
 import { UserProfileComponent } from './components/user-profile.component';
 import { LoginComponent } from './components/login.component';
 import { RegisterComponent } from './components/register.component';
+import { ForgotPasswordComponent } from './components/forgot-password.component';
+import { ResetPasswordComponent } from './components/reset-password.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
   { path: 'auth/login', component: LoginComponent },
   { path: 'auth/register', component: RegisterComponent },
+  { path: 'auth/forgot-password', component: ForgotPasswordComponent },
+  { path: 'auth/reset-password', component: ResetPasswordComponent },
   { path: 'auth/callback', component: OAuth2CallbackComponent },
   { path: 'onboarding', component: OnboardingFlowComponent },
   { path: 'chat', component: ChatDashboardComponent },

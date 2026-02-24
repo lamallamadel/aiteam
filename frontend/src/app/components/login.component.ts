@@ -44,6 +44,9 @@ import { ToastService } from '../services/toast.service';
               [disabled]="loading()"
               required
             />
+            <div class="forgot-password-link">
+              <a routerLink="/auth/forgot-password">Forgot password?</a>
+            </div>
           </div>
 
           @if (error()) {
@@ -181,6 +184,22 @@ import { ToastService } from '../services/toast.service';
     }
 
     .register-link a:hover {
+      text-decoration: underline;
+    }
+
+    .forgot-password-link {
+      text-align: right;
+      margin-top: 6px;
+    }
+
+    .forgot-password-link a {
+      color: #38bdf8;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .forgot-password-link a:hover {
       text-decoration: underline;
     }
 
