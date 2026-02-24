@@ -125,15 +125,48 @@ npm test
 - **Gems Navigation**: Sidebar integration for accessing specialized AI personas.
 - **Interactive Dialogue**: Direct chat with typing indicators and persona-specific branding.
 
+## Authentication
+
+### Features
+- **JWT Token Management**: Access and refresh token handling with automatic rotation
+- **OAuth2 Integration**: Support for GitHub, Google, and GitLab OAuth2 login
+- **Token Refresh**: Automatic token refresh on 401 responses with request retry
+- **CSRF Protection**: CSRF token handling for non-GET requests
+- **User Profile**: Display current user information with role badges
+
+### Components
+- **LoginComponent** (`/auth/login`) - Username/password and OAuth2 login
+- **RegisterComponent** (`/auth/register`) - User registration with validation
+- **OAuth2CallbackComponent** (`/auth/callback`) - OAuth2 callback handler
+- **UserProfileComponent** (`/profile`) - User profile display
+- **SettingsDashboardComponent** - OAuth2 integration buttons in Integrations tab
+
+### Services
+- **AuthService**: Login, logout, token management, user profile
+- **AuthInterceptor**: Automatic token attachment, 401 handling, token refresh
+
+### API Endpoints
+- `POST /api/auth/login` - User login with username/password
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - Logout user
+- `GET /api/auth/me` - Get current user profile
+- `GET /api/oauth2/authorize/{provider}` - Initiate OAuth2 flow
+
 ## Routing
 
 - `/` → Redirects to `/chat`
+- `/auth/login` → Login page
+- `/auth/register` → Registration page
+- `/auth/callback` → OAuth2 callback handler
+- `/profile` → User profile
 - `/chat` → Active run or new run creation
 - `/chat/gem/:persona` → Direct chat with a specific Gem
 - `/dashboard` → Dashboard home
 - `/runs` → Run list with filters
 - `/runs/:id` → Run detail view
 - `/analytics` → Analytics dashboard
+- `/settings` → Settings dashboard with OAuth2 integrations
 
 ## Styling
 

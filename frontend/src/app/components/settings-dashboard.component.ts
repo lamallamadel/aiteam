@@ -140,6 +140,37 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
                   }
                 </div>
               }
+
+              <div class="section-header">
+                <h3>OAuth2 Integrations</h3>
+              </div>
+
+              <div class="oauth2-section">
+                <p class="section-description">Connect your accounts via OAuth2 for seamless integration</p>
+                <div class="oauth2-buttons">
+                  <button class="oauth2-btn github" (click)="connectOAuth2('github')">
+                    <span class="oauth2-icon">🐙</span>
+                    <div class="oauth2-text">
+                      <span class="oauth2-title">Connect GitHub</span>
+                      <span class="oauth2-desc">Access repositories and manage code</span>
+                    </div>
+                  </button>
+                  <button class="oauth2-btn google" (click)="connectOAuth2('google')">
+                    <span class="oauth2-icon">📧</span>
+                    <div class="oauth2-text">
+                      <span class="oauth2-title">Connect Google</span>
+                      <span class="oauth2-desc">Sync calendar and email notifications</span>
+                    </div>
+                  </button>
+                  <button class="oauth2-btn gitlab" (click)="connectOAuth2('gitlab')">
+                    <span class="oauth2-icon">🦊</span>
+                    <div class="oauth2-text">
+                      <span class="oauth2-title">Connect GitLab</span>
+                      <span class="oauth2-desc">Integrate CI/CD and issue tracking</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
             </div>
           }
 
@@ -761,6 +792,81 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       border-color: var(--accent-active);
       background: rgba(255,255,255,0.08);
     }
+
+    .oauth2-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px;
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .section-description {
+      margin: 0;
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .oauth2-buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .oauth2-btn {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+      background: rgba(255,255,255,0.03);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .oauth2-btn:hover {
+      background: rgba(255,255,255,0.06);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .oauth2-btn.github:hover {
+      border-color: #8b949e;
+    }
+
+    .oauth2-btn.google:hover {
+      border-color: #4285f4;
+    }
+
+    .oauth2-btn.gitlab:hover {
+      border-color: #fc6d26;
+    }
+
+    .oauth2-icon {
+      font-size: 2.5rem;
+      flex-shrink: 0;
+    }
+
+    .oauth2-text {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: left;
+    }
+
+    .oauth2-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .oauth2-desc {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+    }
   `]
 })
 export class SettingsDashboardComponent implements OnInit {
@@ -1002,5 +1108,43 @@ export class SettingsDashboardComponent implements OnInit {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return num.toString();
+  }
+
+  connectOAuth2(provider: 'github' | 'google' | 'gitlab') {
+    const width = 600;
+    const height = 700;
+    const left = (window.screen.width / 2) - (width / 2);
+    const top = (window.screen.height / 2) - (height / 2);
+    
+    const authUrl = `/api/oauth2/authorize/${provider}`;
+    const popup = window.open(
+      authUrl,
+      'oauth2_authorization',
+      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`
+    );
+
+    if (popup) {
+      const messageHandler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) {
+          return;
+        }
+        
+        if (event.data && event.data.type === 'oauth2-success') {
+          console.log('OAuth2 authentication successful');
+          window.removeEventListener('message', messageHandler);
+        }
+      };
+
+      window.addEventListener('message', messageHandler);
+
+      const checkPopup = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkPopup);
+          window.removeEventListener('message', messageHandler);
+        }
+      }, 1000);
+    } else {
+      alert('Popup blocked. Please allow popups for this site to use OAuth2 authentication.');
+    }
   }
 }

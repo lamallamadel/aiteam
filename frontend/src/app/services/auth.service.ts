@@ -1,29 +1,143 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { Observable, BehaviorSubject, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
+
+export interface LoginRequest {
+    username: string;
+    password: string;
+}
+
+export interface LoginResponse {
+    accessToken: string;
+    refreshToken: string;
+    tokenType?: string;
+    expiresIn?: number;
+}
+
+export interface RefreshRequest {
+    refreshToken: string;
+}
+
+export interface RefreshResponse {
+    accessToken: string;
+    refreshToken: string;
+    tokenType?: string;
+    expiresIn?: number;
+}
+
+export interface UserProfile {
+    id: string;
+    username: string;
+    email: string;
+    roles: string[];
+    firstName?: string;
+    lastName?: string;
+    avatar?: string;
+}
 
 @Injectable({
     providedIn: 'root'
 })
 export class AuthService {
-    private readonly TOKEN_KEY = 'atlasia_orchestrator_token';
+    private readonly TOKEN_KEY = 'atlasia_access_token';
+    private readonly REFRESH_TOKEN_KEY = 'atlasia_refresh_token';
+    private readonly CSRF_TOKEN_COOKIE = 'XSRF-TOKEN';
+    
+    private isRefreshing = false;
+    private refreshTokenSubject = new BehaviorSubject<string | null>(null);
+    
+    currentUser = signal<UserProfile | null>(null);
 
-    setToken(token: string): void {
+    constructor(
+        private http: HttpClient,
+        private router: Router
+    ) {
+        this.loadUserProfile();
+    }
+
+    login(username: string, password: string): Observable<LoginResponse> {
+        const request: LoginRequest = { username, password };
+        return this.http.post<LoginResponse>('/api/auth/login', request).pipe(
+            tap(response => {
+                this.storeTokens(response.accessToken, response.refreshToken);
+                this.loadUserProfile();
+            }),
+            catchError(this.handleError)
+        );
+    }
+
+    refreshToken(): Observable<RefreshResponse> {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) {
+            return throwError(() => new Error('No refresh token available'));
+        }
+
+        const request: RefreshRequest = { refreshToken };
+        return this.http.post<RefreshResponse>('/api/auth/refresh', request).pipe(
+            tap(response => {
+                this.storeTokens(response.accessToken, response.refreshToken);
+            }),
+            catchError(error => {
+                this.clearTokens();
+                this.router.navigate(['/auth/login']);
+                return throwError(() => error);
+            })
+        );
+    }
+
+    logout(): Observable<void> {
+        return this.http.post<void>('/api/auth/logout', {}).pipe(
+            tap(() => {
+                this.clearTokens();
+                this.currentUser.set(null);
+                this.router.navigate(['/auth/login']);
+            }),
+            catchError(error => {
+                this.clearTokens();
+                this.currentUser.set(null);
+                this.router.navigate(['/auth/login']);
+                return throwError(() => error);
+            })
+        );
+    }
+
+    getUserProfile(): Observable<UserProfile> {
+        return this.http.get<UserProfile>('/api/auth/me').pipe(
+            tap(user => this.currentUser.set(user)),
+            catchError(this.handleError)
+        );
+    }
+
+    setAccessToken(token: string): void {
         localStorage.setItem(this.TOKEN_KEY, token);
     }
 
-    getToken(): string | null {
-        return localStorage.getItem(this.TOKEN_KEY) || 'changeme';
+    getAccessToken(): string | null {
+        return localStorage.getItem(this.TOKEN_KEY);
+    }
+
+    getRefreshToken(): string | null {
+        return localStorage.getItem(this.REFRESH_TOKEN_KEY);
     }
 
     hasToken(): boolean {
-        return !!this.getToken();
+        return !!this.getAccessToken();
     }
 
-    clearToken(): void {
+    storeTokens(accessToken: string, refreshToken: string): void {
+        localStorage.setItem(this.TOKEN_KEY, accessToken);
+        localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
+    }
+
+    clearTokens(): void {
         localStorage.removeItem(this.TOKEN_KEY);
+        localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     }
 
     getCsrfToken(): string | null {
-        const name = 'XSRF-TOKEN=';
+        const name = this.CSRF_TOKEN_COOKIE + '=';
         const decodedCookie = decodeURIComponent(document.cookie);
         const cookieArray = decodedCookie.split(';');
         
@@ -34,5 +148,37 @@ export class AuthService {
             }
         }
         return null;
+    }
+
+    getIsRefreshing(): boolean {
+        return this.isRefreshing;
+    }
+
+    setIsRefreshing(value: boolean): void {
+        this.isRefreshing = value;
+    }
+
+    getRefreshTokenSubject(): BehaviorSubject<string | null> {
+        return this.refreshTokenSubject;
+    }
+
+    private loadUserProfile(): void {
+        if (this.hasToken()) {
+            this.getUserProfile().subscribe({
+                error: () => {
+                    this.currentUser.set(null);
+                }
+            });
+        }
+    }
+
+    private handleError(error: HttpErrorResponse): Observable<never> {
+        let errorMessage = 'An error occurred';
+        if (error.error instanceof ErrorEvent) {
+            errorMessage = `Error: ${error.error.message}`;
+        } else {
+            errorMessage = `Error Code: ${error.status}\nMessage: ${error.message}`;
+        }
+        return throwError(() => new Error(errorMessage));
     }
 }

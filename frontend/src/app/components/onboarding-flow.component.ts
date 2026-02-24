@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SettingsService } from '../services/settings.service';
+import { AuthService } from '../services/auth.service';
 
 interface AgentRole {
   id: string;
@@ -661,7 +662,8 @@ Let's get you set up in just a few quick steps.`;
 
   constructor(
     private settingsService: SettingsService,
-    private router: Router
+    private router: Router,
+    private authService: AuthService
   ) {}
 
   ngOnInit() {

@@ -16,9 +16,16 @@ import { A2ARegistryComponent } from './components/a2a-registry.component';
 import { GraftManagementComponent } from './components/graft-management.component';
 import { OnboardingFlowComponent } from './components/onboarding-flow.component';
 import { SettingsDashboardComponent } from './components/settings-dashboard.component';
+import { OAuth2CallbackComponent } from './components/oauth2-callback.component';
+import { UserProfileComponent } from './components/user-profile.component';
+import { LoginComponent } from './components/login.component';
+import { RegisterComponent } from './components/register.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
+  { path: 'auth/login', component: LoginComponent },
+  { path: 'auth/register', component: RegisterComponent },
+  { path: 'auth/callback', component: OAuth2CallbackComponent },
   { path: 'chat', component: ChatDashboardComponent },
   { path: 'chat/:id', component: ChatDashboardComponent },
   { path: 'chat/gem/:persona', component: ChatDashboardComponent },
@@ -38,5 +45,6 @@ export const routes: Routes = [
   { path: 'grafts', component: GraftManagementComponent },
   { path: 'grafts/:runId', component: GraftManagementComponent },
   { path: 'onboarding', component: OnboardingFlowComponent },
-  { path: 'settings', component: SettingsDashboardComponent }
+  { path: 'settings', component: SettingsDashboardComponent },
+  { path: 'profile', component: UserProfileComponent }
 ];
