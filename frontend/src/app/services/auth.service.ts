@@ -194,6 +194,10 @@ export class AuthService {
         return this.refreshTokenSubject;
     }
 
+    isAuthenticated(): boolean {
+        return this.hasToken() && this.currentUser() !== null;
+    }
+
     private loadUserProfile(): void {
         if (this.hasToken()) {
             this.getUserProfile().subscribe({

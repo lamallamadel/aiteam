@@ -20,23 +20,25 @@ import { OAuth2CallbackComponent } from './components/oauth2-callback.component'
 import { UserProfileComponent } from './components/user-profile.component';
 import { LoginComponent } from './components/login.component';
 import { RegisterComponent } from './components/register.component';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/chat', pathMatch: 'full' },
   { path: 'auth/login', component: LoginComponent },
   { path: 'auth/register', component: RegisterComponent },
   { path: 'auth/callback', component: OAuth2CallbackComponent },
+  { path: 'onboarding', component: OnboardingFlowComponent },
   { path: 'chat', component: ChatDashboardComponent },
   { path: 'chat/:id', component: ChatDashboardComponent },
   { path: 'chat/gem/:persona', component: ChatDashboardComponent },
-  { path: 'dashboard', component: DashboardHomeComponent },
-  { path: 'runs', component: RunListComponent },
-  { path: 'runs/:id', component: RunDetailComponent },
-  { path: 'runs/:id/log', component: ActivityLogComponent },
-  { path: 'runs/:id/report', component: WorkReportComponent },
-  { path: 'runs/:id/trace', component: WaterfallTraceComponent },
-  { path: 'oversight', component: EscalationPanelComponent },
-  { path: 'oversight/inbox', component: OversightInboxComponent },
+  { path: 'dashboard', component: DashboardHomeComponent, canActivate: [authGuard] },
+  { path: 'runs', component: RunListComponent, canActivate: [authGuard] },
+  { path: 'runs/:id', component: RunDetailComponent, canActivate: [authGuard] },
+  { path: 'runs/:id/log', component: ActivityLogComponent, canActivate: [authGuard] },
+  { path: 'runs/:id/report', component: WorkReportComponent, canActivate: [authGuard] },
+  { path: 'runs/:id/trace', component: WaterfallTraceComponent, canActivate: [authGuard] },
+  { path: 'oversight', component: EscalationPanelComponent, canActivate: [authGuard] },
+  { path: 'oversight/inbox', component: OversightInboxComponent, canActivate: [authGuard] },
   { path: 'analytics', component: AnalyticsDashboardComponent },
   { path: 'analytics/failures', component: FailureAnalyticsComponent },
   { path: 'config/agents', component: AgentConfigComponent },
@@ -44,7 +46,6 @@ export const routes: Routes = [
   { path: 'a2a', component: A2ARegistryComponent },
   { path: 'grafts', component: GraftManagementComponent },
   { path: 'grafts/:runId', component: GraftManagementComponent },
-  { path: 'onboarding', component: OnboardingFlowComponent },
-  { path: 'settings', component: SettingsDashboardComponent },
-  { path: 'profile', component: UserProfileComponent }
+  { path: 'settings', component: SettingsDashboardComponent, canActivate: [authGuard] },
+  { path: 'profile', component: UserProfileComponent, canActivate: [authGuard] }
 ];

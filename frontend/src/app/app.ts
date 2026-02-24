@@ -4,6 +4,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { OrchestratorService } from './services/orchestrator.service';
 import { EscalationService } from './services/escalation.service';
 import { OversightInboxService } from './services/oversight-inbox.service';
+import { AuthService } from './services/auth.service';
 import { Persona } from './models/orchestrator.model';
 
 @Component({
@@ -16,11 +17,13 @@ import { Persona } from './models/orchestrator.model';
 export class App implements OnInit {
   protected readonly title = signal('Atlasia Orchestrator');
   personas: Persona[] = [];
+  userMenuOpen = signal(false);
 
   constructor(
     private orchestratorService: OrchestratorService,
     public escalationService: EscalationService,
-    public oversightInboxService: OversightInboxService
+    public oversightInboxService: OversightInboxService,
+    public authService: AuthService
   ) { }
 
   ngOnInit() {
@@ -31,5 +34,22 @@ export class App implements OnInit {
         });
       }
     );
+  }
+
+  toggleUserMenu() {
+    this.userMenuOpen.set(!this.userMenuOpen());
+  }
+
+  handleLogout() {
+    this.authService.logout().subscribe();
+  }
+
+  getAvatarLetter(): string {
+    const username = this.authService.currentUser()?.username;
+    return username ? username.charAt(0).toUpperCase() : '?';
+  }
+
+  getUsername(): string {
+    return this.authService.currentUser()?.username || 'User';
   }
 }
