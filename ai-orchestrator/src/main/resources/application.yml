@@ -28,6 +28,21 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
       enabled: true
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${vault.secret.data.atlasia.mail-username:${MAIL_USERNAME:}}
+    password: ${vault.secret.data.atlasia.mail-password:${MAIL_PASSWORD:}}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: ${MAIL_HOST:smtp.gmail.com}
+        from: ${MAIL_FROM:noreply@atlasia.ai}
   security:
     oauth2:
       client:
@@ -88,6 +103,26 @@ resilience4j:
           - org.springframework.web.reactive.function.client.WebClientRequestException
         ignoreExceptions:
           - java.lang.IllegalArgumentException
+  ratelimiter:
+    instances:
+      auth:
+        limitForPeriod: 5
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0
+        registerHealthIndicator: true
+        eventConsumerBufferSize: 100
+      api:
+        limitForPeriod: 100
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0
+        registerHealthIndicator: true
+        eventConsumerBufferSize: 100
+      upload:
+        limitForPeriod: 10
+        limitRefreshPeriod: 1m
+        timeoutDuration: 0
+        registerHealthIndicator: true
+        eventConsumerBufferSize: 100
 
 atlasia:
   orchestrator:

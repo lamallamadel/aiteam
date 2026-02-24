@@ -27,27 +27,37 @@ public class AuthenticationService {
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
+    private final BruteForceProtectionService bruteForceProtectionService;
 
     public AuthenticationService(
             UserDetailsServiceImpl userDetailsService,
             JwtService jwtService,
             RefreshTokenService refreshTokenService,
             PasswordEncoder passwordEncoder,
-            JwtProperties jwtProperties) {
+            JwtProperties jwtProperties,
+            BruteForceProtectionService bruteForceProtectionService) {
         this.userDetailsService = userDetailsService;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
         this.passwordEncoder = passwordEncoder;
         this.jwtProperties = jwtProperties;
+        this.bruteForceProtectionService = bruteForceProtectionService;
     }
 
     @Transactional
     public AuthTokenResponse authenticate(LoginRequest loginRequest) {
         try {
+            if (bruteForceProtectionService.isBlocked(loginRequest.getUsername())) {
+                logger.warn("Authentication blocked: Account temporarily locked due to failed attempts for user {}", 
+                    loginRequest.getUsername());
+                throw new LockedException("Account is temporarily locked due to multiple failed login attempts. Please try again later.");
+            }
+
             UserEntity user = userDetailsService.loadUserEntityByUsername(loginRequest.getUsername());
 
             if (!user.isEnabled()) {
                 logger.warn("Authentication failed: Account disabled for user {}", loginRequest.getUsername());
+                bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
                 throw new DisabledException("Account is disabled");
             }
 
@@ -58,8 +68,11 @@ public class AuthenticationService {
 
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
                 logger.warn("Authentication failed: Invalid credentials for user {}", loginRequest.getUsername());
+                bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
                 throw new BadCredentialsException("Invalid username or password");
             }
+
+            bruteForceProtectionService.resetFailedAttempts(loginRequest.getUsername());
 
             String accessToken = jwtService.generateAccessToken(user);
             
@@ -77,6 +90,7 @@ public class AuthenticationService {
 
         } catch (UsernameNotFoundException e) {
             logger.warn("Authentication failed: User not found {}", loginRequest.getUsername());
+            bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
             throw new BadCredentialsException("Invalid username or password");
         }
     }
