@@ -140,4 +140,8 @@ public class UserEntity {
         this.permissions.remove(permission);
         this.updatedAt = Instant.now();
     }
+
+    public boolean isMfaEnabled() {
+        return mfaSecret != null && !mfaSecret.isEmpty();
+    }
 }

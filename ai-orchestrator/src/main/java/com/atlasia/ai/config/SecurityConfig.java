@@ -66,6 +66,7 @@ public class SecurityConfig {
                     "/api/auth/logout",
                     "/api/auth/csrf",
                     "/api/auth/me",
+                    "/api/auth/mfa/**",
                     "/api/runs/**",
                     "/actuator/**",
                     "/ws/**"

@@ -28,6 +28,7 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
     private final BruteForceProtectionService bruteForceProtectionService;
+    private final MfaTokenService mfaTokenService;
 
     public AuthenticationService(
             UserDetailsServiceImpl userDetailsService,
@@ -35,13 +36,15 @@ public class AuthenticationService {
             RefreshTokenService refreshTokenService,
             PasswordEncoder passwordEncoder,
             JwtProperties jwtProperties,
-            BruteForceProtectionService bruteForceProtectionService) {
+            BruteForceProtectionService bruteForceProtectionService,
+            MfaTokenService mfaTokenService) {
         this.userDetailsService = userDetailsService;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
         this.passwordEncoder = passwordEncoder;
         this.jwtProperties = jwtProperties;
         this.bruteForceProtectionService = bruteForceProtectionService;
+        this.mfaTokenService = mfaTokenService;
     }
 
     @Transactional
@@ -74,6 +77,11 @@ public class AuthenticationService {
 
             bruteForceProtectionService.resetFailedAttempts(loginRequest.getUsername());
 
+            if (user.isMfaEnabled()) {
+                logger.info("MFA required for user: {}", loginRequest.getUsername());
+                throw new MfaRequiredException(user.getId(), user.getUsername());
+            }
+
             String accessToken = jwtService.generateAccessToken(user);
             
             Map<String, Object> refreshTokenResult = refreshTokenService.createRefreshToken(
@@ -93,6 +101,10 @@ public class AuthenticationService {
             bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
             throw new BadCredentialsException("Invalid username or password");
         }
+    }
+
+    public String generateMfaToken(java.util.UUID userId, String username) {
+        return mfaTokenService.generateMfaToken(userId, username);
     }
 
     @Transactional

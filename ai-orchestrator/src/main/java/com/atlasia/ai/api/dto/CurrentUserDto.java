@@ -10,5 +10,6 @@ public record CurrentUserDto(
     Set<String> roles,
     Set<String> permissions,
     boolean enabled,
-    boolean locked
+    boolean locked,
+    boolean mfaEnabled
 ) {}

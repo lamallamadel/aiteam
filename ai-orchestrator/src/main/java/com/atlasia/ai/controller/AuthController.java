@@ -84,6 +84,12 @@ public class AuthController {
         try {
             AuthTokenResponse response = authenticationService.authenticate(request);
             return ResponseEntity.ok(response);
+        } catch (com.atlasia.ai.service.MfaRequiredException e) {
+            logger.info("MFA required for user: {}", e.getUsername());
+            String mfaToken = authenticationService.generateMfaToken(e.getUserId(), e.getUsername());
+            com.atlasia.ai.api.dto.MfaLoginResponse mfaResponse = 
+                new com.atlasia.ai.api.dto.MfaLoginResponse(true, mfaToken);
+            return ResponseEntity.ok(mfaResponse);
         } catch (IllegalArgumentException e) {
             logger.warn("Login failed: {}", e.getMessage());
             Map<String, String> error = new HashMap<>();
@@ -292,7 +298,8 @@ public class AuthController {
                 authorizationService.getUserRoles(userId),
                 authorizationService.getUserPermissions(userId),
                 user.isEnabled(),
-                user.isLocked()
+                user.isLocked(),
+                user.isMfaEnabled()
             );
 
             return ResponseEntity.ok(dto);
