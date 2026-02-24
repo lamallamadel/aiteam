@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../services/auth.service';
+import { ToastService } from '../services/toast.service';
 
 interface RegisterRequest {
   username: string;
@@ -241,7 +242,8 @@ export class RegisterComponent {
   constructor(
     private http: HttpClient,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private toastService: ToastService
   ) {}
 
   isFormValid(): boolean {
@@ -261,6 +263,7 @@ export class RegisterComponent {
 
     if (this.password !== this.confirmPassword) {
       this.error.set('Passwords do not match');
+      this.toastService.show('Passwords do not match', 'error');
       return;
     }
 
@@ -280,6 +283,7 @@ export class RegisterComponent {
       next: (response) => {
         this.loading.set(false);
         this.success.set('Account created successfully! Redirecting...');
+        this.toastService.show('Account created successfully! Redirecting...', 'success');
         this.authService.storeTokens(response.accessToken, response.refreshToken);
         setTimeout(() => {
           this.router.navigate(['/onboarding']);
@@ -287,7 +291,9 @@ export class RegisterComponent {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(err.error?.message || 'Registration failed. Please try again.');
+        const errorMessage = err.error?.message || 'Registration failed. Please try again.';
+        this.error.set(errorMessage);
+        this.toastService.show(errorMessage, 'error');
       }
     });
   }

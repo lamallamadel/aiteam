@@ -7,6 +7,7 @@ import { SettingsService, GitProviderWithId } from '../services/settings.service
 import { AuthService } from '../services/auth.service';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { CurrentUserDto } from '../models/orchestrator.model';
+import { ToastService } from '../services/toast.service';
 
 Chart.register(...registerables);
 
@@ -1033,7 +1034,8 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private settingsService: SettingsService,
     private authService: AuthService,
-    private orchestratorService: OrchestratorService
+    private orchestratorService: OrchestratorService,
+    private toastService: ToastService
   ) {}
 
   ngOnInit() {
@@ -1202,7 +1204,7 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
         this.currentUser.set(user);
       },
       error: (err) => {
-        console.error('Failed to load current user:', err);
+        this.toastService.show('Failed to load user information', 'error');
       }
     });
   }
@@ -1272,7 +1274,7 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
       }, 1000);
     } else {
       this.oauth2Loading.set(null);
-      alert('Popup blocked. Please allow popups for this site to use OAuth2 authentication.');
+      this.toastService.show('Popup blocked. Please allow popups for this site to use OAuth2 authentication.', 'error');
     }
   }
 }

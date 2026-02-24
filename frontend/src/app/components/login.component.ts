@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { ToastService } from '../services/toast.service';
 
 @Component({
   selector: 'app-login',
@@ -198,7 +199,8 @@ export class LoginComponent {
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private toastService: ToastService
   ) {}
 
   onSubmit(): void {
@@ -212,11 +214,13 @@ export class LoginComponent {
     this.authService.login(this.username, this.password).subscribe({
       next: () => {
         this.loading.set(false);
+        this.toastService.show('Login successful', 'success');
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {
         this.loading.set(false);
         this.error.set('Invalid username or password');
+        this.toastService.show('Invalid username or password', 'error');
       }
     });
   }
@@ -256,6 +260,7 @@ export class LoginComponent {
       }, 1000);
     } else {
       this.error.set('Popup blocked. Please allow popups for this site.');
+      this.toastService.show('Popup blocked. Please allow popups for this site.', 'error');
     }
   }
 }

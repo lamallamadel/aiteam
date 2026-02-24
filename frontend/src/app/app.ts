@@ -7,11 +7,12 @@ import { OversightInboxService } from './services/oversight-inbox.service';
 import { AuthService } from './services/auth.service';
 import { ThemeService } from './services/theme.service';
 import { Persona } from './models/orchestrator.model';
+import { ToastContainerComponent } from './components/shared/toast-container.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastContainerComponent],
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
