@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -33,6 +34,7 @@ import java.util.UUID;
  *   /api/a2a/bindings        — active binding audit
  */
 @RestController
+@Validated
 public class A2AController {
 
     private final A2ADiscoveryService a2aDiscoveryService;

@@ -3,6 +3,7 @@ package com.atlasia.ai.controller;
 import com.atlasia.ai.model.TraceEventEntity;
 import com.atlasia.ai.persistence.TraceEventRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -10,6 +11,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/traces")
+@Validated
 public class TraceController {
 
     private final TraceEventRepository traceEventRepository;

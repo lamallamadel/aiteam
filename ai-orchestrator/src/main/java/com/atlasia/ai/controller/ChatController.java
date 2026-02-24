@@ -2,12 +2,14 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.service.ChatService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/chat")
+@Validated
 public class ChatController {
 
     private final ChatService chatService;

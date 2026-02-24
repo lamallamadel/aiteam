@@ -3,6 +3,7 @@ package com.atlasia.ai.controller;
 import com.atlasia.ai.service.CollaborationService;
 import com.atlasia.ai.service.WebSocketConnectionMonitor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -10,6 +11,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin/websocket")
+@Validated
 public class WebSocketAdminController {
 
     private final WebSocketConnectionMonitor connectionMonitor;
