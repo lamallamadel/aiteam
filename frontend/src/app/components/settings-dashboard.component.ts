@@ -1,9 +1,12 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BaseChartDirective } from 'ng2-charts';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { SettingsService, GitProviderWithId } from '../services/settings.service';
+import { AuthService } from '../services/auth.service';
+import { OrchestratorService } from '../services/orchestrator.service';
+import { CurrentUserDto } from '../models/orchestrator.model';
 
 Chart.register(...registerables);
 
@@ -148,27 +151,54 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
               <div class="oauth2-section">
                 <p class="section-description">Connect your accounts via OAuth2 for seamless integration</p>
                 <div class="oauth2-buttons">
-                  <button class="oauth2-btn github" (click)="connectOAuth2('github')">
-                    <span class="oauth2-icon">🐙</span>
-                    <div class="oauth2-text">
-                      <span class="oauth2-title">Connect GitHub</span>
-                      <span class="oauth2-desc">Access repositories and manage code</span>
-                    </div>
-                  </button>
-                  <button class="oauth2-btn google" (click)="connectOAuth2('google')">
-                    <span class="oauth2-icon">📧</span>
-                    <div class="oauth2-text">
-                      <span class="oauth2-title">Connect Google</span>
-                      <span class="oauth2-desc">Sync calendar and email notifications</span>
-                    </div>
-                  </button>
-                  <button class="oauth2-btn gitlab" (click)="connectOAuth2('gitlab')">
-                    <span class="oauth2-icon">🦊</span>
-                    <div class="oauth2-text">
-                      <span class="oauth2-title">Connect GitLab</span>
-                      <span class="oauth2-desc">Integrate CI/CD and issue tracking</span>
-                    </div>
-                  </button>
+                  <div class="oauth2-item">
+                    <button class="oauth2-btn github" (click)="connectOAuth2('github')" [disabled]="oauth2Loading() === 'github'">
+                      @if (oauth2Loading() === 'github') {
+                        <span class="oauth2-spinner">⏳</span>
+                      } @else {
+                        <span class="oauth2-icon">🐙</span>
+                      }
+                      <div class="oauth2-text">
+                        <span class="oauth2-title">Connect GitHub</span>
+                        <span class="oauth2-desc">Access repositories and manage code</span>
+                      </div>
+                    </button>
+                    @if (isOAuth2Connected('github')) {
+                      <span class="oauth2-status-badge connected">Connected</span>
+                    }
+                  </div>
+                  <div class="oauth2-item">
+                    <button class="oauth2-btn google" (click)="connectOAuth2('google')" [disabled]="oauth2Loading() === 'google'">
+                      @if (oauth2Loading() === 'google') {
+                        <span class="oauth2-spinner">⏳</span>
+                      } @else {
+                        <span class="oauth2-icon">📧</span>
+                      }
+                      <div class="oauth2-text">
+                        <span class="oauth2-title">Connect Google</span>
+                        <span class="oauth2-desc">Sync calendar and email notifications</span>
+                      </div>
+                    </button>
+                    @if (isOAuth2Connected('google')) {
+                      <span class="oauth2-status-badge connected">Connected</span>
+                    }
+                  </div>
+                  <div class="oauth2-item">
+                    <button class="oauth2-btn gitlab" (click)="connectOAuth2('gitlab')" [disabled]="oauth2Loading() === 'gitlab'">
+                      @if (oauth2Loading() === 'gitlab') {
+                        <span class="oauth2-spinner">⏳</span>
+                      } @else {
+                        <span class="oauth2-icon">🦊</span>
+                      }
+                      <div class="oauth2-text">
+                        <span class="oauth2-title">Connect GitLab</span>
+                        <span class="oauth2-desc">Integrate CI/CD and issue tracking</span>
+                      </div>
+                    </button>
+                    @if (isOAuth2Connected('gitlab')) {
+                      <span class="oauth2-status-badge connected">Connected</span>
+                    }
+                  </div>
                 </div>
               </div>
             </div>
@@ -815,6 +845,13 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       gap: 16px;
     }
 
+    .oauth2-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+    }
+
     .oauth2-btn {
       display: flex;
       align-items: center;
@@ -825,23 +862,29 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.2s;
+      width: 100%;
     }
 
-    .oauth2-btn:hover {
+    .oauth2-btn:hover:not(:disabled) {
       background: rgba(255,255,255,0.06);
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    .oauth2-btn.github:hover {
+    .oauth2-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .oauth2-btn.github:hover:not(:disabled) {
       border-color: #8b949e;
     }
 
-    .oauth2-btn.google:hover {
+    .oauth2-btn.google:hover:not(:disabled) {
       border-color: #4285f4;
     }
 
-    .oauth2-btn.gitlab:hover {
+    .oauth2-btn.gitlab:hover:not(:disabled) {
       border-color: #fc6d26;
     }
 
@@ -850,11 +893,23 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       flex-shrink: 0;
     }
 
+    .oauth2-spinner {
+      font-size: 2.5rem;
+      flex-shrink: 0;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
     .oauth2-text {
       display: flex;
       flex-direction: column;
       gap: 4px;
       text-align: left;
+      flex: 1;
     }
 
     .oauth2-title {
@@ -867,9 +922,24 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       font-size: 0.8rem;
       color: rgba(255,255,255,0.5);
     }
+
+    .oauth2-status-badge {
+      padding: 4px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      align-self: flex-start;
+      margin-left: 4px;
+    }
+
+    .oauth2-status-badge.connected {
+      background: rgba(34,197,94,0.15);
+      color: #22c55e;
+    }
   `]
 })
-export class SettingsDashboardComponent implements OnInit {
+export class SettingsDashboardComponent implements OnInit, OnDestroy {
   activeTab = signal<TabId>('integrations');
 
   providers = computed(() => this.settingsService.gitProviders());
@@ -878,6 +948,11 @@ export class SettingsDashboardComponent implements OnInit {
   monthlyRequests = computed(() => this.settingsService.monthlyRequests());
   rateLimitConfig = computed(() => this.settingsService.rateLimitConfig());
   aiPreferences = computed(() => this.settingsService.aiPreferences());
+  
+  currentUser = signal<CurrentUserDto | null>(null);
+  oauth2Loading = signal<string | null>(null);
+  
+  private messageHandler: ((event: MessageEvent) => void) | null = null;
 
   budgetPercent = computed(() => {
     const usage = this.usageData();
@@ -955,10 +1030,21 @@ export class SettingsDashboardComponent implements OnInit {
     }
   };
 
-  constructor(private settingsService: SettingsService) {}
+  constructor(
+    private settingsService: SettingsService,
+    private authService: AuthService,
+    private orchestratorService: OrchestratorService
+  ) {}
 
   ngOnInit() {
     this.loadData();
+    this.loadCurrentUser();
+  }
+
+  ngOnDestroy() {
+    if (this.messageHandler) {
+      window.removeEventListener('message', this.messageHandler);
+    }
   }
 
   loadData() {
@@ -1110,13 +1196,34 @@ export class SettingsDashboardComponent implements OnInit {
     return num.toString();
   }
 
+  loadCurrentUser() {
+    this.orchestratorService.getCurrentUser().subscribe({
+      next: (user) => {
+        this.currentUser.set(user);
+      },
+      error: (err) => {
+        console.error('Failed to load current user:', err);
+      }
+    });
+  }
+
+  isOAuth2Connected(provider: string): boolean {
+    const user = this.currentUser();
+    if (!user || !user.oauth2LinkedAccounts) {
+      return false;
+    }
+    return user.oauth2LinkedAccounts.includes(provider);
+  }
+
   connectOAuth2(provider: 'github' | 'google' | 'gitlab') {
+    this.oauth2Loading.set(provider);
+    
     const width = 600;
     const height = 700;
     const left = (window.screen.width / 2) - (width / 2);
     const top = (window.screen.height / 2) - (height / 2);
     
-    const authUrl = `/api/oauth2/authorize/${provider}`;
+    const authUrl = `/oauth2/authorization/${provider}`;
     const popup = window.open(
       authUrl,
       'oauth2_authorization',
@@ -1124,26 +1231,47 @@ export class SettingsDashboardComponent implements OnInit {
     );
 
     if (popup) {
-      const messageHandler = (event: MessageEvent) => {
+      if (this.messageHandler) {
+        window.removeEventListener('message', this.messageHandler);
+      }
+
+      this.messageHandler = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) {
           return;
         }
         
         if (event.data && event.data.type === 'oauth2-success') {
-          console.log('OAuth2 authentication successful');
-          window.removeEventListener('message', messageHandler);
+          const { accessToken, refreshToken } = event.data;
+          
+          if (accessToken && refreshToken) {
+            this.authService.storeTokens(accessToken, refreshToken);
+            this.loadCurrentUser();
+          }
+          
+          popup.close();
+          this.oauth2Loading.set(null);
+          
+          if (this.messageHandler) {
+            window.removeEventListener('message', this.messageHandler);
+            this.messageHandler = null;
+          }
         }
       };
 
-      window.addEventListener('message', messageHandler);
+      window.addEventListener('message', this.messageHandler);
 
       const checkPopup = setInterval(() => {
         if (popup.closed) {
           clearInterval(checkPopup);
-          window.removeEventListener('message', messageHandler);
+          this.oauth2Loading.set(null);
+          if (this.messageHandler) {
+            window.removeEventListener('message', this.messageHandler);
+            this.messageHandler = null;
+          }
         }
       }, 1000);
     } else {
+      this.oauth2Loading.set(null);
       alert('Popup blocked. Please allow popups for this site to use OAuth2 authentication.');
     }
   }

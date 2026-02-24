@@ -218,6 +218,7 @@ export interface CurrentUserDto {
     permissions: string[];
     enabled: boolean;
     locked: boolean;
+    oauth2LinkedAccounts?: string[];
 }
 
 export interface UserRegistrationRequest {
