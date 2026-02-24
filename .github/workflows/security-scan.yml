@@ -1,0 +1,149 @@
+name: Security Scan
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Run OWASP Dependency Check
+        working-directory: ai-orchestrator
+        run: mvn dependency-check:check --batch-mode --no-transfer-progress
+        continue-on-error: true
+      
+      - name: Upload dependency check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: ai-orchestrator/target/dependency-check-report.*
+          retention-days: 30
+      
+      - name: Parse vulnerability results
+        if: always()
+        id: parse_results
+        working-directory: ai-orchestrator
+        run: |
+          if [ -f target/dependency-check-report.json ]; then
+            # Extract vulnerability counts
+            CRITICAL=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity=="CRITICAL")] | length' target/dependency-check-report.json)
+            HIGH=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity=="HIGH")] | length' target/dependency-check-report.json)
+            MEDIUM=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity=="MEDIUM")] | length' target/dependency-check-report.json)
+            LOW=$(jq '[.dependencies[].vulnerabilities[]? | select(.severity=="LOW")] | length' target/dependency-check-report.json)
+            
+            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+            echo "high=$HIGH" >> $GITHUB_OUTPUT
+            echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
+            echo "low=$LOW" >> $GITHUB_OUTPUT
+            
+            # Build summary
+            SUMMARY="## 🔒 Security Scan Results\n\n"
+            SUMMARY="${SUMMARY}### Vulnerability Summary\n"
+            SUMMARY="${SUMMARY}| Severity | Count |\n"
+            SUMMARY="${SUMMARY}|----------|-------|\n"
+            SUMMARY="${SUMMARY}| 🔴 Critical | $CRITICAL |\n"
+            SUMMARY="${SUMMARY}| 🟠 High | $HIGH |\n"
+            SUMMARY="${SUMMARY}| 🟡 Medium | $MEDIUM |\n"
+            SUMMARY="${SUMMARY}| ⚪ Low | $LOW |\n\n"
+            
+            if [ $((CRITICAL + HIGH)) -gt 0 ]; then
+              SUMMARY="${SUMMARY}⚠️ **Action Required**: Critical or High severity vulnerabilities detected.\n\n"
+            else
+              SUMMARY="${SUMMARY}✅ No Critical or High severity vulnerabilities detected.\n\n"
+            fi
+            
+            SUMMARY="${SUMMARY}View the detailed [Dependency Check Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more information."
+            
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$SUMMARY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "summary=⚠️ Dependency check report not generated." >> $GITHUB_OUTPUT
+            echo "critical=0" >> $GITHUB_OUTPUT
+            echo "high=0" >> $GITHUB_OUTPUT
+            echo "medium=0" >> $GITHUB_OUTPUT
+            echo "low=0" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = `${{ steps.parse_results.outputs.summary }}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+      
+      - name: Fail if high/critical vulnerabilities found
+        if: always()
+        run: |
+          CRITICAL=${{ steps.parse_results.outputs.critical }}
+          HIGH=${{ steps.parse_results.outputs.high }}
+          
+          if [ $((CRITICAL + HIGH)) -gt 0 ]; then
+            echo "❌ Found $CRITICAL critical and $HIGH high severity vulnerabilities"
+            exit 1
+          fi
+
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Generate SBOM with CycloneDX
+        working-directory: ai-orchestrator
+        run: mvn cyclonedx:makeAggregateBom --batch-mode --no-transfer-progress
+      
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ai-orchestrator/target/bom.json
+          retention-days: 90
+      
+      - name: Display SBOM summary
+        working-directory: ai-orchestrator
+        run: |
+          if [ -f target/bom.json ]; then
+            echo "✅ SBOM generated successfully"
+            echo "📦 Component count: $(jq '.components | length' target/bom.json)"
+            echo "📄 Format: CycloneDX $(jq -r '.specVersion' target/bom.json)"
+          fi
