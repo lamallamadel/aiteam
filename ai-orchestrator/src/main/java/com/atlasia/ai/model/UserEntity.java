@@ -1,5 +1,7 @@
 package com.atlasia.ai.model;
 
+import com.atlasia.ai.config.Encrypted;
+import com.atlasia.ai.config.EncryptedStringConverter;
 import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.HashSet;
@@ -24,7 +26,9 @@ public class UserEntity {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "mfa_secret")
+    @Encrypted(reason = "MFA secrets allow account access bypass")
+    @Column(name = "mfa_secret_encrypted", columnDefinition = "TEXT")
+    @Convert(converter = EncryptedStringConverter.class)
     private String mfaSecret;
 
     @Column(name = "created_at", nullable = false)

@@ -51,6 +51,10 @@ vault-token
 *.key
 *.p12
 *.pfx
+*.crt
+*.csr
+infra/certs/
+infra/data/
 
 # Application secrets (should be in Vault)
 application-secrets.yml

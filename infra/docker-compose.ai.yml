@@ -45,10 +45,22 @@ services:
       POSTGRES_DB: ai
       POSTGRES_USER: ai
       POSTGRES_PASSWORD: ai
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --data-checksums"
     volumes:
       - ai_db:/var/lib/postgresql/data
+      - ./certs:/var/lib/postgresql/certs:ro
+      - ./postgres-ssl-init.sh:/docker-entrypoint-initdb.d/postgres-ssl-init.sh:ro
     ports:
       - "5432:5432"
+    command: >
+      postgres
+      -c ssl=on
+      -c ssl_cert_file=/var/lib/postgresql/certs/server.crt
+      -c ssl_key_file=/var/lib/postgresql/certs/server.key
+      -c ssl_ca_file=/var/lib/postgresql/certs/ca.crt
+      -c ssl_min_protocol_version=TLSv1.3
+      -c ssl_ciphers='TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256'
+      -c ssl_prefer_server_ciphers=on
     # Runtime Security Best Practices
     security_opt:
       - no-new-privileges:true
@@ -109,6 +121,11 @@ services:
 
 volumes:
   ai_db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/data/postgres
   vault_data:
 
 # User Namespace Remapping (Docker Daemon Configuration)

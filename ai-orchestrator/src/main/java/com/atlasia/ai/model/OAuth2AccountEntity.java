@@ -1,5 +1,6 @@
 package com.atlasia.ai.model;
 
+import com.atlasia.ai.config.Encrypted;
 import com.atlasia.ai.config.EncryptedStringConverter;
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -23,10 +24,12 @@ public class OAuth2AccountEntity {
     @Column(name = "provider_user_id", nullable = false)
     private String providerUserId;
 
+    @Encrypted(reason = "OAuth2 access tokens contain sensitive credentials")
     @Column(name = "access_token_encrypted", columnDefinition = "TEXT")
     @Convert(converter = EncryptedStringConverter.class)
     private String accessToken;
 
+    @Encrypted(reason = "OAuth2 refresh tokens allow long-term access")
     @Column(name = "refresh_token_encrypted", columnDefinition = "TEXT")
     @Convert(converter = EncryptedStringConverter.class)
     private String refreshToken;

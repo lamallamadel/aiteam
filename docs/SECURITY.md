@@ -1,8 +1,458 @@
-# Security - Dependency Vulnerability Management
+# Security Documentation
 
-This document describes the process for dependency vulnerability scanning, SBOM generation, and remediation in the Atlasia project.
+This document describes security features and processes for the Atlasia project, including TLS configuration, encryption, key rotation, and dependency vulnerability management.
 
-## Overview
+## Table of Contents
+
+1. [Transport Layer Security (TLS)](#transport-layer-security-tls)
+2. [Database Encryption](#database-encryption)
+3. [Key Rotation Procedures](#key-rotation-procedures)
+4. [Encryption at Rest](#encryption-at-rest)
+5. [Dependency Vulnerability Management](#dependency-vulnerability-management)
+
+## Transport Layer Security (TLS)
+
+Atlasia enforces TLS 1.3 for all network communications to protect data in transit.
+
+### Application Server (Spring Boot)
+
+#### Configuration
+
+The application server is configured in `application.yml` to use TLS 1.3:
+
+```yaml
+server:
+  port: 8080
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${vault.secret.data.atlasia.ssl-keystore-path:${SSL_KEYSTORE_PATH:classpath:keystore.p12}}
+    key-store-password: ${vault.secret.data.atlasia.ssl-keystore-password:${SSL_KEYSTORE_PASSWORD:}}
+    key-store-type: PKCS12
+    enabled-protocols: TLSv1.3
+    ciphers: TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256
+```
+
+**Key Features:**
+- **Protocol**: TLS 1.3 only (older versions disabled)
+- **Ciphers**: Strong AEAD ciphers (AES-GCM with SHA-384/SHA-256)
+- **Keystore**: PKCS12 format, password stored in Vault
+- **Keystore path**: Can be loaded from filesystem or classpath
+
+#### Generating SSL Certificates (Development)
+
+For local development, use the provided script to generate self-signed certificates:
+
+```bash
+cd infra
+./gen-ssl-cert.sh
+```
+
+This creates:
+- CA certificate and key
+- Server certificate and key
+- PKCS12 keystore for Spring Boot
+- PostgreSQL certificate bundle
+
+**Note**: Self-signed certificates are for development only. Use proper CA-signed certificates in production.
+
+#### Enabling TLS
+
+Set the following environment variables:
+
+```bash
+export SSL_ENABLED=true
+export SSL_KEYSTORE_PATH=file:/path/to/infra/certs/keystore.p12
+export SSL_KEYSTORE_PASSWORD=changeit
+```
+
+Or store in Vault:
+
+```bash
+vault kv put secret/atlasia/ssl-keystore-path value=file:/path/to/keystore.p12
+vault kv put secret/atlasia/ssl-keystore-password value=your-secure-password
+```
+
+#### Production Setup
+
+For production environments:
+
+1. **Obtain CA-signed certificates** from a trusted CA (Let's Encrypt, DigiCert, etc.)
+2. **Convert to PKCS12 format**:
+   ```bash
+   openssl pkcs12 -export -in cert.pem -inkey key.pem -out keystore.p12 -name atlasia-server
+   ```
+3. **Store keystore and password in Vault**
+4. **Update application configuration** to reference Vault paths
+5. **Set up certificate renewal** (e.g., certbot for Let's Encrypt)
+
+### Database (PostgreSQL)
+
+#### Configuration
+
+PostgreSQL is configured to require TLS 1.3 for all client connections:
+
+```yaml
+command: >
+  postgres
+  -c ssl=on
+  -c ssl_cert_file=/var/lib/postgresql/certs/server.crt
+  -c ssl_key_file=/var/lib/postgresql/certs/server.key
+  -c ssl_ca_file=/var/lib/postgresql/certs/ca.crt
+  -c ssl_min_protocol_version=TLSv1.3
+  -c ssl_ciphers='TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256'
+  -c ssl_prefer_server_ciphers=on
+```
+
+**Key Features:**
+- **Protocol**: TLS 1.3 minimum
+- **Client authentication**: Requires SSL mode
+- **Ciphers**: Strong AEAD ciphers only
+- **Server preference**: Server cipher order takes precedence
+
+#### JDBC Connection
+
+The JDBC connection string enforces SSL:
+
+```
+jdbc:postgresql://host:5432/ai?ssl=true&sslmode=require
+```
+
+**SSL Modes:**
+- `require`: Encryption required (used in production)
+- `verify-ca`: Also verify server certificate against CA
+- `verify-full`: Also verify hostname matches certificate
+
+For production, consider `verify-full` for maximum security.
+
+## Database Encryption
+
+Atlasia implements column-level encryption for sensitive data using AES-256-GCM.
+
+### Column Encryption Service
+
+`ColumnEncryptionService` provides encryption/decryption using:
+- **Algorithm**: AES-256-GCM (Galois/Counter Mode)
+- **Key size**: 256 bits
+- **Authentication**: GCM provides authenticated encryption
+- **IV**: Random 12-byte initialization vector per encryption
+- **Storage**: IV prepended to ciphertext, base64 encoded
+
+#### Usage
+
+The service is automatically used via JPA attribute converters:
+
+```java
+@Column(name = "sensitive_field_encrypted", columnDefinition = "TEXT")
+@Convert(converter = EncryptedStringConverter.class)
+private String sensitiveField;
+```
+
+#### Configuration
+
+Encryption key must be configured in Vault:
+
+```bash
+# Generate a 256-bit key
+openssl rand -base64 32
+
+# Store in Vault
+vault kv put secret/atlasia/encryption-key value=<base64-encoded-key>
+```
+
+Or set via environment variable:
+
+```bash
+export VAULT_ENCRYPTION_KEY=<base64-encoded-key>
+```
+
+### Encrypted Fields
+
+The following sensitive fields are encrypted at rest:
+
+| Entity | Field | Column | Encryption |
+|--------|-------|--------|------------|
+| OAuth2AccountEntity | accessToken | access_token_encrypted | AES-256-GCM |
+| OAuth2AccountEntity | refreshToken | refresh_token_encrypted | AES-256-GCM |
+| UserEntity | mfaSecret | mfa_secret_encrypted | AES-256-GCM |
+| RefreshTokenEntity | tokenHash | token_hash | SHA-256 (hash only) |
+
+**Note**: `refresh_tokens.token_hash` is hashed, not encrypted, as it's used for lookup and doesn't need to be reversed.
+
+### Implementation Details
+
+**Encryption Flow:**
+1. Generate random 12-byte IV using `SecureRandom`
+2. Encrypt plaintext with AES-256-GCM using IV
+3. Prepend IV to ciphertext
+4. Base64 encode entire blob
+5. Store in database TEXT column
+
+**Decryption Flow:**
+1. Base64 decode from database
+2. Extract first 12 bytes as IV
+3. Decrypt remaining bytes with AES-256-GCM
+4. Return plaintext
+
+**Security Properties:**
+- **Confidentiality**: AES-256 provides strong encryption
+- **Integrity**: GCM authentication tag prevents tampering
+- **Uniqueness**: Random IV ensures different ciphertext for same plaintext
+- **Forward secrecy**: Old ciphertexts remain secure after key rotation
+
+## Key Rotation Procedures
+
+Regular key rotation is critical for maintaining security. Atlasia supports rotation of encryption keys and TLS certificates.
+
+### Encryption Key Rotation
+
+#### When to Rotate
+
+- **Scheduled**: Every 90 days (recommended)
+- **Compromise**: Immediately if key may be exposed
+- **Employee departure**: If key custodian leaves
+- **Audit requirement**: As mandated by compliance
+
+#### Rotation Process
+
+1. **Generate new encryption key:**
+   ```bash
+   NEW_KEY=$(openssl rand -base64 32)
+   ```
+
+2. **Store new key in Vault with versioning:**
+   ```bash
+   # Store new key as current
+   vault kv put secret/atlasia/encryption-key value=$NEW_KEY
+   
+   # Archive old key with version number
+   vault kv put secret/atlasia/encryption-key-v1 value=$OLD_KEY
+   ```
+
+3. **Deploy key rotation script:**
+   ```bash
+   cd ai-orchestrator
+   mvn exec:java -Dexec.mainClass="com.atlasia.ai.migration.EncryptionKeyRotation"
+   ```
+
+4. **Verify rotation:**
+   - Check application logs for successful re-encryption
+   - Test reading encrypted fields
+   - Monitor for decryption errors
+
+5. **Update monitoring:**
+   - Document key rotation in audit log
+   - Update key version in documentation
+   - Schedule next rotation
+
+#### Migration Script (Pseudocode)
+
+```java
+// Re-encrypt all sensitive fields with new key
+1. Load old key from Vault (encryption-key-v1)
+2. Load new key from Vault (encryption-key)
+3. For each entity with encrypted fields:
+   a. Decrypt with old key
+   b. Encrypt with new key
+   c. Update database
+   d. Commit transaction
+4. Verify all records updated
+5. Log completion
+```
+
+### TLS Certificate Rotation
+
+#### When to Rotate
+
+- **Scheduled**: 30 days before expiration
+- **Compromise**: Immediately if private key exposed
+- **Algorithm upgrade**: When stronger algorithms available
+- **CA requirement**: Per CA policy
+
+#### Rotation Process
+
+1. **Generate/obtain new certificate:**
+   ```bash
+   # Development
+   cd infra && ./gen-ssl-cert.sh
+   
+   # Production - use your CA's process
+   certbot renew --cert-name atlasia.example.com
+   ```
+
+2. **Update Vault with new certificate paths:**
+   ```bash
+   vault kv put secret/atlasia/ssl-keystore-path value=file:/path/to/new/keystore.p12
+   vault kv put secret/atlasia/ssl-keystore-password value=new-password
+   ```
+
+3. **Rolling restart application servers:**
+   ```bash
+   # Kubernetes
+   kubectl rollout restart deployment/ai-orchestrator
+   
+   # Docker Compose
+   docker-compose restart ai-orchestrator
+   ```
+
+4. **Update PostgreSQL certificates:**
+   ```bash
+   # Copy new certificates
+   cp infra/certs/server.* /var/lib/postgresql/certs/
+   
+   # Reload PostgreSQL configuration
+   docker-compose exec ai-db pg_ctl reload
+   ```
+
+5. **Verify TLS configuration:**
+   ```bash
+   # Test application server
+   openssl s_client -connect localhost:8080 -tls1_3
+   
+   # Test PostgreSQL
+   psql "sslmode=require host=localhost" -c "SELECT version()"
+   ```
+
+### Automated Rotation
+
+Atlasia includes `SecretRotationScheduler` for automated key rotation:
+
+```java
+@Scheduled(cron = "0 0 0 1 */3 *") // Every 3 months
+public void rotateEncryptionKey() {
+    // Automated rotation logic
+}
+
+@Scheduled(cron = "0 0 0 * * *") // Daily check
+public void checkCertificateExpiry() {
+    // Alert if certificates expire within 30 days
+}
+```
+
+### Key Storage Best Practices
+
+1. **Use Vault**: Never store keys in code, config files, or environment variables
+2. **Separate duties**: Different people control key generation vs. usage
+3. **Audit access**: Log all key retrievals from Vault
+4. **Backup keys**: Securely backup old keys for data recovery
+5. **Destroy old keys**: After rotation period, securely delete old keys
+
+## Encryption at Rest
+
+In addition to column-level encryption, Atlasia supports full disk encryption for database volumes.
+
+### LUKS Encryption (Linux)
+
+For on-premises deployments on Linux:
+
+1. **Create encrypted volume:**
+   ```bash
+   # Create LUKS volume
+   cryptsetup luksFormat /dev/sdb
+   
+   # Open volume
+   cryptsetup luksOpen /dev/sdb postgres_encrypted
+   
+   # Format filesystem
+   mkfs.ext4 /dev/mapper/postgres_encrypted
+   
+   # Mount
+   mount /dev/mapper/postgres_encrypted /var/lib/postgresql/data
+   ```
+
+2. **Configure auto-unlock:**
+   ```bash
+   # Store key in secure location
+   echo "your-secure-passphrase" > /root/postgres-luks.key
+   chmod 600 /root/postgres-luks.key
+   
+   # Add to /etc/crypttab
+   echo "postgres_encrypted /dev/sdb /root/postgres-luks.key" >> /etc/crypttab
+   
+   # Add to /etc/fstab
+   echo "/dev/mapper/postgres_encrypted /var/lib/postgresql/data ext4 defaults 0 2" >> /etc/fstab
+   ```
+
+3. **Update Docker Compose:**
+   ```yaml
+   volumes:
+     ai_db:
+       driver: local
+       driver_opts:
+         type: none
+         o: bind
+         device: /var/lib/postgresql/data  # Encrypted mount point
+   ```
+
+### Cloud Provider Encryption
+
+#### AWS (EBS Encryption)
+
+```hcl
+resource "aws_ebs_volume" "postgres" {
+  availability_zone = "us-east-1a"
+  size             = 100
+  encrypted        = true
+  kms_key_id       = aws_kms_key.postgres.arn
+  
+  tags = {
+    Name = "atlasia-postgres-data"
+  }
+}
+```
+
+#### Google Cloud (Disk Encryption)
+
+```hcl
+resource "google_compute_disk" "postgres" {
+  name  = "atlasia-postgres-disk"
+  type  = "pd-ssd"
+  zone  = "us-central1-a"
+  size  = 100
+  
+  disk_encryption_key {
+    kms_key_self_link = google_kms_crypto_key.postgres.id
+  }
+}
+```
+
+#### Azure (Disk Encryption)
+
+```hcl
+resource "azurerm_managed_disk" "postgres" {
+  name                 = "atlasia-postgres-disk"
+  location             = azurerm_resource_group.main.location
+  resource_group_name  = azurerm_resource_group.main.name
+  storage_account_type = "Premium_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 100
+  
+  encryption_settings {
+    enabled = true
+    disk_encryption_key {
+      secret_url      = azurerm_key_vault_secret.disk_encryption.id
+      source_vault_id = azurerm_key_vault.main.id
+    }
+  }
+}
+```
+
+### Docker Volume Encryption
+
+For Docker Compose deployments with encryption:
+
+```yaml
+volumes:
+  ai_db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /path/to/encrypted/mount  # LUKS or cloud-encrypted volume
+```
+
+**Note**: The `device` path should point to an encrypted filesystem (LUKS, EBS, etc.).
+
+## Dependency Vulnerability Management
 
 Atlasia uses automated security scanning to identify vulnerabilities in both backend (Maven/Java) and frontend (NPM/Node.js) dependencies:
 

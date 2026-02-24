@@ -1,9 +1,16 @@
 server:
   port: 8080
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${vault.secret.data.atlasia.ssl-keystore-path:${SSL_KEYSTORE_PATH:classpath:keystore.p12}}
+    key-store-password: ${vault.secret.data.atlasia.ssl-keystore-password:${SSL_KEYSTORE_PASSWORD:}}
+    key-store-type: PKCS12
+    enabled-protocols: TLSv1.3
+    ciphers: TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256
 
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/ai}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ai?ssl=true&sslmode=require}
     username: ${DB_USER:ai}
     password: ${vault.secret.data.atlasia.db-password:${DB_PASSWORD:ai}}
   jpa:
