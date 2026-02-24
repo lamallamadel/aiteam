@@ -52,23 +52,32 @@
     <header class="top-bar">
       <h2>Orchestrator Control Center</h2>
       @if (authService.isAuthenticated()) {
-        <div class="user-menu-container">
-          <button class="user-menu-trigger" (click)="toggleUserMenu()">
-            <div class="user-avatar">{{ getAvatarLetter() }}</div>
-            <span class="user-name">{{ getUsername() }}</span>
+        <div class="top-bar-actions">
+          <button class="theme-toggle" (click)="themeService.toggleTheme()" [attr.aria-label]="themeService.theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+            @if (themeService.theme() === 'dark') {
+              <span class="theme-icon">☀️</span>
+            } @else {
+              <span class="theme-icon">🌙</span>
+            }
           </button>
-          @if (userMenuOpen()) {
-            <div class="user-menu-dropdown">
-              <a routerLink="/profile" class="user-menu-item" (click)="toggleUserMenu()">
-                <span class="menu-icon">👤</span>
-                Profile
-              </a>
-              <button class="user-menu-item" (click)="handleLogout()">
-                <span class="menu-icon">🚪</span>
-                Logout
-              </button>
-            </div>
-          }
+          <div class="user-menu-container">
+            <button class="user-menu-trigger" (click)="toggleUserMenu()">
+              <div class="user-avatar">{{ getAvatarLetter() }}</div>
+              <span class="user-name">{{ getUsername() }}</span>
+            </button>
+            @if (userMenuOpen()) {
+              <div class="user-menu-dropdown">
+                <a routerLink="/profile" class="user-menu-item" (click)="toggleUserMenu()">
+                  <span class="menu-icon">👤</span>
+                  Profile
+                </a>
+                <button class="user-menu-item" (click)="handleLogout()">
+                  <span class="menu-icon">🚪</span>
+                  Logout
+                </button>
+              </div>
+            }
+          </div>
         </div>
       }
     </header>

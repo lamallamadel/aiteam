@@ -5,6 +5,7 @@ import { OrchestratorService } from './services/orchestrator.service';
 import { EscalationService } from './services/escalation.service';
 import { OversightInboxService } from './services/oversight-inbox.service';
 import { AuthService } from './services/auth.service';
+import { ThemeService } from './services/theme.service';
 import { Persona } from './models/orchestrator.model';
 
 @Component({
@@ -23,7 +24,8 @@ export class App implements OnInit {
     private orchestratorService: OrchestratorService,
     public escalationService: EscalationService,
     public oversightInboxService: OversightInboxService,
-    public authService: AuthService
+    public authService: AuthService,
+    public themeService: ThemeService
   ) { }
 
   ngOnInit() {

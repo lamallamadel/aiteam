@@ -62,7 +62,7 @@ body {
 }
 
 .nav-item:hover {
-    background: rgba(56, 189, 248, 0.05);
+    background: color-mix(in srgb, var(--accent-active) 5%, transparent);
 }
 
 .nav-item.active {
@@ -116,6 +116,36 @@ body {
     color: var(--text-primary);
 }
 
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 0;
+}
+
+.theme-toggle:hover {
+    background: color-mix(in srgb, var(--accent-active) 5%, transparent);
+    border-color: color-mix(in srgb, var(--accent-active) 30%, transparent);
+}
+
+.theme-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
 .user-menu-container {
     position: relative;
 }
@@ -134,8 +164,8 @@ body {
 }
 
 .user-menu-trigger:hover {
-    background: rgba(56, 189, 248, 0.05);
-    border-color: rgba(56, 189, 248, 0.3);
+    background: color-mix(in srgb, var(--accent-active) 5%, transparent);
+    border-color: color-mix(in srgb, var(--accent-active) 30%, transparent);
 }
 
 .user-avatar {
@@ -164,7 +194,7 @@ body {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--text-primary) 15%, transparent);
     z-index: 1000;
     overflow: hidden;
 }
@@ -186,7 +216,7 @@ body {
 }
 
 .user-menu-item:hover {
-    background: rgba(56, 189, 248, 0.05);
+    background: color-mix(in srgb, var(--accent-active) 5%, transparent);
 }
 
 .menu-icon {
