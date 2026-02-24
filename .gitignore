@@ -55,3 +55,7 @@ vault-token
 # Application secrets (should be in Vault)
 application-secrets.yml
 bootstrap-secrets.yml
+
+# File upload artifacts
+/app/artifacts/
+artifacts/

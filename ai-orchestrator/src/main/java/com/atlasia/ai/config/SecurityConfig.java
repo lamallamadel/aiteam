@@ -105,7 +105,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(corsProperties.getAllowedOrigins());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setExposedHeaders(Arrays.asList("X-CSRF-TOKEN"));
+        configuration.setExposedHeaders(Arrays.asList("X-CSRF-TOKEN", "X-RateLimit-Remaining"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

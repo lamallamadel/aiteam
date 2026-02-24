@@ -27,11 +27,29 @@ public class RunArtifactEntity {
     private String artifactType;
 
     @Type(JsonBinaryType.class)
-    @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
+    @Column(name = "payload", columnDefinition = "jsonb")
     private String payload;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "original_filename", length = 500)
+    private String originalFilename;
+
+    @Column(name = "content_type")
+    private String contentType;
+
+    @Column(name = "size_bytes")
+    private Long sizeBytes;
+
+    @Column(name = "uploaded_by")
+    private UUID uploadedBy;
+
+    @Column(name = "uploaded_at")
+    private Instant uploadedAt;
+
+    @Column(name = "file_path", length = 1000)
+    private String filePath;
 
     protected RunArtifactEntity() {}
 
@@ -48,6 +66,18 @@ public class RunArtifactEntity {
     public String getArtifactType() { return artifactType; }
     public String getPayload() { return payload; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getOriginalFilename() { return originalFilename; }
+    public String getContentType() { return contentType; }
+    public Long getSizeBytes() { return sizeBytes; }
+    public UUID getUploadedBy() { return uploadedBy; }
+    public Instant getUploadedAt() { return uploadedAt; }
+    public String getFilePath() { return filePath; }
 
     public void setRun(RunEntity run) { this.run = run; }
+    public void setOriginalFilename(String originalFilename) { this.originalFilename = originalFilename; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
+    public void setSizeBytes(Long sizeBytes) { this.sizeBytes = sizeBytes; }
+    public void setUploadedBy(UUID uploadedBy) { this.uploadedBy = uploadedBy; }
+    public void setUploadedAt(Instant uploadedAt) { this.uploadedAt = uploadedAt; }
+    public void setFilePath(String filePath) { this.filePath = filePath; }
 }
