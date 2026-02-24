@@ -1,7 +1,10 @@
 package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.*;
+import com.atlasia.ai.model.UserEntity;
+import com.atlasia.ai.persistence.UserRepository;
 import com.atlasia.ai.service.AuthenticationService;
+import com.atlasia.ai.service.AuthorizationService;
 import com.atlasia.ai.service.OAuth2Service;
 import com.atlasia.ai.service.PasswordResetService;
 import com.atlasia.ai.service.RefreshTokenService;
@@ -11,7 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,18 +35,24 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final PasswordResetService passwordResetService;
     private final OAuth2Service oauth2Service;
+    private final UserRepository userRepository;
+    private final AuthorizationService authorizationService;
 
     public AuthController(
             UserRegistrationService userRegistrationService,
             AuthenticationService authenticationService,
             RefreshTokenService refreshTokenService,
             PasswordResetService passwordResetService,
-            OAuth2Service oauth2Service) {
+            OAuth2Service oauth2Service,
+            UserRepository userRepository,
+            AuthorizationService authorizationService) {
         this.userRegistrationService = userRegistrationService;
         this.authenticationService = authenticationService;
         this.refreshTokenService = refreshTokenService;
         this.passwordResetService = passwordResetService;
         this.oauth2Service = oauth2Service;
+        this.userRepository = userRepository;
+        this.authorizationService = authorizationService;
     }
 
     @PostMapping("/register")
@@ -234,6 +245,55 @@ public class AuthController {
             return authenticationService.extractUserIdFromToken(token);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid token");
+        }
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserDto> getCurrentUser() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            
+            if (authentication == null || !authentication.isAuthenticated() || 
+                "anonymousUser".equals(authentication.getPrincipal())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            UUID userId = null;
+            if (authentication.getDetails() instanceof UUID) {
+                userId = (UUID) authentication.getDetails();
+            } else {
+                String username = authentication.getName();
+                UserEntity user = userRepository.findByUsername(username).orElse(null);
+                if (user != null) {
+                    userId = user.getId();
+                }
+            }
+
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            UserEntity user = userRepository.findByIdWithRoles(userId)
+                .orElse(null);
+                
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+
+            CurrentUserDto dto = new CurrentUserDto(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                authorizationService.getUserRoles(userId),
+                authorizationService.getUserPermissions(userId),
+                user.isEnabled(),
+                user.isLocked()
+            );
+
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            logger.error("Error fetching current user: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 }

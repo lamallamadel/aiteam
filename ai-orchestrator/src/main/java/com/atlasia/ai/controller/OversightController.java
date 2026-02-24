@@ -1,14 +1,17 @@
 package com.atlasia.ai.controller;
 
+import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.GlobalSettingsEntity;
 import com.atlasia.ai.persistence.GlobalSettingsRepository;
 import com.atlasia.ai.service.DynamicInterruptService;
 import com.atlasia.ai.service.InterruptDecisionStore;
+import com.atlasia.ai.service.RoleService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -64,11 +67,15 @@ public class OversightController {
     // ── Config endpoints ─────────────────────────────────────────────────────
 
     @GetMapping("/config")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_OVERSIGHT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<OversightConfig> getConfig() {
         return ResponseEntity.ok(currentConfig);
     }
 
     @PostMapping("/config")
+    @PreAuthorize("hasRole('WORKFLOW_MANAGER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_OVERSIGHT, action = RoleService.ACTION_MANAGE)
     public ResponseEntity<OversightConfig> updateConfig(@RequestBody OversightConfig config) {
         log.info("Oversight config updated: autonomyLevel={}, rules={}",
                 config.autonomyLevel,
@@ -82,6 +89,8 @@ public class OversightController {
 
     /** All pending interrupt decisions awaiting human approval. */
     @GetMapping("/interrupts/pending")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_OVERSIGHT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<Collection<InterruptDecisionStore.PendingApproval>> getPendingInterrupts() {
         return ResponseEntity.ok(interruptDecisionStore.getPending());
     }
@@ -91,6 +100,8 @@ public class OversightController {
      * Completes the CompletableFuture parked in WorkflowEngine, unblocking the pipeline thread.
      */
     @PostMapping("/runs/{runId}/interrupt-decision")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_OVERSIGHT, action = RoleService.ACTION_MANAGE)
     public ResponseEntity<Map<String, Object>> resolveInterrupt(
             @PathVariable UUID runId,
             @RequestBody InterruptDecisionRequest request) {

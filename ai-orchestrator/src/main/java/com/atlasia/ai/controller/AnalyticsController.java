@@ -1,12 +1,15 @@
 package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.*;
+import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.TraceEventEntity;
 import com.atlasia.ai.persistence.TraceEventRepository;
 import com.atlasia.ai.service.AnalyticsService;
 import com.atlasia.ai.service.EscalationAnalyzerService;
+import com.atlasia.ai.service.RoleService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -30,6 +33,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/runs/summary")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<RunsSummaryDto> getRunsSummary(
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
@@ -37,6 +42,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/agents/performance")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<AgentsPerformanceDto> getAgentsPerformance(
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
@@ -44,6 +51,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/personas/findings")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<PersonasFindingsDto> getPersonasFindings(
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
@@ -51,6 +60,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/fix-loops")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<FixLoopsDto> getFixLoops(
             @RequestParam(name = "startDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
             @RequestParam(name = "endDate", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate) {
@@ -58,12 +69,16 @@ public class AnalyticsController {
     }
 
     @PostMapping("/escalations/insights")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<EscalationInsightDto> generateEscalationInsights() {
         EscalationInsightDto insights = escalationAnalyzerService.analyzeEscalations();
         return ResponseEntity.ok(insights);
     }
 
     @GetMapping("/traces/summary")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<TokenSummaryDto> getTracesSummary(
             @RequestParam("runId") UUID runId) {
         List<TraceEventEntity> events = traceEventRepository.findByRunIdOrderByStartTimeAsc(runId);
@@ -89,6 +104,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/traces/latency-trend")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_ANALYTICS, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<Map<String, Object>>> getLatencyTrend() {
         // Returns aggregate LLM latency data across recent runs
         List<TraceEventEntity> llmEvents = traceEventRepository.findAll().stream()

@@ -5,11 +5,13 @@ import com.atlasia.ai.api.EscalationDecisionRequest;
 import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.api.RunResponse;
 import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.RoleService;
 import com.atlasia.ai.service.WorkflowEngine;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.CollaborationService;
@@ -19,6 +21,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -51,6 +54,8 @@ public class RunController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<RunResponse>> listRuns(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         if (getValidatedToken(authorization) == null) {
@@ -64,6 +69,8 @@ public class RunController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_CREATE)
     public ResponseEntity<RunResponse> createRun(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody RunRequest request) {
@@ -92,6 +99,8 @@ public class RunController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_VIEW)
     public ResponseEntity<RunResponse> get(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
@@ -105,6 +114,8 @@ public class RunController {
     }
 
     @GetMapping("/{id}/artifacts")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<ArtifactResponse>> getArtifacts(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
@@ -171,6 +182,8 @@ public class RunController {
      * Re-executes the workflow; WorkflowEngine will load checkpoint context.
      */
     @PostMapping("/{id}/resume")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_UPDATE)
     public ResponseEntity<RunResponse> resume(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
@@ -259,6 +272,8 @@ public class RunController {
      * Body: { "prunedSteps": "QUALIFIER,WRITER" }
      */
     @PutMapping("/{id}/pruned-steps")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_UPDATE)
     public ResponseEntity<Void> setPrunedSteps(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
@@ -280,6 +295,8 @@ public class RunController {
      * Body: { "after": "ARCHITECT", "agentName": "security-scanner-v1" }
      */
     @PostMapping("/{id}/grafts")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_CREATE)
     public ResponseEntity<Void> addGraft(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,

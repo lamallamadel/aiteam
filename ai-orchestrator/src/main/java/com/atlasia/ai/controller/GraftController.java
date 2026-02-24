@@ -3,13 +3,16 @@ package com.atlasia.ai.controller;
 import com.atlasia.ai.api.dto.CircuitBreakerStatusDto;
 import com.atlasia.ai.api.dto.GraftExecutionDto;
 import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.GraftExecutionEntity;
 import com.atlasia.ai.persistence.GraftExecutionRepository;
 import com.atlasia.ai.service.A2ADiscoveryService;
 import com.atlasia.ai.service.GitHubApiClient;
 import com.atlasia.ai.service.GraftExecutionService;
+import com.atlasia.ai.service.RoleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,6 +46,8 @@ public class GraftController {
     }
 
     @GetMapping("/executions")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<GraftExecutionDto>> getAllExecutions(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "runId", required = false) UUID runId,
@@ -70,6 +75,8 @@ public class GraftController {
     }
 
     @GetMapping("/executions/{id}")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<GraftExecutionDto> getExecution(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
@@ -84,6 +91,8 @@ public class GraftController {
     }
 
     @GetMapping("/circuit-breaker/status")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<CircuitBreakerStatusDto>> getCircuitBreakerStatus(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "agentName", required = false) String agentName) {
@@ -108,6 +117,8 @@ public class GraftController {
     }
 
     @PostMapping("/circuit-breaker/{agentName}/reset")
+    @PreAuthorize("hasRole('WORKFLOW_MANAGER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_MANAGE)
     public ResponseEntity<Void> resetCircuitBreaker(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("agentName") String agentName) {
@@ -120,6 +131,8 @@ public class GraftController {
     }
 
     @GetMapping("/agents")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<String>> getAvailableAgents(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         if (getValidatedToken(authorization) == null) {
