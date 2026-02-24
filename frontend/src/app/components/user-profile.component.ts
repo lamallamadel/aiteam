@@ -100,6 +100,31 @@ import { CurrentUserDto } from '../models/orchestrator.model';
               }
             </div>
 
+            <div class="profile-section">
+              <h3>Security</h3>
+              <div class="security-card" (click)="navigateToMfaSettings()">
+                <div class="security-card-content">
+                  <div class="security-icon">🔐</div>
+                  <div class="security-info">
+                    <h4>Two-Factor Authentication</h4>
+                    <p>
+                      @if (user()?.mfaEnabled) {
+                        <span class="status-badge enabled">Enabled</span>
+                      } @else {
+                        <span class="status-badge disabled">Not Enabled</span>
+                      }
+                    </p>
+                    <p class="security-description">
+                      Add an extra layer of security to your account
+                    </p>
+                  </div>
+                  <div class="security-action">
+                    <span class="arrow">→</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="profile-actions">
               <button class="btn-logout" (click)="logout()">
                 <span class="logout-icon">🚪</span>
@@ -412,6 +437,68 @@ import { CurrentUserDto } from '../models/orchestrator.model';
     .btn-primary:hover {
       opacity: 0.85;
     }
+
+    .security-card {
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .security-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--accent-active);
+      transform: translateY(-2px);
+    }
+
+    .security-card-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .security-icon {
+      font-size: 2.5rem;
+      flex-shrink: 0;
+    }
+
+    .security-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .security-info h4 {
+      margin: 0;
+      font-size: 1rem;
+      color: white;
+    }
+
+    .security-info p {
+      margin: 0;
+    }
+
+    .security-description {
+      font-size: 0.85rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .security-action {
+      flex-shrink: 0;
+    }
+
+    .arrow {
+      font-size: 1.5rem;
+      color: var(--accent-active);
+      transition: transform 0.2s;
+    }
+
+    .security-card:hover .arrow {
+      transform: translateX(4px);
+    }
   `]
 })
 export class UserProfileComponent implements OnInit {
@@ -450,6 +537,10 @@ export class UserProfileComponent implements OnInit {
     if (username.length === 0) return '?';
     if (username.length === 1) return username.toUpperCase();
     return username.substring(0, 2).toUpperCase();
+  }
+
+  navigateToMfaSettings(): void {
+    this.router.navigate(['/settings/mfa']);
   }
 
   logout(): void {

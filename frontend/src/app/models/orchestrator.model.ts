@@ -218,6 +218,7 @@ export interface CurrentUserDto {
     permissions: string[];
     enabled: boolean;
     locked: boolean;
+    mfaEnabled?: boolean;
     oauth2LinkedAccounts?: string[];
 }
 

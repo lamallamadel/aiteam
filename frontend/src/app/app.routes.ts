@@ -22,6 +22,7 @@ import { LoginComponent } from './components/login.component';
 import { RegisterComponent } from './components/register.component';
 import { ForgotPasswordComponent } from './components/forgot-password.component';
 import { ResetPasswordComponent } from './components/reset-password.component';
+import { MfaSetupComponent } from './components/mfa-setup.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
@@ -51,5 +52,6 @@ export const routes: Routes = [
   { path: 'grafts', component: GraftManagementComponent },
   { path: 'grafts/:runId', component: GraftManagementComponent },
   { path: 'settings', component: SettingsDashboardComponent, canActivate: [authGuard] },
+  { path: 'settings/mfa', component: MfaSetupComponent, canActivate: [authGuard] },
   { path: 'profile', component: UserProfileComponent, canActivate: [authGuard] }
 ];

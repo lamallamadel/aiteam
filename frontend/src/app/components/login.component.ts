@@ -2,96 +2,114 @@ import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../services/auth.service';
 import { ToastService } from '../services/toast.service';
+import { MfaChallengeComponent } from './mfa-challenge.component';
+
+interface LoginResponse {
+  mfaRequired?: boolean;
+  mfaToken?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+}
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, MfaChallengeComponent],
   template: `
     <div class="login-container">
-      <div class="login-card">
-        <div class="login-header">
-          <h1>Atlasia Orchestrator</h1>
-          <p>AI-Powered Development Automation</p>
-        </div>
-
-        <form (ngSubmit)="onSubmit()" class="login-form">
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input
-              id="username"
-              type="text"
-              [(ngModel)]="username"
-              name="username"
-              class="input-field"
-              placeholder="Enter your username"
-              [disabled]="loading()"
-              required
-            />
+      @if (!showMfaChallenge()) {
+        <div class="login-card">
+          <div class="login-header">
+            <h1>Atlasia Orchestrator</h1>
+            <p>AI-Powered Development Automation</p>
           </div>
 
-          <div class="form-group">
-            <label for="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              [(ngModel)]="password"
-              name="password"
-              class="input-field"
-              placeholder="Enter your password"
-              [disabled]="loading()"
-              required
-            />
-            <div class="forgot-password-link">
-              <a routerLink="/auth/forgot-password">Forgot password?</a>
+          <form (ngSubmit)="onSubmit()" class="login-form">
+            <div class="form-group">
+              <label for="username">Username</label>
+              <input
+                id="username"
+                type="text"
+                [(ngModel)]="username"
+                name="username"
+                class="input-field"
+                placeholder="Enter your username"
+                [disabled]="loading()"
+                required
+              />
             </div>
-          </div>
 
-          @if (error()) {
-            <div class="error-message" aria-live="polite">
-              {{ error() }}
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                [(ngModel)]="password"
+                name="password"
+                class="input-field"
+                placeholder="Enter your password"
+                [disabled]="loading()"
+                required
+              />
+              <div class="forgot-password-link">
+                <a routerLink="/auth/forgot-password">Forgot password?</a>
+              </div>
             </div>
-          }
 
-          <button
-            type="submit"
-            class="btn-primary"
-            [disabled]="loading() || !username || !password"
-          >
-            @if (loading()) {
-              <span class="spinner-small"></span>
-              <span>Signing in...</span>
-            } @else {
-              <span>Sign In</span>
+            @if (error()) {
+              <div class="error-message" aria-live="polite">
+                {{ error() }}
+              </div>
             }
-          </button>
-        </form>
 
-        <div class="oauth-divider">
-          <span>or continue with</span>
-        </div>
+            <button
+              type="submit"
+              class="btn-primary"
+              [disabled]="loading() || !username || !password"
+            >
+              @if (loading()) {
+                <span class="spinner-small"></span>
+                <span>Signing in...</span>
+              } @else {
+                <span>Sign In</span>
+              }
+            </button>
+          </form>
 
-        <div class="oauth-buttons">
-          <button class="oauth-btn github" (click)="loginWithOAuth2('github')" aria-label="Sign in with GitHub">
-            <span class="oauth-icon">🐙</span>
-            <span>GitHub</span>
-          </button>
-          <button class="oauth-btn google" (click)="loginWithOAuth2('google')" aria-label="Sign in with Google">
-            <span class="oauth-icon">📧</span>
-            <span>Google</span>
-          </button>
-          <button class="oauth-btn gitlab" (click)="loginWithOAuth2('gitlab')" aria-label="Sign in with GitLab">
-            <span class="oauth-icon">🦊</span>
-            <span>GitLab</span>
-          </button>
-        </div>
+          <div class="oauth-divider">
+            <span>or continue with</span>
+          </div>
 
-        <div class="register-link">
-          Don't have an account? <a routerLink="/auth/register">Sign up</a>
+          <div class="oauth-buttons">
+            <button class="oauth-btn github" (click)="loginWithOAuth2('github')" aria-label="Sign in with GitHub">
+              <span class="oauth-icon">🐙</span>
+              <span>GitHub</span>
+            </button>
+            <button class="oauth-btn google" (click)="loginWithOAuth2('google')" aria-label="Sign in with Google">
+              <span class="oauth-icon">📧</span>
+              <span>Google</span>
+            </button>
+            <button class="oauth-btn gitlab" (click)="loginWithOAuth2('gitlab')" aria-label="Sign in with GitLab">
+              <span class="oauth-icon">🦊</span>
+              <span>GitLab</span>
+            </button>
+          </div>
+
+          <div class="register-link">
+            Don't have an account? <a routerLink="/auth/register">Sign up</a>
+          </div>
         </div>
-      </div>
+      } @else {
+        <app-mfa-challenge 
+          [mfaToken]="mfaToken()" 
+          (backToLogin)="onBackToLogin()"
+        />
+      }
     </div>
   `,
   styles: [`
@@ -215,8 +233,11 @@ export class LoginComponent {
   password = '';
   loading = signal(false);
   error = signal<string | null>(null);
+  showMfaChallenge = signal(false);
+  mfaToken = signal('');
 
   constructor(
+    private http: HttpClient,
     private authService: AuthService,
     private router: Router,
     private toastService: ToastService
@@ -230,11 +251,21 @@ export class LoginComponent {
     this.loading.set(true);
     this.error.set(null);
 
-    this.authService.login(this.username, this.password).subscribe({
-      next: () => {
+    this.http.post<LoginResponse>('/api/auth/login', {
+      username: this.username,
+      password: this.password
+    }).subscribe({
+      next: (response) => {
         this.loading.set(false);
-        this.toastService.show('Login successful', 'success');
-        this.router.navigate(['/dashboard']);
+        
+        if (response.mfaRequired && response.mfaToken) {
+          this.mfaToken.set(response.mfaToken);
+          this.showMfaChallenge.set(true);
+        } else if (response.accessToken && response.refreshToken) {
+          this.authService.storeTokens(response.accessToken, response.refreshToken);
+          this.toastService.show('Login successful', 'success');
+          this.router.navigate(['/dashboard']);
+        }
       },
       error: (err) => {
         this.loading.set(false);
@@ -242,6 +273,13 @@ export class LoginComponent {
         this.toastService.show('Invalid username or password', 'error');
       }
     });
+  }
+
+  onBackToLogin(): void {
+    this.showMfaChallenge.set(false);
+    this.mfaToken.set('');
+    this.password = '';
+    this.error.set(null);
   }
 
   loginWithOAuth2(provider: 'github' | 'google' | 'gitlab'): void {
