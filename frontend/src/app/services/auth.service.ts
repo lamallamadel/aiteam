@@ -158,6 +158,16 @@ export class AuthService {
         localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     }
 
+    fetchCsrfToken(): Observable<void> {
+        return this.http.get<void>('/api/auth/csrf', {
+            withCredentials: true
+        }).pipe(
+            catchError(() => {
+                return throwError(() => new Error('Failed to fetch CSRF token'));
+            })
+        );
+    }
+
     getCsrfToken(): string | null {
         const name = this.CSRF_TOKEN_COOKIE + '=';
         const decodedCookie = decodeURIComponent(document.cookie);
