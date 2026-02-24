@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus, PendingInterrupt, InterruptDecisionRequest } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus, PendingInterrupt, InterruptDecisionRequest, CurrentUserDto, UserRegistrationRequest, UserRegistrationResponse } from '../models/orchestrator.model';
 import { CollaborationEventEntity } from '../models/collaboration.model';
 
 export interface OversightInterruptRule {
@@ -149,5 +149,31 @@ export class OrchestratorService {
 
     resolveInterrupt(runId: string, request: InterruptDecisionRequest): Observable<void> {
         return this.http.post<void>(`/api/oversight/runs/${runId}/interrupt-decision`, request);
+    }
+
+    // Authentication endpoints
+    login(username: string, password: string, deviceInfo?: string): Observable<{ accessToken: string; refreshToken: string; tokenType: string; expiresIn: number }> {
+        const body: any = { username, password };
+        if (deviceInfo) {
+            body.deviceInfo = deviceInfo;
+        }
+        return this.http.post<{ accessToken: string; refreshToken: string; tokenType: string; expiresIn: number }>('/api/auth/login', body);
+    }
+
+    register(username: string, email: string, password: string): Observable<UserRegistrationResponse> {
+        const request: UserRegistrationRequest = { username, email, password };
+        return this.http.post<UserRegistrationResponse>('/api/auth/register', request);
+    }
+
+    getCurrentUser(): Observable<CurrentUserDto> {
+        return this.http.get<CurrentUserDto>('/api/auth/me');
+    }
+
+    initiatePasswordReset(email: string): Observable<{ message: string; token: string }> {
+        return this.http.post<{ message: string; token: string }>('/api/auth/password-reset/initiate', { email });
+    }
+
+    completePasswordReset(token: string, newPassword: string): Observable<{ message: string }> {
+        return this.http.post<{ message: string }>('/api/auth/password-reset/complete', { token, newPassword });
     }
 }

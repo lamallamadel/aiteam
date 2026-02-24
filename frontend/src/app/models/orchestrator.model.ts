@@ -209,3 +209,26 @@ export interface InterruptDecisionRequest {
     decidedBy: string;
     reason: string;
 }
+
+export interface CurrentUserDto {
+    id: string;
+    username: string;
+    email: string;
+    roles: string[];
+    permissions: string[];
+    enabled: boolean;
+    locked: boolean;
+}
+
+export interface UserRegistrationRequest {
+    username: string;
+    email: string;
+    password: string;
+}
+
+export interface UserRegistrationResponse {
+    userId: string | null;
+    username: string | null;
+    email: string | null;
+    message: string;
+}
