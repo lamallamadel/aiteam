@@ -1,10 +1,11 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SettingsService } from '../services/settings.service';
 import { AuthService } from '../services/auth.service';
 import { OrchestratorService } from '../services/orchestrator.service';
+import { PasswordStrengthComponent } from './shared/password-strength.component';
 
 interface AgentRole {
   id: string;
@@ -17,7 +18,7 @@ interface AgentRole {
 @Component({
   selector: 'app-onboarding-flow',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PasswordStrengthComponent],
   template: `
     <div class="onboarding-wrapper">
       <div class="onboarding-container">
@@ -45,7 +46,10 @@ interface AgentRole {
                 (ngModelChange)="username.set($event)"
                 placeholder="Choose a username"
                 class="input-field"
-                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('username')">
+                [class.error]="usernameError() || (registrationError() && registrationError()!.toLowerCase().includes('username'))">
+              <span class="error-message" *ngIf="usernameError()">
+                {{ usernameError() }}
+              </span>
             </div>
 
             <div class="form-group">
@@ -56,7 +60,10 @@ interface AgentRole {
                 (ngModelChange)="email.set($event)"
                 placeholder="your.email@example.com"
                 class="input-field"
-                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('email')">
+                [class.error]="emailError() || (registrationError() && registrationError()!.toLowerCase().includes('email'))">
+              <span class="error-message" *ngIf="emailError()">
+                {{ emailError() }}
+              </span>
             </div>
 
             <div class="form-group">
@@ -68,6 +75,7 @@ interface AgentRole {
                 placeholder="Choose a secure password"
                 class="input-field"
                 [class.error]="registrationError() && registrationError()!.toLowerCase().includes('password')">
+              <app-password-strength [password]="password()" />
             </div>
 
             <div class="form-group">
@@ -746,12 +754,44 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
     return this.confirmPassword().length > 0 && this.password() !== this.confirmPassword();
   }
 
+  usernameError = computed(() => {
+    const u = this.username();
+    if (!u) return null;
+    if (u.length < 3) return 'Username must be at least 3 characters';
+    return null;
+  });
+
+  emailError = computed(() => {
+    const e = this.email();
+    if (!e) return null;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(e)) return 'Please enter a valid email address';
+    return null;
+  });
+
+  passwordStrength = computed(() => {
+    const pwd = this.password();
+    if (!pwd) return 0;
+
+    let strength = 0;
+    if (pwd.length >= 12) strength++;
+    if (/[A-Z]/.test(pwd)) strength++;
+    if (/[a-z]/.test(pwd)) strength++;
+    if (/\d/.test(pwd)) strength++;
+    if (/[^A-Za-z0-9]/.test(pwd)) strength++;
+
+    return Math.min(strength, 4);
+  });
+
   canProceedFromRegistration(): boolean {
     return this.username().trim() !== '' &&
            this.email().trim() !== '' &&
            this.password().trim() !== '' &&
            this.confirmPassword().trim() !== '' &&
-           !this.passwordMismatch();
+           !this.passwordMismatch() &&
+           !this.usernameError() &&
+           !this.emailError() &&
+           this.passwordStrength() >= 2;
   }
 
   register() {

@@ -1,10 +1,11 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../services/auth.service';
 import { ToastService } from '../services/toast.service';
+import { PasswordStrengthComponent } from './shared/password-strength.component';
 
 interface RegisterRequest {
   username: string;
@@ -23,7 +24,7 @@ interface RegisterResponse {
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, PasswordStrengthComponent],
   template: `
     <div class="register-container">
       <div class="register-card">
@@ -68,10 +69,14 @@ interface RegisterResponse {
               [(ngModel)]="username"
               name="username"
               class="input-field"
+              [class.field-error]="usernameError()"
               placeholder="johndoe"
               [disabled]="loading()"
               required
             />
+            @if (usernameError()) {
+              <span class="field-error-message">{{ usernameError() }}</span>
+            }
           </div>
 
           <div class="form-group">
@@ -82,10 +87,14 @@ interface RegisterResponse {
               [(ngModel)]="email"
               name="email"
               class="input-field"
+              [class.field-error]="emailError()"
               placeholder="john@example.com"
               [disabled]="loading()"
               required
             />
+            @if (emailError()) {
+              <span class="field-error-message">{{ emailError() }}</span>
+            }
           </div>
 
           <div class="form-group">
@@ -100,6 +109,7 @@ interface RegisterResponse {
               [disabled]="loading()"
               required
             />
+            <app-password-strength [password]="password" />
           </div>
 
           <div class="form-group">
@@ -217,6 +227,17 @@ interface RegisterResponse {
       text-decoration: underline;
     }
 
+    .field-error {
+      border-color: #ef4444 !important;
+    }
+
+    .field-error-message {
+      font-size: 0.75rem;
+      color: #ef4444;
+      margin-top: -8px;
+      display: block;
+    }
+
     @media (max-width: 480px) {
       .register-card {
         padding: 32px 24px;
@@ -239,6 +260,33 @@ export class RegisterComponent {
   error = signal<string | null>(null);
   success = signal<string | null>(null);
 
+  usernameError = computed(() => {
+    if (!this.username) return null;
+    if (this.username.length < 3) return 'Username must be at least 3 characters';
+    return null;
+  });
+
+  emailError = computed(() => {
+    if (!this.email) return null;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(this.email)) return 'Please enter a valid email address';
+    return null;
+  });
+
+  passwordStrength = computed(() => {
+    const pwd = this.password;
+    if (!pwd) return 0;
+
+    let strength = 0;
+    if (pwd.length >= 12) strength++;
+    if (/[A-Z]/.test(pwd)) strength++;
+    if (/[a-z]/.test(pwd)) strength++;
+    if (/\d/.test(pwd)) strength++;
+    if (/[^A-Za-z0-9]/.test(pwd)) strength++;
+
+    return Math.min(strength, 4);
+  });
+
   constructor(
     private http: HttpClient,
     private authService: AuthService,
@@ -252,7 +300,10 @@ export class RegisterComponent {
       this.email &&
       this.password &&
       this.confirmPassword &&
-      this.password === this.confirmPassword
+      this.password === this.confirmPassword &&
+      !this.usernameError() &&
+      !this.emailError() &&
+      this.passwordStrength() >= 2
     );
   }
 
