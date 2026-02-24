@@ -9,6 +9,8 @@ import com.atlasia.ai.service.OAuth2Service;
 import com.atlasia.ai.service.PasswordResetService;
 import com.atlasia.ai.service.RefreshTokenService;
 import com.atlasia.ai.service.UserRegistrationService;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -297,5 +300,26 @@ public class AuthController {
             logger.error("Error fetching current user: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/csrf")
+    public ResponseEntity<Map<String, String>> getCsrfToken(CsrfToken csrfToken, HttpServletResponse response) {
+        if (csrfToken != null) {
+            Cookie cookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
+            cookie.setPath("/");
+            cookie.setHttpOnly(false);
+            cookie.setSecure(false);
+            cookie.setMaxAge(3600);
+            response.addCookie(cookie);
+            
+            Map<String, String> tokenResponse = new HashMap<>();
+            tokenResponse.put("token", csrfToken.getToken());
+            tokenResponse.put("headerName", csrfToken.getHeaderName());
+            tokenResponse.put("parameterName", csrfToken.getParameterName());
+            
+            return ResponseEntity.ok(tokenResponse);
+        }
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
 }

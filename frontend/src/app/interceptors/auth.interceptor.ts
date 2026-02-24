@@ -8,11 +8,23 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
 
     console.log('AuthInterceptor: Injection token:', token);
 
+    const headers: { [key: string]: string } = {};
+
     if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const method = req.method.toUpperCase();
+    if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
+        const csrfToken = authService.getCsrfToken();
+        if (csrfToken) {
+            headers['X-CSRF-TOKEN'] = csrfToken;
+        }
+    }
+
+    if (Object.keys(headers).length > 0) {
         const cloned = req.clone({
-            setHeaders: {
-                Authorization: `Bearer ${token}`
-            }
+            setHeaders: headers
         });
         return next(cloned);
     }
