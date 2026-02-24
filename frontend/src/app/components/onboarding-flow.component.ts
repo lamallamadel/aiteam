@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SettingsService } from '../services/settings.service';
 import { AuthService } from '../services/auth.service';
+import { OrchestratorService } from '../services/orchestrator.service';
 
 interface AgentRole {
   id: string;
@@ -20,7 +21,7 @@ interface AgentRole {
   template: `
     <div class="onboarding-wrapper">
       <div class="onboarding-container">
-        <!-- Step 1: Welcome Message -->
+        <!-- Step 1: Registration -->
         <div *ngIf="currentStep() === 1" class="chat-step">
           <div class="message-block assistant">
             <div class="message-header">
@@ -28,12 +29,73 @@ interface AgentRole {
               <span class="message-timestamp">{{ timestamp }}</span>
             </div>
             <div class="message-body">
-              <div class="message-text" [innerHTML]="typedText()"></div>
+              <div class="message-text">
+                <h2>Welcome to Atlasia Orchestrator</h2>
+                <p>Let's create your account to get started with AI-powered development automation.</p>
+              </div>
             </div>
           </div>
 
-          <div class="cta-section" *ngIf="isTypingComplete()">
-            <button class="primary-btn" (click)="nextStep()">Get Started →</button>
+          <div class="form-section">
+            <div class="form-group">
+              <label>Username</label>
+              <input 
+                type="text" 
+                [ngModel]="username()"
+                (ngModelChange)="username.set($event)"
+                placeholder="Choose a username"
+                class="input-field"
+                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('username')">
+            </div>
+
+            <div class="form-group">
+              <label>Email</label>
+              <input 
+                type="email" 
+                [ngModel]="email()"
+                (ngModelChange)="email.set($event)"
+                placeholder="your.email@example.com"
+                class="input-field"
+                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('email')">
+            </div>
+
+            <div class="form-group">
+              <label>Password</label>
+              <input 
+                type="password" 
+                [ngModel]="password()"
+                (ngModelChange)="password.set($event)"
+                placeholder="Choose a secure password"
+                class="input-field"
+                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('password')">
+            </div>
+
+            <div class="form-group">
+              <label>Confirm Password</label>
+              <input 
+                type="password" 
+                [ngModel]="confirmPassword()"
+                (ngModelChange)="confirmPassword.set($event)"
+                placeholder="Re-enter your password"
+                class="input-field"
+                [class.error]="passwordMismatch()">
+              <span class="error-message" *ngIf="passwordMismatch()">
+                Passwords do not match
+              </span>
+            </div>
+
+            <div class="error-message" *ngIf="registrationError()">
+              {{ registrationError() }}
+            </div>
+
+            <div class="cta-section">
+              <button 
+                class="primary-btn" 
+                [disabled]="!canProceedFromRegistration() || isRegistering()"
+                (click)="register()">
+                {{ isRegistering() ? 'Creating Account...' : 'Create Account →' }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -156,7 +218,7 @@ interface AgentRole {
         <div class="progress-bar">
           <div class="progress-step" [class.active]="currentStep() >= 1" [class.complete]="currentStep() > 1">
             <div class="step-dot"></div>
-            <span class="step-label">Welcome</span>
+            <span class="step-label">Registration</span>
           </div>
           <div class="progress-line" [class.complete]="currentStep() > 1"></div>
           <div class="progress-step" [class.active]="currentStep() >= 2" [class.complete]="currentStep() > 2">
@@ -256,6 +318,11 @@ interface AgentRole {
       font-size: 1.5rem;
     }
 
+    .message-text p {
+      margin: 8px 0;
+      color: #94a3b8;
+    }
+
     .message-text ul {
       margin: 12px 0;
       padding-left: 24px;
@@ -346,6 +413,10 @@ interface AgentRole {
       border-color: #38bdf8;
     }
 
+    .input-field.error {
+      border-color: #ef4444;
+    }
+
     .input-field::placeholder {
       color: #64748b;
     }
@@ -354,6 +425,12 @@ interface AgentRole {
       font-size: 0.75rem;
       color: #64748b;
       font-style: italic;
+    }
+
+    .error-message {
+      font-size: 0.85rem;
+      color: #ef4444;
+      margin-top: -8px;
     }
 
     .role-selection-section {
@@ -594,20 +671,12 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
   currentStep = signal(1);
   timestamp = new Date().toLocaleTimeString();
 
-  welcomeMessage = `<h2>Welcome to Atlasia Orchestrator</h2>
-
-Your AI-powered development automation platform is ready to go. Here's what makes Atlasia special:
-
-• <strong>Autonomous Engineering</strong> – Let AI agents handle code reviews, bug fixes, and feature implementation
-• <strong>Multi-Agent Collaboration</strong> – Specialized roles work together on complex tasks
-• <strong>Full Transparency</strong> – Every decision, tool call, and reasoning step is visible
-• <strong>Your Control</strong> – Approve, modify, or reject any automated action
-
-Let's get you set up in just a few quick steps.`;
-
-  typedText = signal('');
-  isTypingComplete = signal(false);
-  private typingInterval?: ReturnType<typeof setInterval>;
+  username = signal('');
+  email = signal('');
+  password = signal('');
+  confirmPassword = signal('');
+  registrationError = signal<string | null>(null);
+  isRegistering = signal(false);
 
   gitProviders = [
     { id: 'github', name: 'GitHub', icon: '🐙' },
@@ -663,44 +732,81 @@ Let's get you set up in just a few quick steps.`;
   constructor(
     private settingsService: SettingsService,
     private router: Router,
-    private authService: AuthService
+    private authService: AuthService,
+    private orchestratorService: OrchestratorService
   ) {}
 
   ngOnInit() {
-    this.startTypingAnimation();
   }
 
   ngOnDestroy() {
-    if (this.typingInterval) {
-      clearInterval(this.typingInterval);
-    }
   }
 
-  startTypingAnimation() {
-    console.log('Starting typing animation...');
-    const plainText = this.welcomeMessage;
-    let currentIndex = 0;
-    
-    this.typingInterval = setInterval(() => {
-      if (currentIndex <= plainText.length) {
-        this.typedText.set(plainText.substring(0, currentIndex));
-        currentIndex++;
-      } else {
-        if (this.typingInterval) {
-          clearInterval(this.typingInterval);
+  passwordMismatch(): boolean {
+    return this.confirmPassword().length > 0 && this.password() !== this.confirmPassword();
+  }
+
+  canProceedFromRegistration(): boolean {
+    return this.username().trim() !== '' &&
+           this.email().trim() !== '' &&
+           this.password().trim() !== '' &&
+           this.confirmPassword().trim() !== '' &&
+           !this.passwordMismatch();
+  }
+
+  register() {
+    if (!this.canProceedFromRegistration() || this.isRegistering()) {
+      return;
+    }
+
+    this.registrationError.set(null);
+    this.isRegistering.set(true);
+
+    this.orchestratorService.register(
+      this.username(),
+      this.email(),
+      this.password()
+    ).subscribe({
+      next: (response) => {
+        if (response.userId) {
+          this.autoLogin();
+        } else {
+          this.isRegistering.set(false);
+          this.registrationError.set(response.message || 'Registration failed. Please try again.');
         }
-        console.log('Typing animation complete.');
-        setTimeout(() => {
-          this.isTypingComplete.set(true);
-        });
+      },
+      error: (error) => {
+        this.isRegistering.set(false);
+        let errorMessage = 'Registration failed. Please try again.';
+        
+        if (error.error && error.error.message) {
+          errorMessage = error.error.message;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        this.registrationError.set(errorMessage);
       }
-    }, 10);
+    });
+  }
+
+  autoLogin() {
+    this.authService.login(this.username(), this.password()).subscribe({
+      next: (response) => {
+        this.authService.storeTokens(response.accessToken, response.refreshToken);
+        this.isRegistering.set(false);
+        this.nextStep();
+      },
+      error: (error) => {
+        this.isRegistering.set(false);
+        this.registrationError.set('Account created, but auto-login failed. Please login manually.');
+        console.error('Auto-login error:', error);
+      }
+    });
   }
 
   nextStep() {
-    console.log('Navigating to next step from:', this.currentStep());
     this.currentStep.update(step => step + 1);
-    console.log('New step:', this.currentStep());
   }
 
   selectProvider(providerId: string) {
