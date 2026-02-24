@@ -61,8 +61,7 @@ export class OAuth2CallbackComponent implements OnInit {
   ngOnInit(): void {
     this.route.queryParams.subscribe(params => {
       const token = params['token'];
-      const accessToken = params['access_token'];
-      const refreshToken = params['refresh_token'];
+      const refreshToken = params['refreshToken'];
       const error = params['error'];
       const errorDescription = params['error_description'];
 
@@ -74,21 +73,19 @@ export class OAuth2CallbackComponent implements OnInit {
         return;
       }
 
-      if (token || (accessToken && refreshToken)) {
-        const finalAccessToken = token || accessToken;
-        const finalRefreshToken = refreshToken || token;
-        
-        this.authService.storeTokens(finalAccessToken, finalRefreshToken);
+      if (token && refreshToken) {
+        this.authService.storeTokens(token, refreshToken);
         this.message = 'Authentication successful! Redirecting...';
         
-        setTimeout(() => {
-          if (window.opener) {
-            window.opener.postMessage({ type: 'oauth2-success', accessToken: finalAccessToken }, window.location.origin);
-            window.close();
-          } else {
-            this.router.navigate(['/dashboard']);
-          }
-        }, 500);
+        if (window.opener) {
+          window.opener.postMessage(
+            { type: 'oauth2-success', accessToken: token },
+            window.location.origin
+          );
+          window.close();
+        } else {
+          this.router.navigate(['/dashboard']);
+        }
       } else {
         this.message = 'Invalid OAuth2 response';
         setTimeout(() => {
