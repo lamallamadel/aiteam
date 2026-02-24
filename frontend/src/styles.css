@@ -6,6 +6,7 @@
   --text-primary: rgb(248, 250, 252);
   --text-muted: rgb(148, 163, 184);
   --accent-active: rgb(56, 189, 248);
+  --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 }
 
@@ -20,10 +21,11 @@
 
 body {
   margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--background);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv02', 'cv03', 'cv04';
 }
 
 .glass-panel {
@@ -37,6 +39,10 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   margin: 0;
+}
+
+h1, h2, h3 {
+  letter-spacing: -0.01em;
 }
 
 a {
@@ -126,6 +132,10 @@ input, select, textarea {
 
 .btn-primary:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-primary:disabled {
@@ -229,4 +239,21 @@ input, select, textarea {
 *:focus-visible {
   outline: 2px solid var(--accent-active);
   outline-offset: 2px;
+}
+
+/* Entrance animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-card,
+.register-card {
+  animation: fadeInUp 0.4s ease-out;
 }
