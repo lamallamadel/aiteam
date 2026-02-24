@@ -2,7 +2,8 @@ import { HttpInterceptorFn, HttpRequest, HttpHandlerFn, HttpErrorResponse } from
 import { inject } from '@angular/core';
 import { AuthService } from '../services/auth.service';
 import { catchError, switchMap, filter, take } from 'rxjs/operators';
-import { throwError } from 'rxjs';
+import { throwError, Observable } from 'rxjs';
+import { Router } from '@angular/router';
 
 export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn) => {
     const authService = inject(AuthService);
@@ -37,36 +38,39 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
     );
 };
 
-function handle401Error(request: HttpRequest<unknown>, next: HttpHandlerFn, authService: AuthService) {
-    if (!authService.getIsRefreshing()) {
-        authService.setIsRefreshing(true);
-        authService.getRefreshTokenSubject().next(null);
+function handle401Error(
+    request: HttpRequest<unknown>,
+    next: HttpHandlerFn,
+    authService: AuthService
+): Observable<any> {
+    const router = inject(Router);
+    
+    if (!authService.refreshing$.value) {
+        authService.refreshing$.next(true);
 
-        const refreshToken = authService.getRefreshToken();
-        if (refreshToken) {
-            return authService.refreshToken().pipe(
-                switchMap((response) => {
-                    authService.setIsRefreshing(false);
-                    authService.getRefreshTokenSubject().next(response.accessToken);
-                    return next(addTokenToRequest(request, response.accessToken));
-                }),
-                catchError((err) => {
-                    authService.setIsRefreshing(false);
-                    authService.clearTokens();
-                    return throwError(() => err);
-                })
-            );
-        } else {
-            authService.setIsRefreshing(false);
-            authService.clearTokens();
-            return throwError(() => new Error('No refresh token available'));
-        }
+        return authService.refreshAccessToken().pipe(
+            switchMap((newAccessToken: string) => {
+                authService.refreshing$.next(false);
+                return next(addTokenToRequest(request, newAccessToken));
+            }),
+            catchError((err) => {
+                authService.refreshing$.next(false);
+                router.navigate(['/onboarding']);
+                return throwError(() => err);
+            })
+        );
     } else {
-        return authService.getRefreshTokenSubject().pipe(
-            filter(token => token !== null),
+        return authService.refreshing$.pipe(
+            filter(refreshing => !refreshing),
             take(1),
-            switchMap(token => {
-                return next(addTokenToRequest(request, token!));
+            switchMap(() => {
+                const newToken = authService.getAccessToken();
+                if (newToken) {
+                    return next(addTokenToRequest(request, newToken));
+                } else {
+                    router.navigate(['/onboarding']);
+                    return throwError(() => new Error('No access token available after refresh'));
+                }
             })
         );
     }

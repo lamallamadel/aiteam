@@ -2,7 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, BehaviorSubject, throwError } from 'rxjs';
-import { tap, catchError } from 'rxjs/operators';
+import { tap, catchError, switchMap } from 'rxjs/operators';
 
 export interface LoginRequest {
     username: string;
@@ -48,6 +48,8 @@ export class AuthService {
     private isRefreshing = false;
     private refreshTokenSubject = new BehaviorSubject<string | null>(null);
     
+    refreshing$ = new BehaviorSubject<boolean>(false);
+    
     currentUser = signal<UserProfile | null>(null);
 
     constructor(
@@ -82,6 +84,26 @@ export class AuthService {
             catchError(error => {
                 this.clearTokens();
                 this.router.navigate(['/auth/login']);
+                return throwError(() => error);
+            })
+        );
+    }
+
+    refreshAccessToken(): Observable<string> {
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) {
+            return throwError(() => new Error('No refresh token available'));
+        }
+
+        const request: RefreshRequest = { refreshToken };
+        return this.http.post<RefreshResponse>('/api/auth/refresh', request).pipe(
+            tap(response => {
+                this.storeTokens(response.accessToken, response.refreshToken);
+            }),
+            switchMap(response => [response.accessToken]),
+            catchError(error => {
+                this.clearTokens();
+                this.router.navigate(['/onboarding']);
                 return throwError(() => error);
             })
         );
