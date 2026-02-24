@@ -5,7 +5,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ai}
     username: ${DB_USER:ai}
-    password: ${DB_PASSWORD:ai}
+    password: ${vault.secret.data.atlasia.db-password:${DB_PASSWORD:ai}}
   jpa:
     hibernate:
       ddl-auto: none
@@ -21,20 +21,20 @@ spring:
       client:
         registration:
           github:
-            client-id: ${atlasia.oauth2.github.client-id:}
-            client-secret: ${atlasia.oauth2.github.client-secret:}
+            client-id: ${vault.secret.data.atlasia.oauth2-github-client-id:${atlasia.oauth2.github.client-id:}}
+            client-secret: ${vault.secret.data.atlasia.oauth2-github-client-secret:${atlasia.oauth2.github.client-secret:}}
             scope:
               - user:email
               - read:user
           google:
-            client-id: ${atlasia.oauth2.google.client-id:}
-            client-secret: ${atlasia.oauth2.google.client-secret:}
+            client-id: ${vault.secret.data.atlasia.oauth2-google-client-id:${atlasia.oauth2.google.client-id:}}
+            client-secret: ${vault.secret.data.atlasia.oauth2-google-client-secret:${atlasia.oauth2.google.client-secret:}}
             scope:
               - email
               - profile
           gitlab:
-            client-id: ${atlasia.oauth2.gitlab.client-id:}
-            client-secret: ${atlasia.oauth2.gitlab.client-secret:}
+            client-id: ${vault.secret.data.atlasia.oauth2-gitlab-client-id:${atlasia.oauth2.gitlab.client-id:}}
+            client-secret: ${vault.secret.data.atlasia.oauth2-gitlab-client-secret:${atlasia.oauth2.gitlab.client-secret:}}
             authorization-grant-type: authorization_code
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
             scope:
@@ -79,28 +79,28 @@ resilience4j:
 
 atlasia:
   orchestrator:
-    token: ${ORCHESTRATOR_TOKEN:changeme}
+    token: ${vault.secret.data.atlasia.orchestrator-token:${ORCHESTRATOR_TOKEN:changeme}}
     repoAllowlist: ${REPO_ALLOWLIST:backend/,frontend/,docs/,infra/,ai/}
     workflowProtectPrefix: ${WORKFLOW_PROTECT:.github/workflows/}
     github:
       app-id: ${GITHUB_APP_ID:}
-      private-key-path: ${GITHUB_PRIVATE_KEY_PATH:}
+      private-key-path: ${vault.secret.data.atlasia.github-private-key-path:${GITHUB_PRIVATE_KEY_PATH:}}
       installation-id: ${GITHUB_INSTALLATION_ID:}
     llm:
       endpoint: ${LLM_ENDPOINT:https://api.openai.com/v1}
       model: ${LLM_MODEL:gpt-4o-mini}
-      api-key: ${LLM_API_KEY:}
+      api-key: ${vault.secret.data.atlasia.llm-api-key:${LLM_API_KEY:}}
       proxy-host: ${LLM_PROXY_HOST:}
       proxy-port: ${LLM_PROXY_PORT:8080}
       fallback-endpoint: ${LLM_FALLBACK_ENDPOINT:https://api.deepseek.com/v1}
-      fallback-api-key: ${LLM_FALLBACK_API_KEY:}
+      fallback-api-key: ${vault.secret.data.atlasia.llm-fallback-api-key:${LLM_FALLBACK_API_KEY:}}
     canvas:
       max-concurrent-bolts: ${MAX_CONCURRENT_BOLTS:5}
       sse-timeout-minutes: ${SSE_TIMEOUT_MINUTES:30}
       default-mode: ${DEFAULT_MODE:EXECUTION}
       enabled-agents: ${ENABLED_AGENTS:PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER}
   jwt:
-    secret-key: ${JWT_SECRET_KEY:}
+    secret-key: ${vault.secret.data.atlasia.jwt-secret:${JWT_SECRET_KEY:}}
     access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:15}
     refresh-token-expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:7}
     issuer: ${JWT_ISSUER:atlasia-ai-orchestrator}
@@ -108,14 +108,14 @@ atlasia:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:8080}
   oauth2:
     github:
-      client-id: ${VAULT_OAUTH2_GITHUB_CLIENT_ID:}
-      client-secret: ${VAULT_OAUTH2_GITHUB_CLIENT_SECRET:}
+      client-id: ${vault.secret.data.atlasia.oauth2-github-client-id:${VAULT_OAUTH2_GITHUB_CLIENT_ID:}}
+      client-secret: ${vault.secret.data.atlasia.oauth2-github-client-secret:${VAULT_OAUTH2_GITHUB_CLIENT_SECRET:}}
     google:
-      client-id: ${VAULT_OAUTH2_GOOGLE_CLIENT_ID:}
-      client-secret: ${VAULT_OAUTH2_GOOGLE_CLIENT_SECRET:}
+      client-id: ${vault.secret.data.atlasia.oauth2-google-client-id:${VAULT_OAUTH2_GOOGLE_CLIENT_ID:}}
+      client-secret: ${vault.secret.data.atlasia.oauth2-google-client-secret:${VAULT_OAUTH2_GOOGLE_CLIENT_SECRET:}}
     gitlab:
-      client-id: ${VAULT_OAUTH2_GITLAB_CLIENT_ID:}
-      client-secret: ${VAULT_OAUTH2_GITLAB_CLIENT_SECRET:}
+      client-id: ${vault.secret.data.atlasia.oauth2-gitlab-client-id:${VAULT_OAUTH2_GITLAB_CLIENT_ID:}}
+      client-secret: ${vault.secret.data.atlasia.oauth2-gitlab-client-secret:${VAULT_OAUTH2_GITLAB_CLIENT_SECRET:}}
     frontend-callback-url: ${OAUTH2_FRONTEND_CALLBACK_URL:http://localhost:4200/auth/callback}
   encryption:
-    key: ${VAULT_ENCRYPTION_KEY:}
+    key: ${vault.secret.data.atlasia.encryption-key:${VAULT_ENCRYPTION_KEY:}}

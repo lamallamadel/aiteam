@@ -1,18 +1,19 @@
 spring:
+  application:
+    name: ai-orchestrator
   cloud:
     vault:
-      enabled: ${SPRING_CLOUD_VAULT_ENABLED:false}
       uri: ${VAULT_ADDR:http://localhost:8200}
+      authentication: TOKEN
       token: ${VAULT_TOKEN:}
       kv:
         enabled: true
         backend: secret
         default-context: atlasia
-        application-name: ai-orchestrator
-      authentication: TOKEN
-      scheme: http
+        application-name: ${spring.application.name}
       connection-timeout: 5000
       read-timeout: 15000
+      scheme: http
       config:
         lifecycle:
           enabled: true

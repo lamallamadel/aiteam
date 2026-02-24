@@ -35,5 +35,23 @@ logs/
 # Escalation insights
 insights/
 
-# envirenements secrets
+# environments secrets
 .env
+.env.*
+!.env.example
+
+# HashiCorp Vault
+vault_data/
+*.hcl
+vault-token
+.vault-token
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Application secrets (should be in Vault)
+application-secrets.yml
+bootstrap-secrets.yml

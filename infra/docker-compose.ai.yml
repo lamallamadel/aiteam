@@ -9,8 +9,12 @@ services:
       ORCHESTRATOR_TOKEN: "${ORCHESTRATOR_TOKEN}"
       REPO_ALLOWLIST: "backend/,frontend/,docs/,infra/,ai/"
       WORKFLOW_PROTECT: ".github/workflows/"
+      VAULT_ADDR: "${VAULT_ADDR:-http://vault:8200}"
+      VAULT_TOKEN: "${VAULT_TOKEN:-dev-root-token}"
+      SPRING_CLOUD_VAULT_ENABLED: "${VAULT_ENABLED:-false}"
     depends_on:
       - ai-db
+      - vault
     ports:
       - "8088:8080"
 
@@ -22,6 +26,27 @@ services:
       POSTGRES_PASSWORD: ai
     volumes:
       - ai_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: atlasia-vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "8200:8200"
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - vault_data:/vault/data
 
 volumes:
   ai_db:
+  vault_data:

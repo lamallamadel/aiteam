@@ -15,9 +15,10 @@ docker compose -f infra/docker-compose.ai.yml up -d  # Start infrastructure
 - **Dev server**: `cd ai-orchestrator && mvn spring-boot:run` | `cd frontend && npm run start`
 
 ## Tech Stack
-- **Backend**: Spring Boot 3.3, Java 17, Maven, PostgreSQL, JPA
+- **Backend**: Spring Boot 3.3, Java 17, Maven, PostgreSQL, JPA, Spring Cloud Vault
 - **Frontend**: Node 20+, Angular (inferred), Playwright E2E
-- **Infra**: Docker Compose, Postgres 16
+- **Infra**: Docker Compose, Postgres 16, HashiCorp Vault
+- **Secrets**: HashiCorp Vault for secure secrets management
 
 ## Review Roles (formerly Gems & Personas)
 The orchestrator is powered by specialized AI "Review Roles":
@@ -31,6 +32,16 @@ Access them directly via the "Chat Mode" in the UI.
 ## Architecture
 Monorepo with `/ai-orchestrator` (Spring Boot API), `/frontend` (Angular UI), `/ai` (agent configurations), `/infra` (Docker setup). 
 The system uses a **Dual-Mode** engine (Code vs Chat) to provide both autonomous engineering and lightweight AI dialogue.
+
+### Secrets Management (NEW)
+HashiCorp Vault integration for secure secrets management:
+- **Spring Cloud Vault**: Automatic secret injection at application startup
+- **VaultSecretsService**: Programmatic secret access and rotation
+- **SecretRotationScheduler**: Automated monthly JWT key rotation, quarterly OAuth2 rotation
+- **VaultHealthIndicator**: Health monitoring via actuator endpoints
+- **Secrets Path**: `secret/data/atlasia/*` (KV v2 engine)
+- **Setup**: See `docs/VAULT_SETUP.md` and `infra/README.md`
+- **Quick Start**: Run `infra/vault-init.sh` to initialize all secrets
 
 ### Multi-User Collaboration (NEW)
 Real-time WebSocket-based collaboration for workflow runs:
