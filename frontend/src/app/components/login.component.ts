@@ -1,13 +1,13 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="login-container">
       <div class="login-card">
@@ -46,7 +46,7 @@ import { AuthService } from '../services/auth.service';
           </div>
 
           @if (error()) {
-            <div class="error-message">
+            <div class="error-message" aria-live="polite">
               {{ error() }}
             </div>
           }
@@ -70,22 +70,22 @@ import { AuthService } from '../services/auth.service';
         </div>
 
         <div class="oauth-buttons">
-          <button class="oauth-btn github" (click)="loginWithOAuth2('github')">
+          <button class="oauth-btn github" (click)="loginWithOAuth2('github')" aria-label="Sign in with GitHub">
             <span class="oauth-icon">🐙</span>
             <span>GitHub</span>
           </button>
-          <button class="oauth-btn google" (click)="loginWithOAuth2('google')">
+          <button class="oauth-btn google" (click)="loginWithOAuth2('google')" aria-label="Sign in with Google">
             <span class="oauth-icon">📧</span>
             <span>Google</span>
           </button>
-          <button class="oauth-btn gitlab" (click)="loginWithOAuth2('gitlab')">
+          <button class="oauth-btn gitlab" (click)="loginWithOAuth2('gitlab')" aria-label="Sign in with GitLab">
             <span class="oauth-icon">🦊</span>
             <span>GitLab</span>
           </button>
         </div>
 
         <div class="register-link">
-          Don't have an account? <a href="/auth/register">Sign up</a>
+          Don't have an account? <a routerLink="/auth/register">Sign up</a>
         </div>
       </div>
     </div>
@@ -136,89 +136,6 @@ import { AuthService } from '../services/auth.service';
       gap: 20px;
     }
 
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .form-group label {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.8);
-    }
-
-    .input-field {
-      padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: white;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .input-field:focus {
-      border-color: #38bdf8;
-    }
-
-    .input-field::placeholder {
-      color: #64748b;
-    }
-
-    .input-field:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .error-message {
-      padding: 12px 16px;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 8px;
-      color: #ef4444;
-      font-size: 0.85rem;
-    }
-
-    .btn-primary {
-      padding: 14px 24px;
-      background: var(--accent-active);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      opacity: 0.9;
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .spinner-small {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
     .oauth-divider {
       display: flex;
       align-items: center;
@@ -245,39 +162,6 @@ import { AuthService } from '../services/auth.service';
       gap: 12px;
     }
 
-    .oauth-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      padding: 16px 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: white;
-      font-size: 0.8rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .oauth-btn:hover {
-      background: rgba(255, 255, 255, 0.06);
-      transform: translateY(-2px);
-    }
-
-    .oauth-btn.github:hover {
-      border-color: #8b949e;
-    }
-
-    .oauth-btn.google:hover {
-      border-color: #4285f4;
-    }
-
-    .oauth-btn.gitlab:hover {
-      border-color: #fc6d26;
-    }
-
     .oauth-icon {
       font-size: 1.5rem;
     }
@@ -297,6 +181,12 @@ import { AuthService } from '../services/auth.service';
 
     .register-link a:hover {
       text-decoration: underline;
+    }
+
+    @media (max-width: 480px) {
+      .login-card {
+        padding: 32px 24px;
+      }
     }
   `]
 })

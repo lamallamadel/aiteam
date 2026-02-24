@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../services/auth.service';
 
@@ -22,7 +22,7 @@ interface RegisterResponse {
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="register-container">
       <div class="register-card">
@@ -116,13 +116,13 @@ interface RegisterResponse {
           </div>
 
           @if (error()) {
-            <div class="error-message">
+            <div class="error-message" aria-live="polite">
               {{ error() }}
             </div>
           }
 
           @if (success()) {
-            <div class="success-message">
+            <div class="success-message" aria-live="polite">
               {{ success() }}
             </div>
           }
@@ -142,7 +142,7 @@ interface RegisterResponse {
         </form>
 
         <div class="login-link">
-          Already have an account? <a href="/auth/login">Sign in</a>
+          Already have an account? <a routerLink="/auth/login">Sign in</a>
         </div>
       </div>
     </div>
@@ -199,98 +199,6 @@ interface RegisterResponse {
       gap: 16px;
     }
 
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .form-group label {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: rgba(255, 255, 255, 0.8);
-    }
-
-    .input-field {
-      padding: 12px 16px;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: white;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .input-field:focus {
-      border-color: #38bdf8;
-    }
-
-    .input-field::placeholder {
-      color: #64748b;
-    }
-
-    .input-field:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .error-message {
-      padding: 12px 16px;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 8px;
-      color: #ef4444;
-      font-size: 0.85rem;
-    }
-
-    .success-message {
-      padding: 12px 16px;
-      background: rgba(34, 197, 94, 0.1);
-      border: 1px solid rgba(34, 197, 94, 0.3);
-      border-radius: 8px;
-      color: #22c55e;
-      font-size: 0.85rem;
-    }
-
-    .btn-primary {
-      padding: 14px 24px;
-      background: var(--accent-active);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      opacity: 0.9;
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .spinner-small {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
     .login-link {
       text-align: center;
       margin-top: 24px;
@@ -306,6 +214,16 @@ interface RegisterResponse {
 
     .login-link a:hover {
       text-decoration: underline;
+    }
+
+    @media (max-width: 480px) {
+      .register-card {
+        padding: 32px 24px;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
     }
   `]
 })
