@@ -4,6 +4,7 @@ import com.atlasia.ai.model.GraftExecutionEntity;
 import com.atlasia.ai.model.GraftExecutionEntity.GraftExecutionStatus;
 import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
+import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.GraftExecutionRepository;
 import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
@@ -489,4 +490,134 @@ public class GraftExecutionService {
             log.info("GRAFT: circuit breaker manually RESET for agent={}", agentName);
         }
     }
+
+    public CrossRepoGraftResult executeCrossRepoGraft(
+            UUID sourceRunId,
+            String sourceRepoUrl,
+            String targetRepoUrl,
+            String graftId,
+            String agentName,
+            String checkpoint,
+            Map<String, Object> contextData) {
+        
+        log.info("CROSS-REPO GRAFT: sourceRepo={}, targetRepo={}, graftId={}, agent={}: sourceRunId={}",
+                sourceRepoUrl, targetRepoUrl, graftId, agentName, sourceRunId);
+
+        try {
+            String[] targetParts = parseRepoUrl(targetRepoUrl);
+            if (targetParts == null) {
+                return new CrossRepoGraftResult(false, null, null,
+                        "Invalid target repository URL: " + targetRepoUrl);
+            }
+
+            String targetOwner = targetParts[0];
+            String targetRepo = targetParts[1];
+
+            Map<String, Object> issueData = Map.of(
+                "title", "Cross-repo graft from " + sourceRepoUrl,
+                "body", "Triggered by security scan or dependency update",
+                "number", 0
+            );
+
+            RunEntity targetRunEntity = new RunEntity(
+                UUID.randomUUID(),
+                targetRepoUrl,
+                0,
+                "cross-repo-graft",
+                RunStatus.RECEIVED,
+                Instant.now()
+            );
+            runRepository.save(targetRunEntity);
+
+            RunContext targetContext = new RunContext(targetRunEntity, targetOwner, targetRepo);
+            targetContext.setIssueData(issueData);
+
+            for (Map.Entry<String, Object> entry : contextData.entrySet()) {
+                switch (entry.getKey()) {
+                    case "ticketPlan" -> targetContext.setTicketPlan((String) entry.getValue());
+                    case "workPlan" -> targetContext.setWorkPlan((String) entry.getValue());
+                    case "architectureNotes" -> targetContext.setArchitectureNotes((String) entry.getValue());
+                }
+            }
+
+            GraftExecutionEntity execution = new GraftExecutionEntity(
+                    targetRunEntity.getId(), graftId, agentName, checkpoint, DEFAULT_TIMEOUT_MS);
+            execution.setStatus(GraftExecutionStatus.RUNNING);
+            graftExecutionRepository.save(execution);
+
+            emitAndTrace(sourceRunId, new WorkflowEvent.GraftStart(
+                    sourceRunId, Instant.now(), graftId, agentName, checkpoint));
+
+            GraftExecutionResult result = executeGraftWithTimeout(execution, targetContext, targetRunEntity, DEFAULT_TIMEOUT_MS);
+
+            if (result.success()) {
+                execution.setStatus(GraftExecutionStatus.COMPLETED);
+                execution.setCompletedAt(Instant.now());
+                execution.setOutputArtifactId(result.artifactId());
+                graftExecutionRepository.save(execution);
+
+                targetRunEntity.setStatus(RunStatus.DONE);
+                runRepository.save(targetRunEntity);
+
+                long duration = Duration.between(execution.getStartedAt(), execution.getCompletedAt()).toMillis();
+                metrics.recordGraftSuccess(agentName, duration);
+                recordSuccess(agentName);
+
+                emitAndTrace(sourceRunId, new WorkflowEvent.GraftComplete(
+                        sourceRunId, Instant.now(), graftId, agentName, duration, result.artifactId()));
+
+                log.info("CROSS-REPO GRAFT: completed graftId={}, targetRunId={}, duration={}ms",
+                        graftId, targetRunEntity.getId(), duration);
+
+                return new CrossRepoGraftResult(true, targetRunEntity.getId(), result.artifactId(), null);
+
+            } else {
+                execution.setStatus(GraftExecutionStatus.FAILED);
+                execution.setErrorMessage(result.errorMessage());
+                execution.setCompletedAt(Instant.now());
+                graftExecutionRepository.save(execution);
+
+                targetRunEntity.setStatus(RunStatus.FAILED);
+                runRepository.save(targetRunEntity);
+
+                metrics.recordGraftFailure(agentName);
+                recordFailure(agentName);
+
+                emitAndTrace(sourceRunId, new WorkflowEvent.GraftFailed(
+                        sourceRunId, Instant.now(), graftId, agentName, result.status(), result.errorMessage()));
+
+                log.error("CROSS-REPO GRAFT: failed graftId={}, targetRunId={}, error={}",
+                        graftId, targetRunEntity.getId(), result.errorMessage());
+
+                return new CrossRepoGraftResult(false, targetRunEntity.getId(), null, result.errorMessage());
+            }
+
+        } catch (Exception e) {
+            log.error("CROSS-REPO GRAFT: unexpected error for graftId={}, targetRepo={}: sourceRunId={}",
+                    graftId, targetRepoUrl, sourceRunId, e);
+            return new CrossRepoGraftResult(false, null, null, e.getMessage());
+        }
+    }
+
+    private String[] parseRepoUrl(String repoUrl) {
+        String normalized = repoUrl.toLowerCase()
+                .replaceFirst("^https?://", "")
+                .replaceFirst("\\.git$", "")
+                .replaceFirst("/$", "");
+
+        String[] parts = normalized.split("/");
+        if (parts.length >= 3 && parts[0].contains("github.com")) {
+            return new String[] { parts[1], parts[2] };
+        } else if (parts.length >= 2) {
+            return new String[] { parts[0], parts[1] };
+        }
+        return null;
+    }
+
+    public record CrossRepoGraftResult(
+        boolean success,
+        UUID targetRunId,
+        UUID artifactId,
+        String errorMessage
+    ) {}
 }

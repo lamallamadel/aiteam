@@ -59,6 +59,17 @@ Real-time WebSocket-based collaboration for workflow runs:
 - **CRDT API**: `/api/crdt/*` endpoints for state queries and peer registration
 - **Docs**: See `docs/COLLABORATION.md`, `docs/COLLABORATION_EXAMPLES.md`, and `docs/CRDT_COLLABORATION.md`
 
+### Multi-Repository Workflow Orchestration (NEW)
+Dependency-aware scheduling for cross-repository workflows:
+- **Topological Sort**: Automatic execution ordering based on repository dependencies (Kahn's algorithm)
+- **Cross-Repo Grafts**: Security scan in repo-A triggers documentation update graft in repo-B via A2A protocol
+- **Monorepo Detection**: Auto-detect Maven modules (`pom.xml`) and NPM workspaces (`package.json`)
+- **Coordinated PRs**: Create and merge PRs with dependency-aware ordering (merge infra before apps)
+- **Cyclic Detection**: Prevents invalid dependency graphs with early validation
+- **Repository Graph**: `repository_graph` table stores cross-repo dependencies as JSONB
+- **API Endpoints**: `/api/multi-repo/*` for registration, execution, and PR coordination
+- **Docs**: See `docs/MULTI_REPO_ORCHESTRATION.md` for complete guide with examples
+
 ## Container Security
 - **Trivy Scanning**: Automated vulnerability scanning in CI/CD pipeline
 - **Non-root Users**: All containers run as unprivileged users
