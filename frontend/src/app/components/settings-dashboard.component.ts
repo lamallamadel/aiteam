@@ -8,6 +8,7 @@ import { AuthService } from '../services/auth.service';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { CurrentUserDto } from '../models/orchestrator.model';
 import { ToastService } from '../services/toast.service';
+import { NotificationService, NotificationConfig, CreateNotificationConfig } from '../services/notification.service';
 
 Chart.register(...registerables);
 
@@ -148,6 +149,96 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
               <div class="section-header">
                 <h3>OAuth2 Integrations</h3>
               </div>
+
+              <div class="section-header">
+                <h3>Notification Webhooks</h3>
+                <button class="add-btn" (click)="showAddNotificationForm()">+ Add Webhook</button>
+              </div>
+
+              @if (showNotificationForm()) {
+                <div class="provider-form glass-panel">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>Provider</label>
+                      <select [(ngModel)]="formNotificationProvider" class="input-field">
+                        <option value="slack">Slack</option>
+                        <option value="discord">Discord</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label>Webhook URL</label>
+                      <input 
+                        type="text" 
+                        [(ngModel)]="formNotificationWebhook" 
+                        placeholder="https://hooks.slack.com/services/..."
+                        class="input-field">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label>Enabled Events</label>
+                    <div class="event-checkboxes">
+                      @for (event of availableNotificationEvents; track event.id) {
+                        <label class="event-checkbox">
+                          <input 
+                            type="checkbox" 
+                            [checked]="isNotificationEventSelected(event.id)"
+                            (change)="toggleNotificationEvent(event.id)" />
+                          <div class="event-info">
+                            <span class="event-name">{{ event.name }}</span>
+                            <span class="event-desc">{{ event.description }}</span>
+                          </div>
+                        </label>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="form-actions">
+                    <button class="btn-secondary" (click)="cancelNotificationForm()">Cancel</button>
+                    <button 
+                      class="btn-primary" 
+                      [disabled]="!canSaveNotification()"
+                      (click)="saveNotification()">
+                      {{ editingNotificationId() ? 'Update' : 'Add' }} Webhook
+                    </button>
+                  </div>
+                </div>
+              }
+
+              @if (notificationConfigs().length > 0) {
+                <div class="providers-grid">
+                  @for (config of notificationConfigs(); track config.id) {
+                    <div class="provider-card">
+                      <div class="provider-header">
+                        <div class="provider-title">
+                          <span class="provider-icon">{{ getNotificationProviderIcon(config.provider) }}</span>
+                          <div class="provider-info">
+                            <span class="provider-label">{{ config.provider }}</span>
+                            <span class="provider-type">{{ config.enabledEvents.length }} events enabled</span>
+                          </div>
+                        </div>
+                        <label class="toggle">
+                          <input
+                            type="checkbox"
+                            [checked]="config.enabled"
+                            (change)="toggleNotificationEnabled(config)" />
+                          <span class="toggle-slider"></span>
+                        </label>
+                      </div>
+                      <div class="provider-url">{{ config.webhookUrl }}</div>
+                      <div class="notification-events">
+                        @for (event of config.enabledEvents; track event) {
+                          <span class="event-badge">{{ event }}</span>
+                        }
+                      </div>
+                      <div class="provider-actions">
+                        <button class="btn-icon" (click)="editNotification(config)">✏️</button>
+                        <button class="btn-icon danger" (click)="deleteNotification(config.id)">🗑️</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
 
               <div class="oauth2-section">
                 <p class="section-description">Connect your accounts via OAuth2 for seamless integration</p>
@@ -938,6 +1029,73 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
       background: rgba(34,197,94,0.15);
       color: #22c55e;
     }
+
+    .event-checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .event-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+
+    .event-checkbox:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .event-checkbox input[type="checkbox"] {
+      margin-top: 2px;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent-active);
+    }
+
+    .event-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .event-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: white;
+    }
+
+    .event-desc {
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .notification-events {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .event-badge {
+      padding: 3px 8px;
+      background: rgba(56,189,248,0.15);
+      color: #38bdf8;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
   `]
 })
 export class SettingsDashboardComponent implements OnInit, OnDestroy {
@@ -952,8 +1110,24 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
   
   currentUser = signal<CurrentUserDto | null>(null);
   oauth2Loading = signal<string | null>(null);
+  notificationConfigs = signal<NotificationConfig[]>([]);
+  showNotificationForm = signal(false);
+  editingNotificationId = signal<string | null>(null);
+  formNotificationProvider = signal<'slack' | 'discord'>('slack');
+  formNotificationWebhook = signal('');
+  formNotificationEvents = signal<string[]>([]);
   
   private messageHandler: ((event: MessageEvent) => void) | null = null;
+
+  availableNotificationEvents = [
+    { id: 'run_started', name: 'Run Started', description: 'Triggered when a workflow run begins' },
+    { id: 'run_completed', name: 'Run Completed', description: 'Triggered when a workflow run completes successfully' },
+    { id: 'run_escalated', name: 'Run Escalated', description: 'Triggered when a workflow run is escalated for manual review' },
+    { id: 'ci_check_failure', name: 'CI Check Failed', description: 'Triggered when CI checks fail' },
+    { id: 'mfa_setup_reminder', name: 'MFA Setup Reminder', description: 'Reminder to set up multi-factor authentication' },
+    { id: 'daily_analytics', name: 'Daily Analytics', description: 'Daily summary of workflow analytics' },
+    { id: 'weekly_analytics', name: 'Weekly Analytics', description: 'Weekly summary of workflow analytics' }
+  ];
 
   budgetPercent = computed(() => {
     const usage = this.usageData();
@@ -1035,12 +1209,14 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
     private settingsService: SettingsService,
     private authService: AuthService,
     private orchestratorService: OrchestratorService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private notificationService: NotificationService
   ) {}
 
   ngOnInit() {
     this.loadData();
     this.loadCurrentUser();
+    this.loadNotificationConfigs();
   }
 
   ngOnDestroy() {
@@ -1215,6 +1391,128 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
       return false;
     }
     return user.oauth2LinkedAccounts.includes(provider);
+  }
+
+  loadNotificationConfigs() {
+    this.notificationService.getConfigs().subscribe({
+      next: (configs) => {
+        this.notificationConfigs.set(configs);
+      },
+      error: (err) => {
+        this.toastService.show('Failed to load notification configs', 'error');
+      }
+    });
+  }
+
+  showAddNotificationForm() {
+    this.showNotificationForm.set(true);
+    this.editingNotificationId.set(null);
+    this.resetNotificationForm();
+  }
+
+  cancelNotificationForm() {
+    this.showNotificationForm.set(false);
+    this.editingNotificationId.set(null);
+    this.resetNotificationForm();
+  }
+
+  resetNotificationForm() {
+    this.formNotificationProvider.set('slack');
+    this.formNotificationWebhook.set('');
+    this.formNotificationEvents.set([]);
+  }
+
+  canSaveNotification(): boolean {
+    return this.formNotificationWebhook() !== '' && this.formNotificationEvents().length > 0;
+  }
+
+  toggleNotificationEvent(eventId: string) {
+    const current = [...this.formNotificationEvents()];
+    const index = current.indexOf(eventId);
+    
+    if (index === -1) {
+      current.push(eventId);
+    } else {
+      current.splice(index, 1);
+    }
+    
+    this.formNotificationEvents.set(current);
+  }
+
+  isNotificationEventSelected(eventId: string): boolean {
+    return this.formNotificationEvents().includes(eventId);
+  }
+
+  saveNotification() {
+    if (!this.canSaveNotification()) return;
+
+    const config: CreateNotificationConfig = {
+      provider: this.formNotificationProvider(),
+      webhookUrl: this.formNotificationWebhook(),
+      enabledEvents: this.formNotificationEvents()
+    };
+
+    if (this.editingNotificationId()) {
+      this.notificationService.updateConfig(this.editingNotificationId()!, config).subscribe({
+        next: () => {
+          this.toastService.show('Notification config updated successfully', 'success');
+          this.loadNotificationConfigs();
+          this.cancelNotificationForm();
+        },
+        error: (err) => {
+          this.toastService.show('Failed to update notification config', 'error');
+        }
+      });
+    } else {
+      this.notificationService.createConfig(config).subscribe({
+        next: () => {
+          this.toastService.show('Notification config created successfully', 'success');
+          this.loadNotificationConfigs();
+          this.cancelNotificationForm();
+        },
+        error: (err) => {
+          this.toastService.show('Failed to create notification config', 'error');
+        }
+      });
+    }
+  }
+
+  editNotification(config: NotificationConfig) {
+    this.editingNotificationId.set(config.id);
+    this.formNotificationProvider.set(config.provider);
+    this.formNotificationWebhook.set(config.webhookUrl);
+    this.formNotificationEvents.set([...config.enabledEvents]);
+    this.showNotificationForm.set(true);
+  }
+
+  deleteNotification(configId: string) {
+    if (confirm('Are you sure you want to delete this notification configuration?')) {
+      this.notificationService.deleteConfig(configId).subscribe({
+        next: () => {
+          this.toastService.show('Notification config deleted successfully', 'success');
+          this.loadNotificationConfigs();
+        },
+        error: (err) => {
+          this.toastService.show('Failed to delete notification config', 'error');
+        }
+      });
+    }
+  }
+
+  toggleNotificationEnabled(config: NotificationConfig) {
+    this.notificationService.updateConfig(config.id, { enabled: !config.enabled }).subscribe({
+      next: () => {
+        this.toastService.show(`Notification config ${config.enabled ? 'disabled' : 'enabled'}`, 'success');
+        this.loadNotificationConfigs();
+      },
+      error: (err) => {
+        this.toastService.show('Failed to toggle notification config', 'error');
+      }
+    });
+  }
+
+  getNotificationProviderIcon(provider: string): string {
+    return provider === 'slack' ? '📢' : '💬';
   }
 
   connectOAuth2(provider: 'github' | 'google' | 'gitlab') {
