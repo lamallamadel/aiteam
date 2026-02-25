@@ -69,6 +69,7 @@ public class SecurityConfig {
                                                                 "/api/auth/mfa/**",
                                                                 "/api/runs/**",
                                                                 "/api/a2a/**",
+                                                                "/api/webhooks/**",
                                                                 "/actuator/**",
                                                                 "/ws/**"))
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -101,6 +102,7 @@ public class SecurityConfig {
                                                 .requestMatchers("/actuator/metrics/**").permitAll()
                                                 .requestMatchers("/ws/**").permitAll()
                                                 .requestMatchers("/api/a2a/**").permitAll()
+                                                .requestMatchers("/api/webhooks/**").permitAll()
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                                                 .requestMatchers("/api/**").authenticated()
                                                 .anyRequest().authenticated())

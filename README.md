@@ -12,9 +12,13 @@ CHAT MODE (Interactive AI Dialogue)
 User <-> [Review Role] (Security Engineer | Code Quality Engineer | SRE Engineer | Frontend UX Engineer)
 ```
 
-**Code Mode** — Triggered by the `ai:run` GitHub label. Executes the full pipeline autonomously: requirement analysis, architecture validation, code generation, persona-based review, testing with CI fix loops, and documentation updates.
+**Code Mode** — Triggered by the `ai:run` GitHub label via webhook. Executes the full pipeline autonomously: requirement analysis, architecture validation, code generation, persona-based review, testing with CI fix loops, and documentation updates.
 
 **Chat Mode** — Direct conversations with specialized AI personas (Review Roles) for brainstorming, code review, and research.
+
+### Event-Driven Webhooks
+
+The orchestrator supports GitHub webhooks for instant, event-driven workflow execution. When an issue is labeled with `ai:run`, a workflow run starts immediately without polling. See [docs/WEBHOOKS.md](docs/WEBHOOKS.md) for setup instructions.
 
 ## Tech Stack
 
@@ -63,6 +67,7 @@ docker compose up -d
 | `GITHUB_APP_ID` | GitHub App ID | — |
 | `GITHUB_PRIVATE_KEY_PATH` | Path to GitHub App private key | — |
 | `GITHUB_INSTALLATION_ID` | GitHub App installation ID | — |
+| `GITHUB_WEBHOOK_SECRET` | GitHub webhook HMAC secret | — |
 | `REPO_ALLOWLIST` | Modifiable paths (CSV) | `backend/,frontend/,docs/,infra/,ai/` |
 | `WORKFLOW_PROTECT` | Protected path prefix | `.github/workflows/` |
 
@@ -98,5 +103,6 @@ See [docs/QUALITY_GATES.md](docs/QUALITY_GATES.md) for full details.
 - [Domain Glossary](docs/DOMAIN_GLOSSARY.md) — Standardized terminology
 - [Quality Gates](docs/QUALITY_GATES.md) — Acceptance criteria and thresholds
 - [Runbook](docs/RUNBOOK.md) — Operational procedures
+- [GitHub Webhooks](docs/WEBHOOKS.md) — Event-driven workflow integration
 - [AI Governance Pack](ai/README.md) — Agent contracts and schemas
 - [Developer Setup](AGENTS.md) — Build commands and architecture overview
