@@ -22,9 +22,10 @@ public class GitHubAppService {
     private final WebClient webClient;
     private final PrivateKey privateKey;
 
-    public GitHubAppService(OrchestratorProperties properties, WebClient.Builder webClientBuilder) {
+    public GitHubAppService(OrchestratorProperties properties, WebClient.Builder webClientBuilder,
+            @org.springframework.beans.factory.annotation.Value("${atlasia.github.api-url:https://api.github.com}") String githubApiUrl) {
         this.properties = properties;
-        this.webClient = webClientBuilder.baseUrl("https://api.github.com").build();
+        this.webClient = webClientBuilder.baseUrl(githubApiUrl).build();
         this.privateKey = loadPrivateKeySafely(properties.github().privateKeyPath());
     }
 

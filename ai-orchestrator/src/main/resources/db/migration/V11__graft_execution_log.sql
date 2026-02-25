@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS graft_executions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     run_id UUID NOT NULL REFERENCES ai_run(id) ON DELETE CASCADE,
     graft_id VARCHAR(100) NOT NULL,
     agent_name VARCHAR(50) NOT NULL,

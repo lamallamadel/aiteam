@@ -2,16 +2,15 @@
 -- This migration adds encrypted versions of sensitive columns
 
 -- OAuth2 accounts: encrypt access tokens and refresh tokens
-ALTER TABLE oauth2_accounts 
-    ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT,
-    ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT;
+ALTER TABLE oauth2_accounts ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT;
+ALTER TABLE oauth2_accounts ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT;
 
 -- Migrate existing data to encrypted columns (if any)
 -- Note: This will be null initially - encryption will happen on first update
-UPDATE oauth2_accounts 
-    SET access_token_encrypted = access_token,
-        refresh_token_encrypted = refresh_token
-    WHERE access_token_encrypted IS NULL;
+-- UPDATE oauth2_accounts 
+--     SET access_token_encrypted = access_token,
+--         refresh_token_encrypted = refresh_token
+--     WHERE access_token_encrypted IS NULL;
 
 -- Drop old unencrypted columns after migration
 -- WARNING: Only run this after verifying encryption is working

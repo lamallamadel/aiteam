@@ -1,7 +1,5 @@
--- Add state tracking columns to collaboration_events table
-ALTER TABLE collaboration_events
-ADD COLUMN IF NOT EXISTS state_before JSONB,
-ADD COLUMN IF NOT EXISTS state_after JSONB;
+ALTER TABLE collaboration_events ADD COLUMN IF NOT EXISTS state_before JSONB;
+ALTER TABLE collaboration_events ADD COLUMN IF NOT EXISTS state_after JSONB;
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_run_timestamp ON collaboration_events(run_id, timestamp);

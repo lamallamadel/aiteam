@@ -1,5 +1,5 @@
 CREATE TABLE persisted_collaboration_messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     run_id UUID NOT NULL,
     user_id VARCHAR(255) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
@@ -12,8 +12,8 @@ CREATE TABLE persisted_collaboration_messages (
 
 CREATE INDEX idx_run_id_timestamp ON persisted_collaboration_messages(run_id, timestamp DESC);
 CREATE INDEX idx_run_id_sequence ON persisted_collaboration_messages(run_id, sequence_number DESC);
-CREATE INDEX idx_critical_messages ON persisted_collaboration_messages(run_id, is_critical) WHERE is_critical = TRUE;
-CREATE INDEX idx_sequence_after ON persisted_collaboration_messages(run_id, sequence_number) WHERE sequence_number IS NOT NULL;
+CREATE INDEX idx_critical_messages ON persisted_collaboration_messages(run_id, is_critical);
+CREATE INDEX idx_sequence_after ON persisted_collaboration_messages(run_id, sequence_number);
 CREATE INDEX idx_event_type ON persisted_collaboration_messages(run_id, event_type);
 
 COMMENT ON TABLE persisted_collaboration_messages IS 'Stores critical collaboration events for late-joiners and replay functionality';

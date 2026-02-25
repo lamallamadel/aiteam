@@ -33,7 +33,8 @@ public class GitHubApiClient {
     private final OrchestratorMetrics metrics;
 
     public GitHubApiClient(GitHubAppService gitHubAppService, OrchestratorProperties properties,
-            WebClient.Builder webClientBuilder, OrchestratorMetrics metrics) {
+            WebClient.Builder webClientBuilder, OrchestratorMetrics metrics,
+            @org.springframework.beans.factory.annotation.Value("${atlasia.github.api-url:https://api.github.com}") String githubApiUrl) {
         this.gitHubAppService = gitHubAppService;
         this.properties = properties;
         this.metrics = metrics;
@@ -47,7 +48,7 @@ public class GitHubApiClient {
                 .responseTimeout(Duration.ofSeconds(30));
 
         this.webClient = webClientBuilder
-                .baseUrl("https://api.github.com")
+                .baseUrl(githubApiUrl)
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(httpClient))
                 .build();
     }
@@ -75,7 +76,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + token)
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .toBodilessEntity()
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -102,7 +105,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -137,7 +142,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -169,7 +176,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -209,7 +218,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -268,7 +279,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -300,7 +313,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -331,7 +346,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -361,7 +378,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(String.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -391,7 +410,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(String.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -422,7 +443,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -453,7 +476,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -484,7 +509,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -515,7 +542,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -546,7 +575,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToFlux(Map.class)
                     .collectList()
@@ -579,7 +610,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Void.class)
@@ -609,7 +642,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -640,7 +675,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToFlux(Map.class)
                     .collectList()
@@ -676,7 +713,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -711,7 +750,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -749,7 +790,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -793,7 +836,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -829,7 +874,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -861,7 +908,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
@@ -892,7 +941,9 @@ public class GitHubApiClient {
                     .header("Authorization", "Bearer " + getToken())
                     .header("Accept", "application/vnd.github+json")
                     .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
                     .retrieve()
                     .bodyToMono(Map.class)
                     .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))

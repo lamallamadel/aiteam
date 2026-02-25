@@ -9,7 +9,7 @@
     "acceptanceCriteria",
     "outOfScope",
     "risks",
-    "priority"
+    "labelsToApply"
   ],
   "properties": {
     "issueId": {
@@ -50,7 +50,9 @@
           },
           {
             "type": "object",
-            "required": ["description"],
+            "required": [
+              "description"
+            ],
             "properties": {
               "description": {
                 "type": "string"
@@ -63,11 +65,6 @@
           }
         ]
       }
-    },
-    "priority": {
-      "type": "string",
-      "enum": ["P0", "P1", "P2", "P3"],
-      "description": "Priority classification: P0 (critical blocker), P1 (must-have), P2 (should-have), P3 (nice-to-have)"
     },
     "labelsToApply": {
       "type": "array",

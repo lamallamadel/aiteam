@@ -11,8 +11,8 @@
   "properties": {
     "branchName": {
       "type": "string",
-      "pattern": "^ai/issue-[0-9]+-[a-z0-9-]+$",
-      "description": "Branch name following the pattern: ai/issue-<num>-<slug>"
+      "pattern": "^ai/issue-[0-9]+(?:-[a-zA-Z0-9-]+)?$",
+      "description": "Branch name following the pattern: ai/issue-<num>[-<slug>]"
     },
     "tasks": {
       "type": "array",
