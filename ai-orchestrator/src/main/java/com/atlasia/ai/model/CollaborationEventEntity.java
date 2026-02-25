@@ -42,6 +42,18 @@ public class CollaborationEventEntity {
     @Column(name = "state_after", columnDefinition = "jsonb")
     @Type(JsonBinaryType.class)
     private String stateAfter;
+    
+    @Column(name = "retention_days")
+    private Integer retentionDays = 2555;
+    
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+    
+    @Column(name = "previous_event_hash", length = 64)
+    private String previousEventHash;
+    
+    @Column(name = "event_hash", length = 64)
+    private String eventHash;
 
     protected CollaborationEventEntity() {}
 
@@ -61,7 +73,15 @@ public class CollaborationEventEntity {
     public Instant getTimestamp() { return timestamp; }
     public String getStateBefore() { return stateBefore; }
     public String getStateAfter() { return stateAfter; }
+    public Integer getRetentionDays() { return retentionDays; }
+    public Instant getArchivedAt() { return archivedAt; }
+    public String getPreviousEventHash() { return previousEventHash; }
+    public String getEventHash() { return eventHash; }
     
     public void setStateBefore(String stateBefore) { this.stateBefore = stateBefore; }
     public void setStateAfter(String stateAfter) { this.stateAfter = stateAfter; }
+    public void setRetentionDays(Integer retentionDays) { this.retentionDays = retentionDays; }
+    public void setArchivedAt(Instant archivedAt) { this.archivedAt = archivedAt; }
+    public void setPreviousEventHash(String previousEventHash) { this.previousEventHash = previousEventHash; }
+    public void setEventHash(String eventHash) { this.eventHash = eventHash; }
 }

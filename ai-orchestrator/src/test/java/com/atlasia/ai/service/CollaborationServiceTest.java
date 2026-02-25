@@ -41,6 +41,9 @@ class CollaborationServiceTest {
     @Mock
     private WebSocketConnectionMonitor connectionMonitor;
 
+    @Mock
+    private AuditTrailService auditTrailService;
+
     private CollaborationService collaborationService;
     private ObjectMapper objectMapper;
 
@@ -50,7 +53,7 @@ class CollaborationServiceTest {
         lenient().when(messageRepository.findMaxSequenceNumberByRunId(any())).thenReturn(0L);
         collaborationService = new CollaborationService(
                 eventRepository, messageRepository, runRepository, 
-                messagingTemplate, objectMapper, connectionMonitor);
+                messagingTemplate, objectMapper, connectionMonitor, auditTrailService);
     }
 
     @Test

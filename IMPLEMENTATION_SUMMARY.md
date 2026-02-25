@@ -1,252 +1,228 @@
-# WebSocket Health Monitoring & Resilience - Implementation Summary
+# Audit Trail and Compliance Implementation Summary
 
 ## Overview
 
-This implementation adds comprehensive WebSocket connection health monitoring and resilience improvements to the Atlasia AI Orchestrator's real-time collaboration system.
+Implemented a comprehensive audit trail and compliance reporting system with blockchain-inspired tamper-proof logging using SHA-256 hash chains.
 
-## Backend Changes
+## Components Implemented
 
-### 1. New Services
+### 1. Database Schema (V19 Migration)
 
-#### `WebSocketConnectionMonitor.java`
-- Tracks active connections per run
-- Records connection metrics (latency, message counts, failures, reconnections)
-- Provides connection health statistics
-- Auto-cleanup of stale metrics
+**File:** `ai-orchestrator/src/main/resources/db/migration/V19__add_audit_trail_and_compliance.sql`
 
-**Key Methods:**
-- `recordConnection(runId, sessionId, userId)`
-- `recordDisconnection(runId, sessionId)`
-- `recordMessageSent/Received/Failure(sessionId)`
-- `recordMessageLatency(sessionId, latencyMs)`
-- `getActiveConnections(runId)`
-- `getConnectionMetrics(sessionId)`
+- Extended `collaboration_events` table with hash chain columns:
+  - `retention_days`, `archived_at`, `previous_event_hash`, `event_hash`
+  
+- Created 4 new audit tables:
+  - `audit_authentication_events` - Login/logout/MFA events
+  - `audit_access_logs` - API and resource access
+  - `audit_data_mutations` - Data changes (CRUD operations)
+  - `audit_admin_actions` - Administrative actions
+  
+- Created `compliance_reports` tracking table
 
-### 2. Enhanced CollaborationService
+### 2. Entity Models
 
-**New Features:**
-- Message sequence numbering for ordered replay
-- Persistence of critical events (GRAFT, PRUNE, FLAG)
-- Automatic cleanup of old messages (keeps last 1000 per run)
-- Late-joiner message replay support
+Created 5 new entity classes in `ai-orchestrator/src/main/java/com/atlasia/ai/model/`:
 
-**New Methods:**
-- `getPersistedMessages(runId, afterSequence)`
-- `getCriticalMessages(runId)`
+1. **AuditAuthenticationEventEntity.java** - Authentication events
+2. **AuditAccessLogEntity.java** - Access logs
+3. **AuditDataMutationEntity.java** - Data mutations
+4. **AuditAdminActionEntity.java** - Admin actions
+5. **ComplianceReportEntity.java** - Report tracking
 
-### 3. Prometheus Metrics
+Updated **CollaborationEventEntity.java** with hash chain support.
 
-Added to `OrchestratorMetrics.java`:
-- `orchestrator.websocket.connections.total`
-- `orchestrator.websocket.disconnections.total`
-- `orchestrator.websocket.reconnections.total`
-- `orchestrator.websocket.messages.in.total`
-- `orchestrator.websocket.messages.out.total`
-- `orchestrator.websocket.message.failures.total`
-- `orchestrator.websocket.message.latency` (Timer)
-- `orchestrator.websocket.fallback.http.total`
+### 3. Repository Interfaces
 
-### 4. WebSocket Interceptor Updates
+Created 5 new repositories in `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/`:
 
-`WebSocketAuthInterceptor.java` now:
-- Tracks connection/disconnection events
-- Monitors message send/receive
-- Records message delivery success/failure
-- Extracts run ID from connection destination
+1. **AuditAuthenticationEventRepository.java**
+2. **AuditAccessLogRepository.java**
+3. **AuditDataMutationRepository.java**
+4. **AuditAdminActionRepository.java**
+5. **ComplianceReportRepository.java**
 
-### 5. New REST Endpoints
+Updated **CollaborationEventRepository.java** with hash chain queries.
 
-#### Admin Monitoring (`WebSocketAdminController.java`)
-- `GET /api/admin/websocket/connections` - All active connections
-- `GET /api/admin/websocket/connections/{runId}` - Connections for specific run
-- `GET /api/admin/websocket/metrics` - All connection metrics
-- `GET /api/admin/websocket/metrics/{sessionId}` - Metrics for specific session
-- `POST /api/admin/websocket/cleanup-stale` - Cleanup old metrics
+### 4. Services
 
-#### HTTP Polling Fallback (`CollaborationController.java`)
-- `GET /api/runs/{runId}/collaboration/poll` - Poll for new events
-- `GET /api/runs/{runId}/collaboration/replay` - Replay persisted messages
+Created 3 new services in `ai-orchestrator/src/main/java/com/atlasia/ai/service/`:
 
-### 6. Database Changes
+1. **AuditTrailService.java** - Core tamper-proof logging with SHA-256 hash chains
+   - Methods: `logAuthenticationEvent()`, `logAccessEvent()`, `logDataMutation()`, `logAdminAction()`
+   - Hash chain verification: `verifyHashChain()`
+   
+2. **ComplianceReportService.java** - GDPR exports and compliance reports
+   - `exportUserDataForGDPR()` - Full user data export
+   - `generateSOC2Report()` - SOC2 Trust Services Criteria evidence
+   - `generateISO27001Report()` - ISO 27001 control evidence
+   
+3. **AuditReportScheduler.java** - Automated report generation
+   - Monthly SOC2/ISO27001 reports (1st of month)
+   - Quarterly SOC2/ISO27001 reports (1st of quarter)
 
-**New Table:** `persisted_collaboration_messages`
-```sql
-- id (UUID, primary key)
-- run_id (UUID, foreign key to ai_run)
-- user_id (VARCHAR)
-- event_type (VARCHAR)
-- message_data (JSONB)
-- timestamp (TIMESTAMP)
-- sequence_number (BIGINT)
-- is_critical (BOOLEAN)
+Updated **CollaborationService.java** to integrate hash chain support.
+
+### 5. Controller
+
+Created **ComplianceController.java** in `ai-orchestrator/src/main/java/com/atlasia/ai/controller/`:
+
+**Endpoints:**
+- `GET /api/compliance/export?userId={id}` - GDPR user data export (JSON)
+- `POST /api/compliance/reports/soc2` - Generate SOC2 report (CSV)
+- `POST /api/compliance/reports/iso27001` - Generate ISO 27001 report (CSV)
+
+### 6. API DTOs
+
+Created 2 DTO classes in `ai-orchestrator/src/main/java/com/atlasia/ai/api/`:
+
+1. **GDPRExportResponse.java** - GDPR export response structure
+2. **ComplianceReportResponse.java** - Report generation response
+
+### 7. Configuration
+
+- Updated `.gitignore` to exclude `compliance-reports/` directory
+- Created comprehensive documentation in `docs/AUDIT_COMPLIANCE.md`
+
+## Key Features
+
+### Blockchain-Inspired Hash Chain
+
+Each audit event contains:
+- `event_hash` - SHA-256 hash of event data
+- `previous_event_hash` - Hash of previous event
+- Creates tamper-proof chronological chain
+
+### GDPR Compliance
+
+- Full user data export in JSON format
+- Includes all events: auth, access, mutations, admin actions, collaboration
+- Users can export own data, admins can export any user
+- Retention policy: 2555 days (~7 years)
+
+### SOC2 Compliance
+
+- Automated CSV reports with event evidence
+- Mapped to Trust Services Criteria
+- Monthly and quarterly generation
+- Covers: access controls, authentication, monitoring, operations
+
+### ISO 27001 Compliance
+
+- Automated CSV reports mapped to control domains
+- Includes control references (A.9.4.2, A.9.4.1, A.12.4.1, A.9.2.3)
+- Monthly and quarterly generation
+- Evidence for: access control, event logging, privileged access management
+
+### Scheduled Automation
+
+- Monthly reports: 1st of every month at 3:00 AM and 3:30 AM
+- Quarterly reports: 1st of every quarter at 4:00 AM and 4:30 AM
+- All reports stored in `compliance-reports/` directory
+
+## Security Features
+
+1. **Tamper Detection** - Hash chain breaks if any event is modified
+2. **Non-Repudiation** - Cryptographically linked events prevent denial
+3. **Append-Only** - No deletion, only archival after retention period
+4. **Access Control** - Role-based permissions on endpoints
+5. **Verification** - Built-in hash chain integrity verification
+
+## Integration Points
+
+Services can log audit events by injecting `AuditTrailService`:
+
+```java
+// Authentication events
+auditTrailService.logAuthenticationEvent(userId, username, "LOGIN", ip, userAgent, true, null);
+
+// Access events
+auditTrailService.logAccessEvent(userId, username, "RUN", runId, "READ", "GET", endpoint, ip, userAgent, 200);
+
+// Data mutations
+auditTrailService.logDataMutation(userId, username, "RUN", runId, "UPDATE", "status", oldVal, newVal);
+
+// Admin actions
+auditTrailService.logAdminAction(adminId, adminName, "GRANT_PERMISSION", targetId, targetName, details, ip);
 ```
-
-**Indexes:**
-- `idx_run_id_timestamp` - For time-based queries
-- `idx_run_id_sequence` - For sequence-based replay
-- `idx_critical_messages` - For critical event queries
-
-**Migration:** `V12__create_persisted_collaboration_messages.sql`
-
-## Frontend Changes
-
-### 1. Enhanced CollaborationWebSocketService
-
-**New Features:**
-- Client-side message queuing during disconnection
-- Automatic reconnection with exponential backoff
-- HTTP polling fallback after 5 failed reconnection attempts
-- Message replay on reconnect using sequence numbers
-- Connection health tracking (latency, delivery rate, reconnection count)
-- Latency measurement via ping/pong
-
-**New Properties:**
-- `messageQueue: QueuedMessage[]` - Queued messages during disconnection
-- `useFallbackPolling: boolean` - Whether using HTTP polling
-- `lastReceivedSequence: number` - Last sequence number received
-- `latencyMeasurements: number[]` - Recent latency samples
-
-**New Methods:**
-- `getQueuedMessageCount()` - Returns number of queued messages
-- `isUsingFallback()` - Returns true if using HTTP polling
-- `measureLatency()` - Sends ping to measure latency
-- `replayMissedMessages(runId)` - Fetches and replays missed events
-
-**New Observables:**
-- `health$: Observable<ConnectionHealth>` - Health metrics stream
-
-### 2. WorkflowStreamStore Updates
-
-**New Signals:**
-- `connectionHealth` - Health metrics (latency, reconnection count, delivery rate)
-- `queuedMessageCount` - Number of queued messages
-- `usingFallback` - Whether using HTTP polling fallback
-
-### 3. New Component: ConnectionHealthComponent
-
-Displays real-time connection health:
-- Visual status indicator (green/red dot)
-- Status text (Connected/Reconnected/Disconnected/HTTP Polling)
-- Health metrics (latency, delivery rate, reconnection count)
-- Queued message count
-- Fallback mode warning
-
-### 4. RunDetailComponent Integration
-
-Added connection health display:
-```html
-<app-connection-health
-  [health]="streamStore.connectionHealth()"
-  [queuedMessages]="streamStore.queuedMessageCount()"
-  [usingFallback]="streamStore.usingFallback()">
-</app-connection-health>
-```
-
-## Infrastructure
-
-### Grafana Dashboard
-
-**File:** `infra/grafana-websocket-dashboard.json`
-
-**Panels:**
-1. Active WebSocket Connections
-2. Connection Rate (connections/disconnections per second)
-3. Message Throughput (in/out per second)
-4. Message Delivery Rate
-5. Message Latency (p50, p95, p99)
-6. Reconnection Frequency
-7. HTTP Polling Fallback Rate
-8. Message Failures
-
-## Documentation
-
-### New Files:
-1. `docs/WEBSOCKET_HEALTH_MONITORING.md` - Complete feature documentation
-2. `IMPLEMENTATION_SUMMARY.md` - This file
-
-## Key Features Summary
-
-### ✅ Connection Quality Metrics
-- Latency tracking (p50, p95, p99)
-- Reconnection frequency monitoring
-- Message delivery rate calculation
-- Exposed via Prometheus for Grafana dashboards
-
-### ✅ Client-Side Message Queuing
-- Messages queued during disconnection
-- Automatic replay on reconnection
-- Retry logic with exponential backoff
-- Visual queue size indicator
-
-### ✅ Server-Side Message Persistence
-- Critical events persisted to database
-- Sequence numbers for ordered replay
-- Automatic retention (last 1000 messages per run)
-- Late-joiner replay support
-
-### ✅ HTTP Polling Fallback
-- Automatic fallback after 5 failed reconnections
-- Polls every 2 seconds
-- Same event format as WebSocket
-- Seamless transition
-
-### ✅ Admin Monitoring
-- REST API for connection monitoring
-- Per-run and per-session metrics
-- Active connection tracking
-- Stale metric cleanup
-
-## Testing Recommendations
-
-1. **Connection Loss**: Disconnect network to verify message queuing and reconnection
-2. **Fallback Mode**: Force 5+ reconnection failures to test HTTP polling
-3. **Late Joiners**: Join collaboration mid-session to verify replay
-4. **Message Persistence**: Create grafts/prunes/flags, verify they persist across reconnections
-5. **Metrics**: Check Prometheus endpoint for metric updates
-6. **Admin API**: Test all admin endpoints with multiple concurrent connections
-
-## Configuration
-
-### Backend
-- `MAX_PERSISTED_MESSAGES_PER_RUN = 1000` (CollaborationService.java)
-- `CRITICAL_EVENT_TYPES = Set.of("GRAFT", "PRUNE", "FLAG")` (CollaborationService.java)
-
-### Frontend
-- `maxReconnectAttempts = 5` (CollaborationWebSocketService.ts)
-- `pollingInterval = 2000` (CollaborationWebSocketService.ts)
-- `messageRetryLimit = 3` (CollaborationWebSocketService.ts)
 
 ## Files Created/Modified
 
-### Created:
-- `ai-orchestrator/src/main/java/com/atlasia/ai/service/WebSocketConnectionMonitor.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/model/PersistedCollaborationMessage.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/PersistedCollaborationMessageRepository.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/controller/WebSocketAdminController.java`
-- `ai-orchestrator/src/main/resources/db/migration/V12__create_persisted_collaboration_messages.sql`
-- `frontend/src/app/components/connection-health.component.ts`
-- `infra/grafana-websocket-dashboard.json`
-- `docs/WEBSOCKET_HEALTH_MONITORING.md`
-- `IMPLEMENTATION_SUMMARY.md`
+### Created (20 files)
 
-### Modified:
-- `ai-orchestrator/src/main/java/com/atlasia/ai/service/observability/OrchestratorMetrics.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/service/CollaborationService.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/config/WebSocketAuthInterceptor.java`
-- `ai-orchestrator/src/main/java/com/atlasia/ai/controller/CollaborationController.java`
-- `frontend/src/app/services/collaboration-websocket.service.ts`
-- `frontend/src/app/services/workflow-stream.store.ts`
-- `frontend/src/app/components/run-detail.component.ts`
+**Database:**
+1. `ai-orchestrator/src/main/resources/db/migration/V19__add_audit_trail_and_compliance.sql`
 
-## Next Steps for Production
+**Models (5):**
+2. `ai-orchestrator/src/main/java/com/atlasia/ai/model/AuditAuthenticationEventEntity.java`
+3. `ai-orchestrator/src/main/java/com/atlasia/ai/model/AuditAccessLogEntity.java`
+4. `ai-orchestrator/src/main/java/com/atlasia/ai/model/AuditDataMutationEntity.java`
+5. `ai-orchestrator/src/main/java/com/atlasia/ai/model/AuditAdminActionEntity.java`
+6. `ai-orchestrator/src/main/java/com/atlasia/ai/model/ComplianceReportEntity.java`
 
-1. **Set up Prometheus/Grafana** for production monitoring
-2. **Import Grafana dashboard** from `infra/grafana-websocket-dashboard.json`
-3. **Configure alerts** for:
-   - High reconnection rate (> 10/min)
-   - Poor delivery rate (< 95%)
-   - High latency (p95 > 500ms)
-   - Frequent fallback mode
-4. **Test load** with multiple concurrent users
-5. **Monitor metrics** during initial rollout
-6. **Tune parameters** based on observed behavior
+**Repositories (5):**
+7. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/AuditAuthenticationEventRepository.java`
+8. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/AuditAccessLogRepository.java`
+9. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/AuditDataMutationRepository.java`
+10. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/AuditAdminActionRepository.java`
+11. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/ComplianceReportRepository.java`
+
+**Services (3):**
+12. `ai-orchestrator/src/main/java/com/atlasia/ai/service/AuditTrailService.java`
+13. `ai-orchestrator/src/main/java/com/atlasia/ai/service/ComplianceReportService.java`
+14. `ai-orchestrator/src/main/java/com/atlasia/ai/service/AuditReportScheduler.java`
+
+**Controller:**
+15. `ai-orchestrator/src/main/java/com/atlasia/ai/controller/ComplianceController.java`
+
+**API DTOs (2):**
+16. `ai-orchestrator/src/main/java/com/atlasia/ai/api/GDPRExportResponse.java`
+17. `ai-orchestrator/src/main/java/com/atlasia/ai/api/ComplianceReportResponse.java`
+
+**Documentation:**
+18. `docs/AUDIT_COMPLIANCE.md`
+19. `IMPLEMENTATION_SUMMARY.md`
+
+### Modified (4 files)
+
+20. `ai-orchestrator/src/main/java/com/atlasia/ai/model/CollaborationEventEntity.java` - Added hash chain columns
+21. `ai-orchestrator/src/main/java/com/atlasia/ai/persistence/CollaborationEventRepository.java` - Added hash chain queries
+22. `ai-orchestrator/src/main/java/com/atlasia/ai/service/CollaborationService.java` - Integrated AuditTrailService
+23. `.gitignore` - Added compliance-reports/ exclusion
+
+## Testing Recommendations
+
+1. **Hash Chain Integrity:**
+   - Verify hash computation is correct
+   - Test chain verification after multiple events
+   - Test detection of tampered events
+
+2. **GDPR Export:**
+   - Test with user having various event types
+   - Test access control (own data vs admin access)
+   - Verify JSON structure and completeness
+
+3. **Compliance Reports:**
+   - Test SOC2 CSV generation with sample data
+   - Test ISO 27001 CSV generation with control mapping
+   - Verify file creation and storage
+
+4. **Scheduled Jobs:**
+   - Test monthly/quarterly triggers
+   - Verify error handling on failures
+   - Check report tracking in database
+
+5. **Integration:**
+   - Test CollaborationService hash chain integration
+   - Verify all audit events are logged correctly
+   - Test concurrent event logging
+
+## Next Steps
+
+1. Run database migration: `mvn flyway:migrate`
+2. Test GDPR export endpoint with sample user
+3. Generate test compliance reports
+4. Integrate audit logging into existing services (AuthenticationService, etc.)
+5. Set up monitoring/alerting for hash chain verification
+6. Configure scheduled jobs in production environment

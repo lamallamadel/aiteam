@@ -74,3 +74,6 @@ security-reports/
 # Plugins (hot-reload directory)
 plugins/
 *.jar
+
+# Compliance reports (audit trail exports)
+compliance-reports/

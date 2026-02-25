@@ -28,4 +28,9 @@ public interface CollaborationEventRepository extends JpaRepository<Collaboratio
     
     @Query("SELECT COUNT(DISTINCT e.userId) FROM CollaborationEventEntity e WHERE e.runId = :runId")
     long countDistinctUsersByRunId(@Param("runId") UUID runId);
+    
+    @Query(value = "SELECT * FROM collaboration_events ORDER BY timestamp DESC LIMIT 1", nativeQuery = true)
+    java.util.Optional<CollaborationEventEntity> findLatestEvent();
+    
+    List<CollaborationEventEntity> findByUserIdOrderByTimestampAsc(String userId);
 }

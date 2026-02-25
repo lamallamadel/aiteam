@@ -26,6 +26,7 @@ public class CollaborationService {
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
     private final WebSocketConnectionMonitor connectionMonitor;
+    private final AuditTrailService auditTrailService;
     
     private final Map<UUID, Set<String>> activeUsers = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, String>> cursorPositions = new ConcurrentHashMap<>();
@@ -40,13 +41,15 @@ public class CollaborationService {
             RunRepository runRepository,
             SimpMessagingTemplate messagingTemplate,
             ObjectMapper objectMapper,
-            WebSocketConnectionMonitor connectionMonitor) {
+            WebSocketConnectionMonitor connectionMonitor,
+            AuditTrailService auditTrailService) {
         this.eventRepository = eventRepository;
         this.messageRepository = messageRepository;
         this.runRepository = runRepository;
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
         this.connectionMonitor = connectionMonitor;
+        this.auditTrailService = auditTrailService;
     }
 
     @Transactional
@@ -54,12 +57,11 @@ public class CollaborationService {
         String eventData = serializeEventData(graftData);
         CollaborationEventEntity event = new CollaborationEventEntity(
                 runId, userId, "GRAFT", eventData, Instant.now());
+        
+        auditTrailService.updateCollaborationEventHash(event);
         eventRepository.save(event);
 
-        // Apply operational transformation and update run entity
         applyGraftToRun(runId, graftData);
-
-        // Broadcast to all connected clients
         broadcastEvent(runId, "GRAFT", userId, graftData);
     }
 
@@ -68,12 +70,11 @@ public class CollaborationService {
         String eventData = serializeEventData(pruneData);
         CollaborationEventEntity event = new CollaborationEventEntity(
                 runId, userId, "PRUNE", eventData, Instant.now());
+        
+        auditTrailService.updateCollaborationEventHash(event);
         eventRepository.save(event);
 
-        // Apply operational transformation and update run entity
         applyPruneToRun(runId, pruneData);
-
-        // Broadcast to all connected clients
         broadcastEvent(runId, "PRUNE", userId, pruneData);
     }
 
@@ -82,9 +83,10 @@ public class CollaborationService {
         String eventData = serializeEventData(flagData);
         CollaborationEventEntity event = new CollaborationEventEntity(
                 runId, userId, "FLAG", eventData, Instant.now());
+        
+        auditTrailService.updateCollaborationEventHash(event);
         eventRepository.save(event);
 
-        // Broadcast to all connected clients
         broadcastEvent(runId, "FLAG", userId, flagData);
     }
 
