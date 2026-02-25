@@ -169,3 +169,9 @@ atlasia:
     frontend-callback-url: ${OAUTH2_FRONTEND_CALLBACK_URL:http://localhost:4200/auth/callback}
   encryption:
     key: ${vault.secret.data.atlasia.encryption-key:${VAULT_ENCRYPTION_KEY:}}
+  plugins:
+    directory: ${PLUGIN_DIRECTORY:plugins}
+    hot-reload:
+      enabled: ${PLUGIN_HOT_RELOAD_ENABLED:true}
+    health-check:
+      interval-seconds: ${PLUGIN_HEALTH_CHECK_INTERVAL:60}

@@ -70,3 +70,7 @@ trivy-cache/
 trivy-results.json
 trivy-results.txt
 security-reports/
+
+# Plugins (hot-reload directory)
+plugins/
+*.jar
