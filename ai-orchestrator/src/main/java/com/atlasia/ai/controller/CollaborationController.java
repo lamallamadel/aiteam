@@ -101,6 +101,21 @@ public class CollaborationController {
         
         collaborationService.handlePing(runId, userId, sessionId, clientTimestamp);
     }
+    
+    @MessageMapping("/runs/{runId}/crdt-sync")
+    public void handleCrdtSync(
+            @DestinationVariable UUID runId,
+            @Payload Map<String, Object> syncData,
+            SimpMessageHeaderAccessor headerAccessor) {
+        String sourceRegion = (String) syncData.get("sourceRegion");
+        String changesBase64 = (String) syncData.get("changes");
+        Long lamportTimestamp = ((Number) syncData.get("lamportTimestamp")).longValue();
+        
+        if (changesBase64 != null) {
+            byte[] changes = Base64.getDecoder().decode(changesBase64);
+            collaborationService.handleRemoteSync(runId, sourceRegion, changes, lamportTimestamp);
+        }
+    }
 
     private String extractUserId(SimpMessageHeaderAccessor headerAccessor) {
         Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();

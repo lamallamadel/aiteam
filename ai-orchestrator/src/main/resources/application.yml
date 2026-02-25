@@ -175,3 +175,8 @@ atlasia:
       enabled: ${PLUGIN_HOT_RELOAD_ENABLED:true}
     health-check:
       interval-seconds: ${PLUGIN_HEALTH_CHECK_INTERVAL:60}
+
+crdt:
+  mesh:
+    peers: ${CRDT_MESH_PEERS:}
+  region: ${REGION:us-east-1}

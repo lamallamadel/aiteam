@@ -54,6 +54,15 @@ public class CollaborationEventEntity {
     
     @Column(name = "event_hash", length = 64)
     private String eventHash;
+    
+    @Column(name = "crdt_changes", columnDefinition = "bytea")
+    private byte[] crdtChanges;
+    
+    @Column(name = "source_region", length = 50)
+    private String sourceRegion;
+    
+    @Column(name = "lamport_timestamp")
+    private Long lamportTimestamp;
 
     protected CollaborationEventEntity() {}
 
@@ -63,6 +72,18 @@ public class CollaborationEventEntity {
         this.eventType = eventType;
         this.eventData = eventData;
         this.timestamp = timestamp;
+    }
+    
+    public CollaborationEventEntity(UUID runId, String userId, String eventType, String eventData, 
+                                   Instant timestamp, byte[] crdtChanges, String sourceRegion, Long lamportTimestamp) {
+        this.runId = runId;
+        this.userId = userId;
+        this.eventType = eventType;
+        this.eventData = eventData;
+        this.timestamp = timestamp;
+        this.crdtChanges = crdtChanges;
+        this.sourceRegion = sourceRegion;
+        this.lamportTimestamp = lamportTimestamp;
     }
 
     public UUID getId() { return id; }
@@ -77,6 +98,9 @@ public class CollaborationEventEntity {
     public Instant getArchivedAt() { return archivedAt; }
     public String getPreviousEventHash() { return previousEventHash; }
     public String getEventHash() { return eventHash; }
+    public byte[] getCrdtChanges() { return crdtChanges; }
+    public String getSourceRegion() { return sourceRegion; }
+    public Long getLamportTimestamp() { return lamportTimestamp; }
     
     public void setStateBefore(String stateBefore) { this.stateBefore = stateBefore; }
     public void setStateAfter(String stateAfter) { this.stateAfter = stateAfter; }
@@ -84,4 +108,7 @@ public class CollaborationEventEntity {
     public void setArchivedAt(Instant archivedAt) { this.archivedAt = archivedAt; }
     public void setPreviousEventHash(String previousEventHash) { this.previousEventHash = previousEventHash; }
     public void setEventHash(String eventHash) { this.eventHash = eventHash; }
+    public void setCrdtChanges(byte[] crdtChanges) { this.crdtChanges = crdtChanges; }
+    public void setSourceRegion(String sourceRegion) { this.sourceRegion = sourceRegion; }
+    public void setLamportTimestamp(Long lamportTimestamp) { this.lamportTimestamp = lamportTimestamp; }
 }

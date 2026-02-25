@@ -44,6 +44,15 @@ class CollaborationServiceTest {
     @Mock
     private AuditTrailService auditTrailService;
 
+    @Mock
+    private CrdtDocumentManager crdtDocumentManager;
+
+    @Mock
+    private CrdtSyncService crdtSyncService;
+
+    @Mock
+    private CrdtSnapshotService crdtSnapshotService;
+
     private CollaborationService collaborationService;
     private ObjectMapper objectMapper;
 
@@ -51,9 +60,16 @@ class CollaborationServiceTest {
     void setUp() {
         objectMapper = new ObjectMapper();
         lenient().when(messageRepository.findMaxSequenceNumberByRunId(any())).thenReturn(0L);
+        lenient().when(crdtSyncService.getLocalRegion()).thenReturn("us-east-1");
+        lenient().when(crdtDocumentManager.applyGraftMutation(any(), any(), any())).thenReturn(new byte[0]);
+        lenient().when(crdtDocumentManager.applyPruneMutation(any(), any(), any())).thenReturn(new byte[0]);
+        lenient().when(crdtDocumentManager.applyFlagMutation(any(), any(), any())).thenReturn(new byte[0]);
+        lenient().when(crdtDocumentManager.getState(any())).thenReturn(new com.atlasia.ai.model.CrdtDocumentState());
+        lenient().when(crdtDocumentManager.serializeState(any())).thenReturn("{}");
         collaborationService = new CollaborationService(
                 eventRepository, messageRepository, runRepository, 
-                messagingTemplate, objectMapper, connectionMonitor, auditTrailService);
+                messagingTemplate, objectMapper, connectionMonitor, auditTrailService,
+                crdtDocumentManager, crdtSyncService, crdtSnapshotService);
     }
 
     @Test
@@ -99,14 +115,18 @@ class CollaborationServiceTest {
 
         collaborationService.handlePruneMutation(runId, userId, pruneData);
 
-        // Verify event saved
-        verify(eventRepository).save(any(CollaborationEventEntity.class));
+        // Verify event saved with CRDT changes
+        ArgumentCaptor<CollaborationEventEntity> eventCaptor = ArgumentCaptor.forClass(CollaborationEventEntity.class);
+        verify(eventRepository).save(eventCaptor.capture());
+        CollaborationEventEntity savedEvent = eventCaptor.getValue();
+        assertNotNull(savedEvent.getCrdtChanges());
+        assertEquals("PRUNE", savedEvent.getEventType());
 
-        // Verify run updated
-        ArgumentCaptor<RunEntity> runCaptor = ArgumentCaptor.forClass(RunEntity.class);
-        verify(runRepository).save(runCaptor.capture());
-        RunEntity savedRun = runCaptor.getValue();
-        assertTrue(savedRun.getPrunedSteps().contains("QUALIFIER"));
+        // Verify CRDT mutation applied
+        verify(crdtDocumentManager).applyPruneMutation(eq(runId), eq(userId), eq(pruneData));
+        
+        // Verify CRDT sync broadcast
+        verify(crdtSyncService).broadcastChanges(eq(runId), any(byte[].class));
 
         // Verify broadcast
         verify(messagingTemplate).convertAndSend(
@@ -165,12 +185,12 @@ class CollaborationServiceTest {
         prune2.put("isPruned", true);
         collaborationService.handlePruneMutation(runId, "user2", prune2);
 
-        // Both should be pruned (set-based CRDT)
-        ArgumentCaptor<RunEntity> runCaptor = ArgumentCaptor.forClass(RunEntity.class);
-        verify(runRepository, atLeastOnce()).save(runCaptor.capture());
-        String prunedSteps = runCaptor.getValue().getPrunedSteps();
-        assertTrue(prunedSteps.contains("QUALIFIER"));
-        assertTrue(prunedSteps.contains("WRITER"));
+        // Both mutations should be applied to CRDT (conflict-free)
+        verify(crdtDocumentManager).applyPruneMutation(eq(runId), eq("user1"), eq(prune1));
+        verify(crdtDocumentManager).applyPruneMutation(eq(runId), eq("user2"), eq(prune2));
+        
+        // Both should be broadcast via CRDT sync
+        verify(crdtSyncService, times(2)).broadcastChanges(eq(runId), any(byte[].class));
     }
 
     @Test
