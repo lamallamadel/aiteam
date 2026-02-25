@@ -431,6 +431,73 @@ class A2AControllerTest {
         }
 
         // -------------------------------------------------------------------------
+        // POST /api/a2a/agents/install — agent installation
+        // -------------------------------------------------------------------------
+
+        @Test
+        void installAgent_withValidToken_installsAgent() throws Exception {
+                AgentCard newAgent = agentCard("custom-agent", "CUSTOM");
+                when(a2aDiscoveryService.getAgent("custom-agent")).thenReturn(null);
+
+                mockMvc.perform(post("/api/a2a/agents/install")
+                                .header("Authorization", "Bearer " + GITHUB_TOKEN)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(newAgent)))
+                                .andExpect(status().isCreated())
+                                .andExpect(jsonPath("$.success").value(true))
+                                .andExpect(jsonPath("$.agentName").value("custom-agent"));
+
+                verify(a2aDiscoveryService).register(any(AgentCard.class));
+        }
+
+        @Test
+        void installAgent_alreadyExists_returnsConflict() throws Exception {
+                AgentCard existingAgent = agentCard("pm-v1", "PM");
+                when(a2aDiscoveryService.getAgent("pm-v1")).thenReturn(existingAgent);
+
+                mockMvc.perform(post("/api/a2a/agents/install")
+                                .header("Authorization", "Bearer " + GITHUB_TOKEN)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(existingAgent)))
+                                .andExpect(status().isConflict())
+                                .andExpect(jsonPath("$.success").value(false));
+
+                verify(a2aDiscoveryService, never()).register(any(AgentCard.class));
+        }
+
+        @Test
+        void installAgent_withoutToken_returnsUnauthorized() throws Exception {
+                AgentCard newAgent = agentCard("custom-agent", "CUSTOM");
+
+                mockMvc.perform(post("/api/a2a/agents/install")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(newAgent)))
+                                .andExpect(status().isUnauthorized());
+        }
+
+        // -------------------------------------------------------------------------
+        // GET /api/a2a/capabilities — list all capabilities
+        // -------------------------------------------------------------------------
+
+        @Test
+        void listCapabilities_withValidToken_returnsCapabilities() throws Exception {
+                Set<String> capabilities = Set.of("ticket_analysis", "code_generation", "code_review");
+                when(a2aDiscoveryService.listAllCapabilities()).thenReturn(capabilities);
+
+                mockMvc.perform(get("/api/a2a/capabilities")
+                                .header("Authorization", "Bearer " + GITHUB_TOKEN))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$", hasSize(3)))
+                                .andExpect(jsonPath("$", hasItems("ticket_analysis", "code_generation", "code_review")));
+        }
+
+        @Test
+        void listCapabilities_withoutToken_returnsUnauthorized() throws Exception {
+                mockMvc.perform(get("/api/a2a/capabilities"))
+                                .andExpect(status().isUnauthorized());
+        }
+
+        // -------------------------------------------------------------------------
         // Helpers
         // -------------------------------------------------------------------------
 

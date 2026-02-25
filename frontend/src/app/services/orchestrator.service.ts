@@ -85,6 +85,14 @@ export class OrchestratorService {
         return this.http.get<{ binding: AgentBinding; valid: boolean }>(`/api/a2a/bindings/${bindingId}`);
     }
 
+    listCapabilities(): Observable<string[]> {
+        return this.http.get<string[]>('/api/a2a/capabilities');
+    }
+
+    installAgent(card: AgentCard): Observable<{ success: boolean; message: string; agentName: string }> {
+        return this.http.post<{ success: boolean; message: string; agentName: string }>('/api/a2a/agents/install', card);
+    }
+
     // Vis-CoT pipeline mutation endpoints
     flagNode(runId: string, stepId: string, note: string = ''): Observable<void> {
         return this.http.post<void>(`${this.apiUrl}/${runId}/flags`, { stepId, note });

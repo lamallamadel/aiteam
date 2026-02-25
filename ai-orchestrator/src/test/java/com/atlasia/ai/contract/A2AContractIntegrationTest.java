@@ -4,6 +4,7 @@ import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
+import com.atlasia.ai.service.A2ADiscoveryService.AgentConstraints;
 import com.atlasia.ai.service.AgentBindingService.AgentBinding;
 import io.restassured.module.mockmvc.RestAssuredMockMvc;
 import org.junit.jupiter.api.DisplayName;

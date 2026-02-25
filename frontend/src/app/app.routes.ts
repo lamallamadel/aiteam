@@ -13,6 +13,7 @@ import { AgentConfigComponent } from './components/config/agent-config.component
 import { OversightConfigComponent } from './components/config/oversight-config.component';
 import { WaterfallTraceComponent } from './components/trace/waterfall-trace.component';
 import { A2ARegistryComponent } from './components/a2a-registry.component';
+import { AgentMarketplaceComponent } from './components/agent-marketplace.component';
 import { GraftManagementComponent } from './components/graft-management.component';
 import { OnboardingFlowComponent } from './components/onboarding-flow.component';
 import { SettingsDashboardComponent } from './components/settings-dashboard.component';
@@ -49,6 +50,7 @@ export const routes: Routes = [
   { path: 'config/agents', component: AgentConfigComponent },
   { path: 'config/oversight', component: OversightConfigComponent },
   { path: 'a2a', component: A2ARegistryComponent },
+  { path: 'marketplace', component: AgentMarketplaceComponent, canActivate: [authGuard] },
   { path: 'grafts', component: GraftManagementComponent },
   { path: 'grafts/:runId', component: GraftManagementComponent },
   { path: 'settings', component: SettingsDashboardComponent, canActivate: [authGuard] },

@@ -10,6 +10,8 @@ export { ArtifactRendererComponent } from './artifact-renderer.component';
 export { ConfidenceSignalComponent } from './confidence-signal.component';
 export { IntentPreviewModalComponent } from './intent-preview-modal.component';
 export { GraftManagementComponent } from './graft-management.component';
+export { AgentMarketplaceComponent } from './agent-marketplace.component';
+export { A2ARegistryComponent } from './a2a-registry.component';
 export { NeuralTraceComponent } from './neural-trace.component';
 export { TimeTravelControlsComponent } from './time-travel-controls.component';
 export { EventSourcingVizComponent } from './event-sourcing-viz.component';

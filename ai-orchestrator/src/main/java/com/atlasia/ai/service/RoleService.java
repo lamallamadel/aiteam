@@ -30,6 +30,7 @@ public class RoleService {
     public static final String RESOURCE_GRAFT = "graft";
     public static final String RESOURCE_OVERSIGHT = "oversight";
     public static final String RESOURCE_ANALYTICS = "analytics";
+    public static final String RESOURCE_AGENTS = "agents";
 
     public static final String ACTION_CREATE = "create";
     public static final String ACTION_VIEW = "view";
@@ -49,6 +50,7 @@ public class RoleService {
     public static final String PERMISSION_OVERSIGHT_VIEW = RESOURCE_OVERSIGHT + ":" + ACTION_VIEW;
     public static final String PERMISSION_OVERSIGHT_MANAGE = RESOURCE_OVERSIGHT + ":" + ACTION_MANAGE;
     public static final String PERMISSION_ANALYTICS_VIEW = RESOURCE_ANALYTICS + ":" + ACTION_VIEW;
+    public static final String PERMISSION_AGENTS_MANAGE = RESOURCE_AGENTS + ":" + ACTION_MANAGE;
 
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
@@ -92,7 +94,8 @@ public class RoleService {
             new PermissionSpec(RESOURCE_GRAFT, ACTION_MANAGE, "Manage grafts"),
             new PermissionSpec(RESOURCE_OVERSIGHT, ACTION_VIEW, "View oversight configuration"),
             new PermissionSpec(RESOURCE_OVERSIGHT, ACTION_MANAGE, "Manage oversight configuration"),
-            new PermissionSpec(RESOURCE_ANALYTICS, ACTION_VIEW, "View analytics")
+            new PermissionSpec(RESOURCE_ANALYTICS, ACTION_VIEW, "View analytics"),
+            new PermissionSpec(RESOURCE_AGENTS, ACTION_MANAGE, "Manage agents and marketplace")
         );
 
         for (PermissionSpec spec : specs) {
@@ -162,6 +165,7 @@ public class RoleService {
         manager.addPermission(permissions.get(PERMISSION_OVERSIGHT_VIEW));
         manager.addPermission(permissions.get(PERMISSION_OVERSIGHT_MANAGE));
         manager.addPermission(permissions.get(PERMISSION_ANALYTICS_VIEW));
+        manager.addPermission(permissions.get(PERMISSION_AGENTS_MANAGE));
         roleRepository.save(manager);
     }
 
