@@ -1,0 +1,60 @@
+{
+  "description": "Contract for capability-based agent discovery",
+  "request": {
+    "method": "GET",
+    "url": "/api/a2a/capabilities/code_generation",
+    "headers": {
+      "Authorization": "Bearer test-token"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": [
+      {
+        "name": "developer-v1",
+        "version": "1.0",
+        "role": "DEVELOPER",
+        "vendor": "atlasia",
+        "description": "Developer agent: generates code, runs security review, and commits changes",
+        "capabilities": ["code_generation", "security_review", "code_quality", "multi_file_commit"],
+        "outputArtifactKey": "code_changes",
+        "mcpServers": [],
+        "constraints": {
+          "maxTokens": 8192,
+          "maxDurationMs": 300000,
+          "costBudgetUsd": 0.10
+        },
+        "transport": "local",
+        "healthEndpoint": null,
+        "status": "active"
+      }
+    ],
+    "matchers": {
+      "body": [
+        {
+          "path": "$",
+          "type": "by_type",
+          "minOccurrence": 0
+        },
+        {
+          "path": "$[*].name",
+          "type": "by_regex",
+          "value": "[a-zA-Z0-9\\-_]+"
+        },
+        {
+          "path": "$[*].capabilities",
+          "type": "by_type",
+          "minOccurrence": 1
+        },
+        {
+          "path": "$[*].status",
+          "type": "by_regex",
+          "value": "active|degraded|inactive"
+        }
+      ]
+    }
+  }
+}

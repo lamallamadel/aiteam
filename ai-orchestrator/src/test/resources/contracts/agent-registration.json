@@ -1,0 +1,134 @@
+{
+  "description": "Contract for external agent registration via A2A protocol",
+  "request": {
+    "method": "POST",
+    "url": "/api/a2a/agents",
+    "headers": {
+      "Authorization": "Bearer admin-token",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "external-agent-v1",
+      "version": "1.0",
+      "role": "CUSTOM",
+      "vendor": "external-vendor",
+      "description": "External agent for custom processing",
+      "capabilities": ["custom_processing", "data_analysis"],
+      "outputArtifactKey": "custom_output",
+      "mcpServers": [],
+      "constraints": {
+        "maxTokens": 16384,
+        "maxDurationMs": 600000,
+        "costBudgetUsd": 0.25
+      },
+      "transport": "http",
+      "healthEndpoint": "/health",
+      "status": "active"
+    },
+    "matchers": {
+      "body": [
+        {
+          "path": "$.name",
+          "type": "by_regex",
+          "value": "[a-zA-Z0-9\\-_]+"
+        },
+        {
+          "path": "$.version",
+          "type": "by_regex",
+          "value": "[0-9]+\\.[0-9]+(\\.[0-9]+)?"
+        },
+        {
+          "path": "$.role",
+          "type": "by_regex",
+          "value": "[A-Z_]+"
+        },
+        {
+          "path": "$.capabilities",
+          "type": "by_type",
+          "minOccurrence": 1
+        },
+        {
+          "path": "$.constraints.maxTokens",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.maxDurationMs",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.costBudgetUsd",
+          "type": "by_type"
+        },
+        {
+          "path": "$.status",
+          "type": "by_regex",
+          "value": "active|degraded|inactive"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "external-agent-v1",
+      "version": "1.0",
+      "role": "CUSTOM",
+      "vendor": "external-vendor",
+      "description": "External agent for custom processing",
+      "capabilities": ["custom_processing", "data_analysis"],
+      "outputArtifactKey": "custom_output",
+      "mcpServers": [],
+      "constraints": {
+        "maxTokens": 16384,
+        "maxDurationMs": 600000,
+        "costBudgetUsd": 0.25
+      },
+      "transport": "http",
+      "healthEndpoint": "/health",
+      "status": "active"
+    },
+    "matchers": {
+      "body": [
+        {
+          "path": "$.name",
+          "type": "by_equality"
+        },
+        {
+          "path": "$.version",
+          "type": "by_regex",
+          "value": "[0-9]+\\.[0-9]+(\\.[0-9]+)?"
+        },
+        {
+          "path": "$.role",
+          "type": "by_regex",
+          "value": "[A-Z_]+"
+        },
+        {
+          "path": "$.capabilities",
+          "type": "by_type",
+          "minOccurrence": 1
+        },
+        {
+          "path": "$.constraints.maxTokens",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.maxDurationMs",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.costBudgetUsd",
+          "type": "by_type"
+        },
+        {
+          "path": "$.status",
+          "type": "by_regex",
+          "value": "active|degraded|inactive"
+        }
+      ]
+    }
+  }
+}
