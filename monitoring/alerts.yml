@@ -1,0 +1,219 @@
+groups:
+  - name: orchestrator_performance
+    interval: 30s
+    rules:
+      - alert: HighAgentLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(orchestrator_agent_execution_latency_bucket[5m])) by (agent_type, le)) > 10000
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High agent execution latency detected"
+          description: "Agent {{ $labels.agent_type }} P95 latency is {{ $value }}ms (threshold: 10000ms)"
+          dashboard: "http://grafana:3000/d/agent-performance"
+
+      - alert: HighAgentLatencyP99
+        expr: histogram_quantile(0.99, sum(rate(orchestrator_agent_execution_latency_bucket[5m])) by (agent_type, le)) > 30000
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical agent execution latency detected"
+          description: "Agent {{ $labels.agent_type }} P99 latency is {{ $value }}ms (threshold: 30000ms)"
+          dashboard: "http://grafana:3000/d/agent-performance"
+
+  - name: orchestrator_resilience
+    interval: 30s
+    rules:
+      - alert: CircuitBreakerOpen
+        expr: orchestrator_graft_circuit_breaker_state == 1
+        for: 2m
+        labels:
+          severity: critical
+          category: resilience
+        annotations:
+          summary: "Circuit breaker OPEN for agent {{ $labels.agent }}"
+          description: "Circuit breaker has been OPEN for 2+ minutes. System is rejecting graft requests."
+          dashboard: "http://grafana:3000/d/circuit-breakers"
+          runbook: "https://docs.atlasia.ai/runbooks/circuit-breaker-open"
+
+      - alert: HighGraftFailureRate
+        expr: (rate(orchestrator_graft_failure_total[5m]) / rate(orchestrator_graft_executions_total[5m])) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: resilience
+        annotations:
+          summary: "High graft execution failure rate"
+          description: "Graft failure rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+          dashboard: "http://grafana:3000/d/circuit-breakers"
+
+      - alert: GraftTimeoutsHigh
+        expr: rate(orchestrator_graft_timeout_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: resilience
+        annotations:
+          summary: "High graft timeout rate"
+          description: "Graft timeout rate is {{ $value }}/sec (threshold: 0.1/sec)"
+          dashboard: "http://grafana:3000/d/circuit-breakers"
+
+  - name: orchestrator_websocket
+    interval: 30s
+    rules:
+      - alert: WebSocketConnectionsHigh
+        expr: orchestrator_websocket_active_connections > 100
+        for: 10m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "High WebSocket connection count"
+          description: "Active connections: {{ $value }} (threshold: 100). Consider scaling."
+          dashboard: "http://grafana:3000/d/websocket-health"
+
+      - alert: MessageDeliveryRateLow
+        expr: avg(orchestrator_websocket_message_delivery_rate) < 0.95
+        for: 10m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "Low WebSocket message delivery rate"
+          description: "Delivery rate is {{ $value | humanizePercentage }} (threshold: 95%)"
+          dashboard: "http://grafana:3000/d/websocket-health"
+
+      - alert: DroppedMessagesHigh
+        expr: increase(orchestrator_websocket_dropped_messages[5m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "High number of dropped WebSocket messages"
+          description: "Dropped {{ $value }} messages in last 5 minutes (threshold: 50)"
+          dashboard: "http://grafana:3000/d/websocket-health"
+
+      - alert: ConnectionQualityLow
+        expr: avg(orchestrator_websocket_connection_quality) < 60
+        for: 15m
+        labels:
+          severity: warning
+          category: quality
+        annotations:
+          summary: "Low WebSocket connection quality"
+          description: "Average connection quality is {{ $value }} (threshold: 60/100)"
+          dashboard: "http://grafana:3000/d/websocket-health"
+
+      - alert: MessageQueueDepthHigh
+        expr: orchestrator_websocket_message_queue_depth > 500
+        for: 10m
+        labels:
+          severity: warning
+          category: backpressure
+        annotations:
+          summary: "High WebSocket message queue depth"
+          description: "Queue depth is {{ $value }} messages (threshold: 500)"
+          dashboard: "http://grafana:3000/d/websocket-health"
+
+  - name: orchestrator_security
+    interval: 60s
+    rules:
+      - alert: JWTRefreshFailureRateHigh
+        expr: rate(orchestrator_jwt_token_refresh_failure_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "High JWT token refresh failure rate"
+          description: "Failure rate is {{ $value }}/sec (threshold: 0.1/sec). Users may be unable to authenticate."
+          dashboard: "http://grafana:3000/d/security-metrics"
+          runbook: "https://docs.atlasia.ai/runbooks/jwt-refresh-failures"
+
+      - alert: VaultRotationFailure
+        expr: increase(orchestrator_vault_secret_rotation_failure_total[1h]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault secret rotation failure detected"
+          description: "Secret rotation failed in the last hour. Manual intervention required."
+          dashboard: "http://grafana:3000/d/security-metrics"
+          runbook: "https://docs.atlasia.ai/runbooks/vault-rotation-failure"
+
+      - alert: NoRecentVaultRotation
+        expr: (time() - timestamp(orchestrator_vault_secret_rotation_total)) > 2678400
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "No Vault secret rotation in 31+ days"
+          description: "Last rotation was {{ $value | humanizeDuration }} ago. Scheduled rotation may be failing silently."
+          dashboard: "http://grafana:3000/d/security-metrics"
+
+  - name: orchestrator_cost
+    interval: 60s
+    rules:
+      - alert: CostSpikeDetected
+        expr: rate(orchestrator_cost_attribution[1h]) > 10
+        for: 30m
+        labels:
+          severity: warning
+          category: cost
+        annotations:
+          summary: "Cost spike detected"
+          description: "Cost rate is ${{ $value }}/hour (threshold: $10/hour). Investigate high-cost operations."
+          dashboard: "http://grafana:3000/d/cost-attribution"
+
+      - alert: RepositoryCostHigh
+        expr: sum(increase(orchestrator_cost_attribution[24h])) by (repository) > 50
+        for: 1h
+        labels:
+          severity: warning
+          category: cost
+        annotations:
+          summary: "High cost for repository {{ $labels.repository }}"
+          description: "Repository cost in last 24h: ${{ $value }} (threshold: $50)"
+          dashboard: "http://grafana:3000/d/cost-attribution"
+
+      - alert: UserCostHigh
+        expr: sum(increase(orchestrator_cost_attribution[24h])) by (user) > 100
+        for: 1h
+        labels:
+          severity: warning
+          category: cost
+        annotations:
+          summary: "High cost for user {{ $labels.user }}"
+          description: "User cost in last 24h: ${{ $value }} (threshold: $100)"
+          dashboard: "http://grafana:3000/d/cost-attribution"
+
+  - name: orchestrator_health
+    interval: 30s
+    rules:
+      - alert: OrchestratorDown
+        expr: up{job="ai-orchestrator"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "AI Orchestrator is down"
+          description: "Orchestrator has been unreachable for 2+ minutes"
+          runbook: "https://docs.atlasia.ai/runbooks/orchestrator-down"
+
+      - alert: HighErrorRate
+        expr: (rate(orchestrator_agent_step_errors_total[5m]) / rate(orchestrator_agent_step_executions_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "High agent step error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+          dashboard: "http://grafana:3000/d/metrics-overview"

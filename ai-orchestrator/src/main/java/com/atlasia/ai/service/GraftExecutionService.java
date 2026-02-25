@@ -405,6 +405,7 @@ public class GraftExecutionService {
                 state.state = CircuitState.HALF_OPEN;
                 state.failureCount = 0;
                 log.info("GRAFT: circuit breaker HALF_OPEN for agent={}", agentName);
+                metrics.updateCircuitBreakerState(agentName, "HALF_OPEN");
                 return false;
             }
             return true;
@@ -419,6 +420,7 @@ public class GraftExecutionService {
         if (state.state == CircuitState.HALF_OPEN) {
             state.state = CircuitState.CLOSED;
             log.info("GRAFT: circuit breaker CLOSED for agent={}", agentName);
+            metrics.updateCircuitBreakerState(agentName, "CLOSED");
         }
     }
 
@@ -430,6 +432,7 @@ public class GraftExecutionService {
         if (state.failureCount >= CIRCUIT_BREAKER_FAILURE_THRESHOLD) {
             state.state = CircuitState.OPEN;
             log.warn("GRAFT: circuit breaker OPEN for agent={}, failures={}", agentName, state.failureCount);
+            metrics.updateCircuitBreakerState(agentName, "OPEN");
         }
     }
 
