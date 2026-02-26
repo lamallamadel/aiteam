@@ -53,6 +53,9 @@ class CollaborationServiceTest {
     @Mock
     private CrdtSnapshotService crdtSnapshotService;
 
+    @Mock
+    private io.opentelemetry.api.trace.Tracer tracer;
+
     private CollaborationService collaborationService;
     private ObjectMapper objectMapper;
 
@@ -66,10 +69,18 @@ class CollaborationServiceTest {
         lenient().when(crdtDocumentManager.applyFlagMutation(any(), any(), any())).thenReturn(new byte[0]);
         lenient().when(crdtDocumentManager.getState(any())).thenReturn(new com.atlasia.ai.model.CrdtDocumentState());
         lenient().when(crdtDocumentManager.serializeState(any())).thenReturn("{}");
+        
+        io.opentelemetry.api.trace.Span mockSpan = mock(io.opentelemetry.api.trace.Span.class);
+        io.opentelemetry.api.trace.SpanBuilder mockBuilder = mock(io.opentelemetry.api.trace.SpanBuilder.class);
+        lenient().when(tracer.spanBuilder(any())).thenReturn(mockBuilder);
+        lenient().when(mockBuilder.setAttribute(any(String.class), any(String.class))).thenReturn(mockBuilder);
+        lenient().when(mockBuilder.startSpan()).thenReturn(mockSpan);
+        lenient().when(mockSpan.makeCurrent()).thenReturn(mock(io.opentelemetry.context.Scope.class));
+        
         collaborationService = new CollaborationService(
                 eventRepository, messageRepository, runRepository, 
                 messagingTemplate, objectMapper, connectionMonitor, auditTrailService,
-                crdtDocumentManager, crdtSyncService, crdtSnapshotService);
+                crdtDocumentManager, crdtSyncService, crdtSnapshotService, tracer);
     }
 
     @Test

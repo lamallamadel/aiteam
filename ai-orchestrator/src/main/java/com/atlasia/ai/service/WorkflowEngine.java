@@ -17,6 +17,11 @@ import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.atlasia.ai.service.trace.TraceEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +62,7 @@ public class WorkflowEngine {
     private final InterruptDecisionStore interruptDecisionStore;
     private final ObjectMapper objectMapper;
     private final GraftExecutionService graftExecutionService;
+    private final Tracer tracer;
 
     @Autowired
     @Lazy
@@ -77,7 +83,8 @@ public class WorkflowEngine {
             AgentBindingService agentBindingService,
             InterruptDecisionStore interruptDecisionStore,
             ObjectMapper objectMapper,
-            GraftExecutionService graftExecutionService) {
+            GraftExecutionService graftExecutionService,
+            Tracer tracer) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
         this.developerStep = developerStep;
@@ -93,6 +100,7 @@ public class WorkflowEngine {
         this.interruptDecisionStore = interruptDecisionStore;
         this.objectMapper = objectMapper;
         this.graftExecutionService = graftExecutionService;
+        this.tracer = tracer;
     }
 
     @Async("workflowExecutor")
@@ -112,19 +120,29 @@ public class WorkflowEngine {
 
     @Transactional
     public void executeWorkflow(UUID runId) {
-        RunEntity runEntity = runRepository.findById(runId).orElseThrow(
-                () -> new WorkflowException("Run not found: " + runId, runId, "INIT",
-                        OrchestratorException.RecoveryStrategy.FAIL_FAST));
+        Span workflowSpan = tracer.spanBuilder("workflow.execute")
+                .setAttribute("run.id", runId.toString())
+                .setAttribute("correlation.id", CorrelationIdHolder.getCorrelationId())
+                .startSpan();
 
-        Timer.Sample workflowTimer = metrics.startWorkflowTimer();
-        long startTime = System.currentTimeMillis();
+        try (Scope scope = workflowSpan.makeCurrent()) {
+            RunEntity runEntity = runRepository.findById(runId).orElseThrow(
+                    () -> new WorkflowException("Run not found: " + runId, runId, "INIT",
+                            OrchestratorException.RecoveryStrategy.FAIL_FAST));
 
-        metrics.recordWorkflowExecution();
+            workflowSpan.setAttribute("run.repo", runEntity.getRepo());
+            workflowSpan.setAttribute("run.issue_number", runEntity.getIssueNumber());
+            workflowSpan.setAttribute("run.autonomy", runEntity.getAutonomy() != null ? runEntity.getAutonomy() : "auto");
 
-        try {
-            log.info("Starting workflow execution: runId={}, issueNumber={}, repo={}, correlationId={}",
-                    runEntity.getId(), runEntity.getIssueNumber(), runEntity.getRepo(),
-                    CorrelationIdHolder.getCorrelationId());
+            Timer.Sample workflowTimer = metrics.startWorkflowTimer();
+            long startTime = System.currentTimeMillis();
+
+            metrics.recordWorkflowExecution();
+
+            try {
+                log.info("Starting workflow execution: runId={}, issueNumber={}, repo={}, correlationId={}",
+                        runEntity.getId(), runEntity.getIssueNumber(), runEntity.getRepo(),
+                        CorrelationIdHolder.getCorrelationId());
 
             String[] repoParts = runEntity.getRepo().split("/");
             String owner = repoParts[0];
@@ -322,58 +340,94 @@ public class WorkflowEngine {
             traceEventService.cleanup(runId);
             eventBus.completeEmitters(runId);
 
-            log.info("Workflow completed successfully: runId={}, duration={}ms, correlationId={}",
-                    runEntity.getId(), duration, CorrelationIdHolder.getCorrelationId());
+                log.info("Workflow completed successfully: runId={}, duration={}ms, correlationId={}",
+                        runEntity.getId(), duration, CorrelationIdHolder.getCorrelationId());
 
-        } catch (EscalationException e) {
-            long duration = System.currentTimeMillis() - startTime;
-            workflowTimer.stop(metrics.getWorkflowDuration());
-            metrics.recordWorkflowEscalation(duration);
-            handleEscalation(runEntity, e);
-            emitAndTrace(runId, new WorkflowEvent.EscalationRaised(
-                    runId, Instant.now(), runEntity.getCurrentAgent(), e.getMessage()));
-            traceEventService.cleanup(runId);
-            eventBus.completeEmitters(runId);
-        } catch (OrchestratorException e) {
-            long duration = System.currentTimeMillis() - startTime;
-            workflowTimer.stop(metrics.getWorkflowDuration());
-            metrics.recordWorkflowFailure(duration);
-            handleOrchestratorException(runEntity, e);
-            emitAndTrace(runId, new WorkflowEvent.WorkflowError(
-                    runId, Instant.now(), runEntity.getCurrentAgent(), e.getErrorCode(), e.getMessage()));
-            traceEventService.cleanup(runId);
-            eventBus.completeEmitters(runId);
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            workflowTimer.stop(metrics.getWorkflowDuration());
-            metrics.recordWorkflowFailure(duration);
-            handleFailure(runEntity, e);
-            emitAndTrace(runId, new WorkflowEvent.WorkflowError(
-                    runId, Instant.now(), runEntity.getCurrentAgent(),
-                    e.getClass().getSimpleName(), e.getMessage()));
-            traceEventService.cleanup(runId);
-            eventBus.completeEmitters(runId);
+                workflowSpan.setStatus(StatusCode.OK);
+                workflowSpan.setAttribute("workflow.duration_ms", duration);
+                workflowSpan.setAttribute("workflow.status", "DONE");
+
+            } catch (EscalationException e) {
+                long duration = System.currentTimeMillis() - startTime;
+                workflowTimer.stop(metrics.getWorkflowDuration());
+                metrics.recordWorkflowEscalation(duration);
+                handleEscalation(runEntity, e);
+                emitAndTrace(runId, new WorkflowEvent.EscalationRaised(
+                        runId, Instant.now(), runEntity.getCurrentAgent(), e.getMessage()));
+                traceEventService.cleanup(runId);
+                eventBus.completeEmitters(runId);
+
+                workflowSpan.setStatus(StatusCode.ERROR, "Workflow escalated");
+                workflowSpan.setAttribute("workflow.duration_ms", duration);
+                workflowSpan.setAttribute("workflow.status", "ESCALATED");
+                workflowSpan.setAttribute("escalation.reason", e.getMessage());
+            } catch (OrchestratorException e) {
+                long duration = System.currentTimeMillis() - startTime;
+                workflowTimer.stop(metrics.getWorkflowDuration());
+                metrics.recordWorkflowFailure(duration);
+                handleOrchestratorException(runEntity, e);
+                emitAndTrace(runId, new WorkflowEvent.WorkflowError(
+                        runId, Instant.now(), runEntity.getCurrentAgent(), e.getErrorCode(), e.getMessage()));
+                traceEventService.cleanup(runId);
+                eventBus.completeEmitters(runId);
+
+                workflowSpan.setStatus(StatusCode.ERROR, e.getMessage());
+                workflowSpan.setAttribute("workflow.duration_ms", duration);
+                workflowSpan.setAttribute("workflow.status", "FAILED");
+                workflowSpan.setAttribute("error.type", e.getErrorCode());
+                workflowSpan.recordException(e);
+            } catch (Exception e) {
+                long duration = System.currentTimeMillis() - startTime;
+                workflowTimer.stop(metrics.getWorkflowDuration());
+                metrics.recordWorkflowFailure(duration);
+                handleFailure(runEntity, e);
+                emitAndTrace(runId, new WorkflowEvent.WorkflowError(
+                        runId, Instant.now(), runEntity.getCurrentAgent(),
+                        e.getClass().getSimpleName(), e.getMessage()));
+                traceEventService.cleanup(runId);
+                eventBus.completeEmitters(runId);
+
+                workflowSpan.setStatus(StatusCode.ERROR, e.getMessage());
+                workflowSpan.setAttribute("workflow.duration_ms", duration);
+                workflowSpan.setAttribute("workflow.status", "FAILED");
+                workflowSpan.setAttribute("error.type", e.getClass().getSimpleName());
+                workflowSpan.recordException(e);
+            }
+        } finally {
+            workflowSpan.end();
         }
     }
 
     private void executePmStep(RunContext context) throws Exception {
         String role = "PM";
         UUID runId = context.getRunEntity().getId();
-        CorrelationIdHolder.setAgentName(role);
-        Timer.Sample stepTimer = metrics.startAgentStepTimer();
-        long startTime = System.currentTimeMillis();
+        Span stepSpan = tracer.spanBuilder("workflow.step." + role.toLowerCase())
+                .setAttribute("step.name", role)
+                .setAttribute("step.action", "execute")
+                .setAttribute("run.id", runId.toString())
+                .startSpan();
 
-        emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
+        try (Scope scope = stepSpan.makeCurrent()) {
+            CorrelationIdHolder.setAgentName(role);
+            Timer.Sample stepTimer = metrics.startAgentStepTimer();
+            long startTime = System.currentTimeMillis();
 
-        Set<String> caps = Set.of("ticket_analysis", "requirement_extraction");
-        AgentCard card = agentStepFactory.getActiveCard(role);
-        log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
-        AgentBinding binding = card != null
-                ? agentBindingService.negotiate(card, caps, runId) : null;
+            emitAndTrace(runId, new WorkflowEvent.StepStart(runId, Instant.now(), role, "execute"));
 
-        try {
-            log.info("Executing PM step: runId={}, correlationId={}",
-                    context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
+            Set<String> caps = Set.of("ticket_analysis", "requirement_extraction");
+            AgentCard card = agentStepFactory.getActiveCard(role);
+            log.info("Selected agent: {} for role {}: runId={}", card != null ? card.name() : "local", role, runId);
+            AgentBinding binding = card != null
+                    ? agentBindingService.negotiate(card, caps, runId) : null;
+
+            stepSpan.setAttribute("agent.type", card != null ? "remote" : "local");
+            if (card != null) {
+                stepSpan.setAttribute("agent.name", card.name());
+            }
+
+            try {
+                log.info("Executing PM step: runId={}, correlationId={}",
+                        context.getRunEntity().getId(), CorrelationIdHolder.getCorrelationId());
 
             RunEntity runEntity = context.getRunEntity();
             runEntity.setStatus(RunStatus.PM);
@@ -389,27 +443,36 @@ public class WorkflowEngine {
             persistArtifact(runEntity, role, "ticket_plan.json", artifact);
             snapshotEnvironment(context);
 
-            long duration = System.currentTimeMillis() - startTime;
-            stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepExecution(role, "execute", duration);
+                long duration = System.currentTimeMillis() - startTime;
+                stepTimer.stop(metrics.getAgentStepDuration());
+                metrics.recordAgentStepExecution(role, "execute", duration);
 
-            emitAndTrace(runId, new WorkflowEvent.StepComplete(
-                    runId, Instant.now(), role, duration, "ticket_plan.json"));
+                emitAndTrace(runId, new WorkflowEvent.StepComplete(
+                        runId, Instant.now(), role, duration, "ticket_plan.json"));
 
-            if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
+                if (binding != null) agentBindingService.revokeBinding(binding.bindingId(), "step_completed");
 
-            log.info("PM step completed: runId={}, duration={}ms, correlationId={}",
-                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
-        } catch (Exception e) {
-            long duration = System.currentTimeMillis() - startTime;
-            stepTimer.stop(metrics.getAgentStepDuration());
-            metrics.recordAgentStepError(role, "execute");
+                log.info("PM step completed: runId={}, duration={}ms, correlationId={}",
+                        context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId());
 
-            log.error("PM step failed: runId={}, duration={}ms, correlationId={}",
-                    context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
-            throw e;
+                stepSpan.setStatus(StatusCode.OK);
+                stepSpan.setAttribute("step.duration_ms", duration);
+            } catch (Exception e) {
+                long duration = System.currentTimeMillis() - startTime;
+                stepTimer.stop(metrics.getAgentStepDuration());
+                metrics.recordAgentStepError(role, "execute");
+
+                log.error("PM step failed: runId={}, duration={}ms, correlationId={}",
+                        context.getRunEntity().getId(), duration, CorrelationIdHolder.getCorrelationId(), e);
+
+                stepSpan.setStatus(StatusCode.ERROR, e.getMessage());
+                stepSpan.recordException(e);
+                throw e;
+            } finally {
+                CorrelationIdHolder.setAgentName(null);
+            }
         } finally {
-            CorrelationIdHolder.setAgentName(null);
+            stepSpan.end();
         }
     }
 

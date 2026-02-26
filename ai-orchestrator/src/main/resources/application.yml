@@ -85,6 +85,31 @@ management:
         enabled: true
     tags:
       application: ai-orchestrator
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
+otel:
+  service:
+    name: ${OTEL_SERVICE_NAME:ai-orchestrator}
+  exporter:
+    otlp:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://jaeger:4317}
+  traces:
+    exporter: otlp
+  metrics:
+    exporter: none
+  logs:
+    exporter: none
+  instrumentation:
+    spring-webmvc:
+      enabled: true
+    spring-webflux:
+      enabled: true
+    jdbc:
+      enabled: true
+    logback-appender:
+      enabled: true
 
 resilience4j:
   circuitbreaker:

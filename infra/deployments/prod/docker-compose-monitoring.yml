@@ -144,12 +144,44 @@ services:
           cpus: '0.1'
           memory: 128M
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: jaeger-prod
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_EPHEMERAL=false
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
+      - QUERY_BASE_PATH=/jaeger
+    volumes:
+      - jaeger-prod-data:/badger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+      - "14250:14250"
+    networks:
+      - monitoring-prod
+      - ai_prod_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
 volumes:
   prometheus-prod-data:
     driver: local
   grafana-prod-data:
     driver: local
   alertmanager-prod-data:
+    driver: local
+  jaeger-prod-data:
     driver: local
 
 networks:

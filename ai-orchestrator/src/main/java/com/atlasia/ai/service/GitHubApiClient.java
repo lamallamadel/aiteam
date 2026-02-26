@@ -5,6 +5,10 @@ import com.atlasia.ai.service.observability.CorrelationIdHolder;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.micrometer.core.instrument.Timer;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,13 +32,15 @@ public class GitHubApiClient {
     private final GitHubAppService gitHubAppService;
     private final OrchestratorProperties properties;
     private final OrchestratorMetrics metrics;
+    private final Tracer tracer;
 
     public GitHubApiClient(GitHubAppService gitHubAppService, OrchestratorProperties properties,
-            WebClient.Builder webClientBuilder, OrchestratorMetrics metrics,
+            WebClient.Builder webClientBuilder, OrchestratorMetrics metrics, Tracer tracer,
             @org.springframework.beans.factory.annotation.Value("${atlasia.github.api-url:https://api.github.com}") String githubApiUrl) {
         this.gitHubAppService = gitHubAppService;
         this.properties = properties;
         this.metrics = metrics;
+        this.tracer = tracer;
 
         ConnectionProvider provider = ConnectionProvider.builder("github-pool")
                 .maxIdleTime(Duration.ofSeconds(60))
@@ -91,33 +97,50 @@ public class GitHubApiClient {
     @CircuitBreaker(name = "githubApi")
     public Map<String, Object> readIssue(String owner, String repo, int issueNumber) {
         String endpoint = "/repos/" + owner + "/" + repo + "/issues/" + issueNumber;
-        Timer.Sample sample = metrics.startGitHubApiTimer();
+        Span span = tracer.spanBuilder("github.api.readIssue")
+                .setAttribute("http.method", "GET")
+                .setAttribute("http.url", endpoint)
+                .setAttribute("github.owner", owner)
+                .setAttribute("github.repo", repo)
+                .setAttribute("github.issue_number", issueNumber)
+                .startSpan();
 
-        try {
-            log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
+        try (Scope scope = span.makeCurrent()) {
+            Timer.Sample sample = metrics.startGitHubApiTimer();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = webClient.get()
-                    .uri("/repos/{owner}/{repo}/issues/{issue_number}", owner, repo, issueNumber)
-                    .header("Authorization", "Bearer " + getToken())
-                    .header("Accept", "application/vnd.github+json")
-                    .header("X-GitHub-Api-Version", "2022-11-28")
-                    .header("X-Correlation-ID",
-                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
-                                    : "")
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
-                            .filter(this::isTransientError))
-                    .block();
+            try {
+                log.debug("GitHub API call: GET {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
-            long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
-            metrics.recordGitHubApiCall(endpoint, duration);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = webClient.get()
+                        .uri("/repos/{owner}/{repo}/issues/{issue_number}", owner, repo, issueNumber)
+                        .header("Authorization", "Bearer " + getToken())
+                        .header("Accept", "application/vnd.github+json")
+                        .header("X-GitHub-Api-Version", "2022-11-28")
+                        .header("X-Correlation-ID",
+                                CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                        : "")
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                                .filter(this::isTransientError))
+                        .block();
 
-            return response;
-        } catch (WebClientResponseException e) {
-            handleWebClientException(e, endpoint, sample);
-            throw e;
+                long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
+                metrics.recordGitHubApiCall(endpoint, duration);
+
+                span.setStatus(StatusCode.OK);
+                span.setAttribute("http.status_code", 200);
+                return response;
+            } catch (WebClientResponseException e) {
+                span.setStatus(StatusCode.ERROR, e.getMessage());
+                span.setAttribute("http.status_code", e.getStatusCode().value());
+                span.recordException(e);
+                handleWebClientException(e, endpoint, sample);
+                throw e;
+            }
+        } finally {
+            span.end();
         }
     }
 
@@ -259,16 +282,26 @@ public class GitHubApiClient {
     public Map<String, Object> createPullRequest(String owner, String repo, String title, String head, String base,
             String body) {
         String endpoint = "/repos/" + owner + "/" + repo + "/pulls";
-        Timer.Sample sample = metrics.startGitHubApiTimer();
+        Span span = tracer.spanBuilder("github.api.createPullRequest")
+                .setAttribute("http.method", "POST")
+                .setAttribute("http.url", endpoint)
+                .setAttribute("github.owner", owner)
+                .setAttribute("github.repo", repo)
+                .setAttribute("github.pr.head", head)
+                .setAttribute("github.pr.base", base)
+                .startSpan();
 
-        Map<String, Object> requestBody = Map.of(
-                "title", title,
-                "head", head,
-                "base", base,
-                "body", body);
+        try (Scope scope = span.makeCurrent()) {
+            Timer.Sample sample = metrics.startGitHubApiTimer();
 
-        try {
-            log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
+            Map<String, Object> requestBody = Map.of(
+                    "title", title,
+                    "head", head,
+                    "base", base,
+                    "body", body);
+
+            try {
+                log.debug("GitHub API call: POST {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
 
             @SuppressWarnings("unchecked")
             Map<String, Object> response = webClient.post()
@@ -286,13 +319,25 @@ public class GitHubApiClient {
                             .filter(this::isTransientError))
                     .block();
 
-            long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
-            metrics.recordGitHubApiCall(endpoint, duration);
+                long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
+                metrics.recordGitHubApiCall(endpoint, duration);
 
-            return response;
-        } catch (WebClientResponseException e) {
-            handleWebClientException(e, endpoint, sample);
-            throw e;
+                span.setStatus(StatusCode.OK);
+                span.setAttribute("http.status_code", 201);
+                Integer prNumber = (Integer) response.get("number");
+                if (prNumber != null) {
+                    span.setAttribute("github.pr.number", prNumber);
+                }
+                return response;
+            } catch (WebClientResponseException e) {
+                span.setStatus(StatusCode.ERROR, e.getMessage());
+                span.setAttribute("http.status_code", e.getStatusCode().value());
+                span.recordException(e);
+                handleWebClientException(e, endpoint, sample);
+                throw e;
+            }
+        } finally {
+            span.end();
         }
     }
 
