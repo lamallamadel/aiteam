@@ -40,6 +40,17 @@ jobs:
           fi
           echo "✅ Environment: ${{ github.event.inputs.environment }}"
 
+      - name: Set Git branch based on environment
+        id: git_branch
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "branch=main" >> $GITHUB_OUTPUT
+            echo "🔵 Production deployment: using 'main' branch"
+          else
+            echo "branch=develop" >> $GITHUB_OUTPUT
+            echo "🟢 Staging deployment: using 'develop' branch"
+          fi
+
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
@@ -51,6 +62,7 @@ jobs:
       - name: Deploy via SSH
         run: |
           echo "🚀 Deploying aiteam to ${{ github.event.inputs.environment }}..."
+          echo "   Branch: ${{ steps.git_branch.outputs.branch }}"
           
           ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" << 'EOF'
@@ -58,22 +70,26 @@ jobs:
           cd "${{ secrets.DEPLOY_DIR }}"
           
           echo "📍 Connected to ${{ secrets.DEPLOY_HOST }}"
-          echo "🔄 Pulling latest code from GitHub..."
-          git pull origin main --quiet
+          echo "🔄 Pulling latest code from GitHub (${{ steps.git_branch.outputs.branch }} branch)..."
+          git fetch origin ${{ steps.git_branch.outputs.branch }} --quiet
+          git checkout ${{ steps.git_branch.outputs.branch }} --quiet
+          git reset --hard origin/${{ steps.git_branch.outputs.branch }} --quiet
           
           echo "🐳 Pulling latest images from GHCR..."
-          docker-compose -f docker-compose.prod.yml pull
+          docker-compose -f infra/deployments/prod/docker-compose.yml pull
           
           echo "💾 Running deployment script..."
           if [ "${{ github.event.inputs.environment }}" = "production" ]; then
-            ./scripts/deploy.sh prod
+            ./infra/ci-cd/scripts/deploy-prod.sh
           else
-            ./scripts/deploy.sh staging
+            # Staging deployment
+            echo "🚀 Deploying to staging environment..."
+            docker-compose -f infra/deployments/prod/docker-compose.yml up -d
           fi
           
           echo "✅ Deployment complete"
           echo "📊 Service status:"
-          docker-compose -f docker-compose.prod.yml ps
+          docker-compose -f infra/deployments/prod/docker-compose.yml ps
           EOF
 
       - name: Notify Slack on success
@@ -89,7 +105,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*GitHub Manual Deploy Success*\nEnvironment: `${{ github.event.inputs.environment }}`\nBranch: `${{ github.ref_name }}`\nCommit: `${{ github.event.after }}`"
+                    "text": "*GitHub Manual Deploy Success*\nEnvironment: `${{ github.event.inputs.environment }}`\nBranch: `${{ steps.git_branch.outputs.branch }}`\nCommit: `${{ github.sha }}`"
                   }
                 }
               ]
@@ -109,7 +125,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*GitHub Manual Deploy Failed*\nEnvironment: `${{ github.event.inputs.environment }}`\nDetails: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    "text": "*GitHub Manual Deploy Failed*\nEnvironment: `${{ github.event.inputs.environment }}`\nBranch: `${{ steps.git_branch.outputs.branch }}`\nDetails: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
                   }
                 }
               ]

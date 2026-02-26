@@ -19,8 +19,9 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Remove unnecessary packages to minimize attack surface
-RUN apk del --purge apk-tools && \
+# Install curl for health checks, then remove unnecessary packages
+RUN apk add --no-cache curl && \
+    apk del --purge apk-tools && \
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 
 # Create non-root user for security
@@ -35,9 +36,9 @@ COPY --from=builder --chown=appuser:appgroup /build/app.jar .
 # Run as non-root user
 USER appuser
 
-# Health check
+# Health check using curl (works reliably in Alpine)
 HEALTHCHECK --interval=10s --timeout=5s --retries=20 --start-period=30s \
-    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+    CMD curl -sf http://localhost:8080/actuator/health || exit 1
 
 EXPOSE 8080
 

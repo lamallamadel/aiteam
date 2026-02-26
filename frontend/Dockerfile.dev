@@ -11,12 +11,15 @@ RUN npm ci
 # Copy the rest (except node_modules which is mounted as volume)
 COPY . .
 
+# Install curl for health checks
+RUN apk add --no-cache curl
+
 # Expose dev server port
 EXPOSE 4200
 
-# Health check for dev server
+# Health check for dev server using curl
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
-    CMD wget -qO- http://localhost:4200/ || exit 1
+    CMD curl -sf http://localhost:4200/ || exit 1
 
 # Run ng serve with polling for hot-reload
 # --poll enables file watching in Docker environments

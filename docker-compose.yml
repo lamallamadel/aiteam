@@ -1,56 +1,9 @@
-services:
-  ai-db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: ${DB_NAME:-ai}
-      POSTGRES_USER: ${DB_USER:-ai}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-ai}
-    volumes:
-      - ai_db_data:/var/lib/postgresql/data
-    networks:
-      - ai_network
+# This file is DEPRECATED and has been moved to infra/deployments/prod/docker-compose.yml
+# Please use that location instead.
+#
+# To use the new location:
+#   docker-compose -f infra/deployments/prod/docker-compose.yml up -d
+#
+# This file will be deleted in a future release. Do not add new changes here.
 
-  ai-orchestrator:
-    build:
-      context: ./ai-orchestrator
-      network: host
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://ai-db:5432/${DB_NAME:-ai}
-      DB_USER: ${DB_USER:-ai}
-      DB_PASSWORD: ${DB_PASSWORD:-ai}
-      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN}
-      LLM_API_KEY: ${LLM_API_KEY}
-      REPO_ALLOWLIST: "backend/,frontend/,docs/,infra/,ai/"
-      WORKFLOW_PROTECT: ".github/workflows/"
-    depends_on:
-      - ai-db
-    ports:
-      - "8088:8080"
-    healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:8080/actuator/health" ]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    networks:
-      - ai_network
-
-  ai-dashboard:
-    build:
-      context: ./frontend
-      network: host
-    ports:
-      - "80:80"
-    depends_on:
-      ai-orchestrator:
-        condition: service_healthy
-    networks:
-      - ai_network
-
-networks:
-  ai_network:
-    driver: bridge
-
-volumes:
-  ai_db_data:
+warning: "This file is deprecated. Use infra/deployments/prod/docker-compose.yml instead."
