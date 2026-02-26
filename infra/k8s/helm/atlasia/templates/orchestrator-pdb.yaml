@@ -1,0 +1,13 @@
+{{- if .Values.orchestrator.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "atlasia.fullname" . }}-orchestrator
+  labels:
+    {{- include "atlasia.orchestrator.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.orchestrator.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "atlasia.orchestrator.selectorLabels" . | nindent 6 }}
+{{- end }}

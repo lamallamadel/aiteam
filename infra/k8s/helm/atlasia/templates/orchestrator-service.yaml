@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "atlasia.fullname" . }}-orchestrator
+  labels:
+    {{- include "atlasia.orchestrator.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.orchestrator.service.type }}
+  ports:
+  - port: {{ .Values.orchestrator.service.port }}
+    targetPort: {{ .Values.orchestrator.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "atlasia.orchestrator.selectorLabels" . | nindent 4 }}

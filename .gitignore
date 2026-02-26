@@ -90,3 +90,10 @@ backups/
 ai-orchestrator/target/load-test-results/
 load-test-results/
 *.k6.json
+
+# Kubernetes / Helm
+*.tgz
+Chart.lock
+infra/k8s/helm/atlasia/charts/
+infra/k8s/secrets.yaml
+infra/k8s/sealed-secrets.yaml
