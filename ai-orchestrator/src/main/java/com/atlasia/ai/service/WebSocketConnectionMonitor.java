@@ -18,6 +18,7 @@ public class WebSocketConnectionMonitor {
 
     public WebSocketConnectionMonitor(OrchestratorMetrics metrics) {
         this.metrics = metrics;
+        metrics.registerWebSocketConnectionPoolGauges(this);
     }
 
     public void recordConnection(UUID runId, String sessionId, String userId) {

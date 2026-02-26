@@ -272,6 +272,13 @@ public class A2ADiscoveryService {
         return new ArrayList<>(registry.values());
     }
 
+    /**
+     * Get all available capabilities across all registered agents.
+     */
+    public Set<String> listAllCapabilities() {
+        return Collections.unmodifiableSet(capabilityIndex.keySet());
+    }
+
     // --- Scoring ---
 
     /**

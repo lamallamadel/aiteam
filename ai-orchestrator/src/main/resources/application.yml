@@ -146,6 +146,9 @@ atlasia:
       sse-timeout-minutes: ${SSE_TIMEOUT_MINUTES:30}
       default-mode: ${DEFAULT_MODE:EXECUTION}
       enabled-agents: ${ENABLED_AGENTS:PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER}
+  webhook:
+    github:
+      secret: ${vault.secret.data.atlasia.github-webhook-secret:${GITHUB_WEBHOOK_SECRET:}}
   jwt:
     secret-key: ${vault.secret.data.atlasia.jwt-secret:${JWT_SECRET_KEY:}}
     access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:15}
@@ -166,3 +169,14 @@ atlasia:
     frontend-callback-url: ${OAUTH2_FRONTEND_CALLBACK_URL:http://localhost:4200/auth/callback}
   encryption:
     key: ${vault.secret.data.atlasia.encryption-key:${VAULT_ENCRYPTION_KEY:}}
+  plugins:
+    directory: ${PLUGIN_DIRECTORY:plugins}
+    hot-reload:
+      enabled: ${PLUGIN_HOT_RELOAD_ENABLED:true}
+    health-check:
+      interval-seconds: ${PLUGIN_HEALTH_CHECK_INTERVAL:60}
+
+crdt:
+  mesh:
+    peers: ${CRDT_MESH_PEERS:}
+  region: ${REGION:us-east-1}

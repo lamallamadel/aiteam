@@ -37,4 +37,10 @@ public interface RunArtifactRepository extends JpaRepository<RunArtifactEntity, 
 
     @Query("SELECT a.agentName as agentName, COUNT(a) as count FROM RunArtifactEntity a GROUP BY a.agentName")
     List<Object[]> countByAgentName();
+
+    @Query("SELECT a FROM RunArtifactEntity a WHERE a.run = :run AND a.artifactType = :artifactType")
+    List<RunArtifactEntity> findByRunAndArtifactType(
+            @Param("run") com.atlasia.ai.model.RunEntity run,
+            @Param("artifactType") String artifactType
+    );
 }

@@ -46,12 +46,29 @@ HashiCorp Vault integration for secure secrets management:
 ### Multi-User Collaboration (NEW)
 Real-time WebSocket-based collaboration for workflow runs:
 - **WebSocket Endpoint**: `/ws/runs/{runId}/collaboration` (STOMP over SockJS)
-- **Features**: Live graft/prune/flag mutations, presence indicators, cursor tracking, operational transformation
-- **Audit**: All events stored in `collaboration_events` table with full history
+- **Features**: Live graft/prune/flag mutations, presence indicators, cursor tracking
+- **CRDT-Based Sync**: Automerge CRDT for conflict-free distributed state synchronization (replaces operational transformation)
+- **Multi-Region Support**: WebSocket mesh topology for eventual consistency across global deployments
+- **Partition Tolerance**: AP guarantee (Availability + Partition Tolerance) enables collaboration during network splits
+- **Concurrent Editing**: Multiple users can graft agents at same position without conflicts - CRDT automatically merges deterministically
+- **Audit**: All events stored in `collaboration_events` table with CRDT change logs and Lamport timestamps
+- **Snapshots**: Periodic CRDT snapshots in `crdt_snapshots` table for fast recovery
 - **Health Monitoring**: Connection quality metrics (latency, reconnections, delivery rate), Prometheus/Grafana dashboards
 - **Resilience**: Client-side message queuing, automatic HTTP polling fallback, server-side message persistence
 - **Admin API**: `/api/admin/websocket/*` endpoints for monitoring active connections and metrics
-- **Docs**: See `docs/COLLABORATION.md` and `docs/COLLABORATION_EXAMPLES.md`
+- **CRDT API**: `/api/crdt/*` endpoints for state queries and peer registration
+- **Docs**: See `docs/COLLABORATION.md`, `docs/COLLABORATION_EXAMPLES.md`, and `docs/CRDT_COLLABORATION.md`
+
+### Multi-Repository Workflow Orchestration (NEW)
+Dependency-aware scheduling for cross-repository workflows:
+- **Topological Sort**: Automatic execution ordering based on repository dependencies (Kahn's algorithm)
+- **Cross-Repo Grafts**: Security scan in repo-A triggers documentation update graft in repo-B via A2A protocol
+- **Monorepo Detection**: Auto-detect Maven modules (`pom.xml`) and NPM workspaces (`package.json`)
+- **Coordinated PRs**: Create and merge PRs with dependency-aware ordering (merge infra before apps)
+- **Cyclic Detection**: Prevents invalid dependency graphs with early validation
+- **Repository Graph**: `repository_graph` table stores cross-repo dependencies as JSONB
+- **API Endpoints**: `/api/multi-repo/*` for registration, execution, and PR coordination
+- **Docs**: See `docs/MULTI_REPO_ORCHESTRATION.md` for complete guide with examples
 
 ## Container Security
 - **Trivy Scanning**: Automated vulnerability scanning in CI/CD pipeline

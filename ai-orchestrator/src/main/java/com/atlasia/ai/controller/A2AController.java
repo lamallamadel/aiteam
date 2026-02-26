@@ -2,6 +2,7 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
@@ -10,10 +11,12 @@ import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
 import com.atlasia.ai.service.AgentBindingService;
 import com.atlasia.ai.service.AgentBindingService.AgentBinding;
 import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.RoleService;
 import com.atlasia.ai.service.WorkflowEngine;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -113,6 +116,40 @@ public class A2AController {
         }
         a2aDiscoveryService.deregister(name);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Install an agent from marketplace (register with approval workflow). */
+    @PostMapping("/api/a2a/agents/install")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_AGENTS, action = RoleService.ACTION_MANAGE)
+    public ResponseEntity<InstallResponse> installAgent(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody AgentCard card) {
+        if (!isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        
+        // Check if agent already exists
+        AgentCard existing = a2aDiscoveryService.getAgent(card.name());
+        if (existing != null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new InstallResponse(false, "Agent already installed", card.name()));
+        }
+
+        // Register the agent (in real implementation, would queue for approval)
+        a2aDiscoveryService.register(card);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new InstallResponse(true, "Agent installed successfully", card.name()));
+    }
+
+    /** Get all available capabilities across all agents. */
+    @GetMapping("/api/a2a/capabilities")
+    public ResponseEntity<Collection<String>> listCapabilities(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (!isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(a2aDiscoveryService.listAllCapabilities());
     }
 
     /** Find agents that provide a specific capability. */
@@ -247,4 +284,6 @@ public class A2AController {
             Instant createdAt) {}
 
     public record BindingVerification(AgentBinding binding, boolean valid) {}
+
+    public record InstallResponse(boolean success, String message, String agentName) {}
 }

@@ -4,6 +4,7 @@ import com.atlasia.ai.config.JwtProperties;
 import com.atlasia.ai.model.PermissionEntity;
 import com.atlasia.ai.model.RoleEntity;
 import com.atlasia.ai.model.UserEntity;
+import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
@@ -29,9 +30,11 @@ public class JwtService {
     
     private final JwtProperties jwtProperties;
     private final SecretKey secretKey;
+    private final OrchestratorMetrics metrics;
 
-    public JwtService(JwtProperties jwtProperties) {
+    public JwtService(JwtProperties jwtProperties, OrchestratorMetrics metrics) {
         this.jwtProperties = jwtProperties;
+        this.metrics = metrics;
         if (jwtProperties.getSecretKey() == null || jwtProperties.getSecretKey().isEmpty()) {
             throw new IllegalStateException("JWT secret key must be configured");
         }
@@ -84,15 +87,22 @@ public class JwtService {
         claims.put("userId", user.getId().toString());
         claims.put("type", "refresh");
 
-        return Jwts.builder()
-                .claims(claims)
-                .subject(user.getUsername())
-                .issuer(jwtProperties.getIssuer())
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiration))
-                .id(UUID.randomUUID().toString())
-                .signWith(secretKey, Jwts.SIG.HS512)
-                .compact();
+        try {
+            String token = Jwts.builder()
+                    .claims(claims)
+                    .subject(user.getUsername())
+                    .issuer(jwtProperties.getIssuer())
+                    .issuedAt(Date.from(now))
+                    .expiration(Date.from(expiration))
+                    .id(UUID.randomUUID().toString())
+                    .signWith(secretKey, Jwts.SIG.HS512)
+                    .compact();
+            metrics.recordJwtTokenRefresh();
+            return token;
+        } catch (Exception e) {
+            metrics.recordJwtTokenRefreshFailure();
+            throw e;
+        }
     }
 
     public boolean validateToken(String token) {

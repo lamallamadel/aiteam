@@ -17,10 +17,7 @@ import reactor.netty.resources.ConnectionProvider;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -1002,4 +999,229 @@ public class GitHubApiClient {
                 (throwable instanceof WebClientResponseException &&
                         ((WebClientResponseException) throwable).getStatusCode().is5xxServerError());
     }
+
+    public Map<String, Object> createPullRequestWithMetadata(
+            String owner, String repo, String title, String head, String base,
+            String body, Map<String, String> metadata) {
+        
+        StringBuilder enhancedBody = new StringBuilder(body);
+        
+        if (metadata != null && !metadata.isEmpty()) {
+            enhancedBody.append("\n\n---\n### Multi-Repo Orchestration Metadata\n");
+            for (Map.Entry<String, String> entry : metadata.entrySet()) {
+                enhancedBody.append("- **").append(entry.getKey()).append("**: ")
+                           .append(entry.getValue()).append("\n");
+            }
+        }
+
+        return createPullRequest(owner, repo, title, head, base, enhancedBody.toString());
+    }
+
+    public CoordinatedPRResult createCoordinatedPullRequests(List<PRCreationRequest> requests, List<String> mergeOrder) {
+        Map<String, PRCreationResult> results = new LinkedHashMap<>();
+        List<String> errors = new ArrayList<>();
+
+        for (PRCreationRequest request : requests) {
+            try {
+                log.info("Creating coordinated PR: repo={}/{}, branch={}, mergeOrder={}",
+                        request.owner(), request.repo(), request.head(), 
+                        mergeOrder.indexOf(formatRepoUrl(request.owner(), request.repo())) + 1);
+
+                Map<String, String> metadata = new HashMap<>(request.metadata() != null ? request.metadata() : Map.of());
+                metadata.put("Merge Order", String.valueOf(mergeOrder.indexOf(formatRepoUrl(request.owner(), request.repo())) + 1));
+                metadata.put("Total PRs", String.valueOf(requests.size()));
+                
+                if (request.dependencies() != null && !request.dependencies().isEmpty()) {
+                    metadata.put("Dependencies", String.join(", ", request.dependencies()));
+                }
+
+                Map<String, Object> prResponse = createPullRequestWithMetadata(
+                        request.owner(), request.repo(), request.title(),
+                        request.head(), request.base(), request.body(), metadata);
+
+                Integer prNumber = (Integer) prResponse.get("number");
+                String prUrl = (String) prResponse.get("html_url");
+
+                results.put(formatRepoUrl(request.owner(), request.repo()), 
+                           new PRCreationResult(true, prNumber, prUrl, null));
+
+                log.info("Created coordinated PR #{} for {}/{}: {}", 
+                        prNumber, request.owner(), request.repo(), prUrl);
+
+            } catch (Exception e) {
+                String repoUrl = formatRepoUrl(request.owner(), request.repo());
+                String errorMsg = "Failed to create PR for " + repoUrl + ": " + e.getMessage();
+                errors.add(errorMsg);
+                results.put(repoUrl, new PRCreationResult(false, null, null, errorMsg));
+                log.error("Failed to create coordinated PR for {}/{}: {}", 
+                         request.owner(), request.repo(), e.getMessage(), e);
+            }
+        }
+
+        boolean allSuccess = errors.isEmpty();
+        return new CoordinatedPRResult(allSuccess, results, mergeOrder, errors);
+    }
+
+    @CircuitBreaker(name = "githubApi")
+    public Map<String, Object> mergePullRequest(String owner, String repo, int pullNumber, String mergeMethod) {
+        String endpoint = "/repos/" + owner + "/" + repo + "/pulls/" + pullNumber + "/merge";
+        Timer.Sample sample = metrics.startGitHubApiTimer();
+
+        Map<String, Object> requestBody = Map.of("merge_method", mergeMethod);
+
+        try {
+            log.debug("GitHub API call: PUT {}, correlationId={}", endpoint, CorrelationIdHolder.getCorrelationId());
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = webClient.put()
+                    .uri("/repos/{owner}/{repo}/pulls/{pull_number}/merge", owner, repo, pullNumber)
+                    .header("Authorization", "Bearer " + getToken())
+                    .header("Accept", "application/vnd.github+json")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
+                    .header("X-Correlation-ID",
+                            CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId()
+                                    : "")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError))
+                    .block();
+
+            long duration = sample.stop(metrics.getGitHubApiDuration()) / 1_000_000;
+            metrics.recordGitHubApiCall(endpoint, duration);
+
+            return response;
+        } catch (WebClientResponseException e) {
+            handleWebClientException(e, endpoint, sample);
+            throw e;
+        }
+    }
+
+    public CoordinatedMergeResult mergeCoordinatedPullRequests(
+            Map<String, Integer> repoPrMapping, List<String> mergeOrder, String mergeMethod) {
+        
+        Map<String, MergeResult> results = new LinkedHashMap<>();
+        List<String> errors = new ArrayList<>();
+
+        for (String repoUrl : mergeOrder) {
+            Integer prNumber = repoPrMapping.get(repoUrl);
+            if (prNumber == null) {
+                log.warn("No PR number found for {} in merge order, skipping", repoUrl);
+                continue;
+            }
+
+            try {
+                String[] parts = parseRepoUrlParts(repoUrl);
+                if (parts == null || parts.length < 2) {
+                    String errorMsg = "Invalid repository URL: " + repoUrl;
+                    errors.add(errorMsg);
+                    results.put(repoUrl, new MergeResult(false, null, errorMsg));
+                    continue;
+                }
+
+                String owner = parts[0];
+                String repo = parts[1];
+
+                log.info("Merging coordinated PR #{} for {} (order: {}/{})",
+                        prNumber, repoUrl, mergeOrder.indexOf(repoUrl) + 1, mergeOrder.size());
+
+                Map<String, Object> prStatus = getPullRequest(owner, repo, prNumber);
+                String state = (String) prStatus.get("state");
+                Boolean mergeable = (Boolean) prStatus.get("mergeable");
+
+                if (!"open".equals(state)) {
+                    String errorMsg = "PR #" + prNumber + " is not open (state: " + state + ")";
+                    errors.add(errorMsg);
+                    results.put(repoUrl, new MergeResult(false, null, errorMsg));
+                    continue;
+                }
+
+                if (Boolean.FALSE.equals(mergeable)) {
+                    String errorMsg = "PR #" + prNumber + " has merge conflicts";
+                    errors.add(errorMsg);
+                    results.put(repoUrl, new MergeResult(false, null, errorMsg));
+                    continue;
+                }
+
+                Map<String, Object> mergeResponse = mergePullRequest(owner, repo, prNumber, mergeMethod);
+                String sha = (String) mergeResponse.get("sha");
+                Boolean merged = (Boolean) mergeResponse.get("merged");
+
+                if (Boolean.TRUE.equals(merged)) {
+                    results.put(repoUrl, new MergeResult(true, sha, null));
+                    log.info("Successfully merged PR #{} for {} with SHA: {}", prNumber, repoUrl, sha);
+                } else {
+                    String errorMsg = "Merge request accepted but merged=false";
+                    errors.add(errorMsg);
+                    results.put(repoUrl, new MergeResult(false, null, errorMsg));
+                }
+
+            } catch (Exception e) {
+                String errorMsg = "Failed to merge PR #" + prNumber + " for " + repoUrl + ": " + e.getMessage();
+                errors.add(errorMsg);
+                results.put(repoUrl, new MergeResult(false, null, errorMsg));
+                log.error("Failed to merge coordinated PR for {}: {}", repoUrl, e.getMessage(), e);
+            }
+        }
+
+        boolean allSuccess = errors.isEmpty();
+        return new CoordinatedMergeResult(allSuccess, results, errors);
+    }
+
+    private String formatRepoUrl(String owner, String repo) {
+        return String.format("github.com/%s/%s", owner.toLowerCase(), repo.toLowerCase());
+    }
+
+    private String[] parseRepoUrlParts(String repoUrl) {
+        String normalized = repoUrl.toLowerCase()
+                .replaceFirst("^https?://", "")
+                .replaceFirst("\\.git$", "")
+                .replaceFirst("/$", "");
+
+        String[] parts = normalized.split("/");
+        if (parts.length >= 3 && parts[0].contains("github.com")) {
+            return new String[] { parts[1], parts[2] };
+        } else if (parts.length >= 2) {
+            return new String[] { parts[0], parts[1] };
+        }
+        return null;
+    }
+
+    public record PRCreationRequest(
+        String owner,
+        String repo,
+        String title,
+        String head,
+        String base,
+        String body,
+        List<String> dependencies,
+        Map<String, String> metadata
+    ) {}
+
+    public record PRCreationResult(
+        boolean success,
+        Integer prNumber,
+        String prUrl,
+        String error
+    ) {}
+
+    public record CoordinatedPRResult(
+        boolean allSuccess,
+        Map<String, PRCreationResult> results,
+        List<String> mergeOrder,
+        List<String> errors
+    ) {}
+
+    public record MergeResult(
+        boolean success,
+        String sha,
+        String error
+    ) {}
+
+    public record CoordinatedMergeResult(
+        boolean allSuccess,
+        Map<String, MergeResult> results,
+        List<String> errors
+    ) {}
 }

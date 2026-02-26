@@ -1,13 +1,14 @@
 package com.atlasia.ai.service.observability;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
+import com.atlasia.ai.service.WebSocketConnectionMonitor;
+import io.micrometer.core.instrument.*;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class OrchestratorMetrics {
@@ -318,6 +319,25 @@ public class OrchestratorMetrics {
                 .description("WebSocket message delivery success rate (0-1)")
                 .baseUnit("rate")
                 .register(meterRegistry);
+
+        this.jwtTokenRefreshTotal = Counter.builder("orchestrator.jwt.token.refresh.total")
+                .description("Total number of JWT token refresh operations")
+                .register(meterRegistry);
+
+        this.jwtTokenRefreshFailureTotal = Counter.builder("orchestrator.jwt.token.refresh.failure.total")
+                .description("Total number of JWT token refresh failures")
+                .register(meterRegistry);
+
+        this.vaultSecretRotationTotal = Counter.builder("orchestrator.vault.secret.rotation.total")
+                .description("Total number of Vault secret rotation operations")
+                .register(meterRegistry);
+
+        this.vaultSecretRotationFailureTotal = Counter.builder("orchestrator.vault.secret.rotation.failure.total")
+                .description("Total number of Vault secret rotation failures")
+                .register(meterRegistry);
+
+        registerCircuitBreakerGauges();
+        registerWebSocketHealthGauges();
     }
 
     public void recordGitHubApiCall(String endpoint, long duration) {
@@ -567,6 +587,14 @@ public class OrchestratorMetrics {
     private final DistributionSummary websocketConnectionQuality;
     private final DistributionSummary websocketMessageDeliveryRate;
 
+    private final Map<String, Timer> agentExecutionTimers = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> circuitBreakerStates = new ConcurrentHashMap<>();
+    
+    private final Counter jwtTokenRefreshTotal;
+    private final Counter jwtTokenRefreshFailureTotal;
+    private final Counter vaultSecretRotationTotal;
+    private final Counter vaultSecretRotationFailureTotal;
+
     public void recordWebSocketConnection() {
         websocketConnectionsTotal.increment();
     }
@@ -605,5 +633,99 @@ public class OrchestratorMetrics {
 
     public void recordWebSocketMessageDeliveryRate(double rate) {
         websocketMessageDeliveryRate.record(rate);
+    }
+
+    public Timer getOrCreateAgentExecutionTimer(String agentType, String repository, String userId) {
+        String key = agentType;
+        return agentExecutionTimers.computeIfAbsent(key, k -> 
+            Timer.builder("orchestrator.agent.execution.latency")
+                .description("Agent execution latency with percentiles")
+                .tag("agent_type", agentType)
+                .tag("repository", repository != null ? repository : "unknown")
+                .tag("user", userId != null ? userId : "unknown")
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .register(meterRegistry)
+        );
+    }
+
+    public void recordAgentExecution(String agentType, String repository, String userId, long durationMs) {
+        Timer timer = getOrCreateAgentExecutionTimer(agentType, repository, userId);
+        timer.record(durationMs, TimeUnit.MILLISECONDS);
+    }
+
+    public void updateCircuitBreakerState(String agentName, String state) {
+        int stateValue = switch (state) {
+            case "CLOSED" -> 0;
+            case "OPEN" -> 1;
+            case "HALF_OPEN" -> 2;
+            default -> -1;
+        };
+        
+        circuitBreakerStates.computeIfAbsent(agentName, name -> {
+            AtomicInteger gauge = new AtomicInteger(0);
+            Gauge.builder("orchestrator.graft.circuit.breaker.state", gauge, AtomicInteger::get)
+                .description("Circuit breaker state: 0=CLOSED, 1=OPEN, 2=HALF_OPEN")
+                .tag("agent", agentName)
+                .register(meterRegistry);
+            return gauge;
+        }).set(stateValue);
+    }
+
+    public void recordJwtTokenRefresh() {
+        jwtTokenRefreshTotal.increment();
+    }
+
+    public void recordJwtTokenRefreshFailure() {
+        jwtTokenRefreshFailureTotal.increment();
+    }
+
+    public void recordVaultSecretRotation(String secretType) {
+        vaultSecretRotationTotal.increment();
+    }
+
+    public void recordVaultSecretRotationFailure(String secretType) {
+        vaultSecretRotationFailureTotal.increment();
+    }
+
+    public void recordCostAttribution(String repository, String userId, double cost) {
+        Counter.builder("orchestrator.cost.attribution")
+            .description("Cost attribution by repository and user")
+            .tag("repository", repository != null ? repository : "unknown")
+            .tag("user", userId != null ? userId : "unknown")
+            .register(meterRegistry)
+            .increment(cost);
+    }
+
+    private void registerCircuitBreakerGauges() {
+    }
+
+    private void registerWebSocketHealthGauges() {
+    }
+
+    public void registerWebSocketConnectionPoolGauges(WebSocketConnectionMonitor monitor) {
+        Gauge.builder("orchestrator.websocket.active.connections", monitor, 
+                m -> m.getAllConnectionMetrics().stream()
+                    .filter(cm -> cm.getDisconnectedAt() == null)
+                    .count())
+            .description("Number of active WebSocket connections")
+            .register(meterRegistry);
+
+        Gauge.builder("orchestrator.websocket.message.queue.depth", monitor,
+                m -> m.getAllConnectionMetrics().stream()
+                    .mapToLong(cm -> cm.getMessagesSent() - cm.getMessagesReceived())
+                    .sum())
+            .description("WebSocket message queue depth (sent - received)")
+            .register(meterRegistry);
+
+        Gauge.builder("orchestrator.websocket.dropped.messages", monitor,
+                m -> m.getAllConnectionMetrics().stream()
+                    .mapToLong(WebSocketConnectionMonitor.ConnectionMetrics::getMessageFailures)
+                    .sum())
+            .description("Total number of dropped WebSocket messages")
+            .register(meterRegistry);
+    }
+
+    public MeterRegistry getMeterRegistry() {
+        return meterRegistry;
     }
 }

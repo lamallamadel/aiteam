@@ -1,5 +1,6 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,10 +17,12 @@ public class SecretRotationScheduler {
     private static final Logger logger = LoggerFactory.getLogger(SecretRotationScheduler.class);
     
     private final VaultSecretsService vaultSecretsService;
+    private final OrchestratorMetrics metrics;
     private final SecureRandom secureRandom;
 
-    public SecretRotationScheduler(VaultSecretsService vaultSecretsService) {
+    public SecretRotationScheduler(VaultSecretsService vaultSecretsService, OrchestratorMetrics metrics) {
         this.vaultSecretsService = vaultSecretsService;
+        this.metrics = metrics;
         this.secureRandom = new SecureRandom();
     }
 
@@ -30,8 +33,10 @@ public class SecretRotationScheduler {
             String newSecret = generateSecureSecret(64);
             vaultSecretsService.rotateSecret("secret/data/atlasia/jwt-secret", newSecret);
             logger.info("Successfully rotated JWT signing key");
+            metrics.recordVaultSecretRotation("jwt-secret");
         } catch (Exception e) {
             logger.error("Failed to rotate JWT signing key", e);
+            metrics.recordVaultSecretRotationFailure("jwt-secret");
         }
     }
 
@@ -43,8 +48,10 @@ public class SecretRotationScheduler {
             rotateOAuth2ClientSecret("google");
             rotateOAuth2ClientSecret("gitlab");
             logger.info("Successfully rotated all OAuth2 client secrets");
+            metrics.recordVaultSecretRotation("oauth2-secrets");
         } catch (Exception e) {
             logger.error("Failed to rotate OAuth2 secrets", e);
+            metrics.recordVaultSecretRotationFailure("oauth2-secrets");
         }
     }
 

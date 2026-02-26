@@ -1,0 +1,72 @@
+{
+  "description": "Contract for AgentCard schema validation",
+  "request": {
+    "method": "GET",
+    "url": "/.well-known/agent.json"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "atlasia-orchestrator",
+      "version": "1.0",
+      "role": "ORCHESTRATOR",
+      "vendor": "atlasia",
+      "description": "Atlasia AI Orchestrator: full PM→Qualifier→Architect→Developer→Review→Tester→Writer pipeline",
+      "capabilities": ["ticket_analysis", "requirement_extraction", "system_design", "code_generation", "code_review", "ci_validation", "documentation", "quality_arbitration", "majority_voting", "multi_agent_pipeline"],
+      "outputArtifactKey": "pipeline_result",
+      "mcpServers": [],
+      "constraints": {
+        "maxTokens": 32768,
+        "maxDurationMs": 1800000,
+        "costBudgetUsd": 1.00
+      },
+      "transport": "http",
+      "healthEndpoint": "/actuator/health",
+      "status": "active"
+    },
+    "matchers": {
+      "body": [
+        {
+          "path": "$.name",
+          "type": "by_regex",
+          "value": "[a-zA-Z0-9\\-_]+"
+        },
+        {
+          "path": "$.version",
+          "type": "by_regex",
+          "value": "[0-9]+\\.[0-9]+(\\.[0-9]+)?"
+        },
+        {
+          "path": "$.role",
+          "type": "by_regex",
+          "value": "[A-Z_]+"
+        },
+        {
+          "path": "$.capabilities",
+          "type": "by_type",
+          "minOccurrence": 1
+        },
+        {
+          "path": "$.constraints.maxTokens",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.maxDurationMs",
+          "type": "by_type"
+        },
+        {
+          "path": "$.constraints.costBudgetUsd",
+          "type": "by_type"
+        },
+        {
+          "path": "$.status",
+          "type": "by_regex",
+          "value": "active|degraded|inactive"
+        }
+      ]
+    }
+  }
+}
