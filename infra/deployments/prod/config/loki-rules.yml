@@ -1,0 +1,165 @@
+groups:
+  - name: log_alerts_critical
+    interval: 1m
+    rules:
+      # Database connection failures
+      - alert: DatabaseConnectionFailuresHigh
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)(database|connection|hikari).*(fail|error|exception)" | json | level="ERROR" [5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "High rate of database connection failures"
+          description: "Detected {{ $value }} database errors per second in the last 5 minutes"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/database-failures"
+
+      # Vault connectivity loss
+      - alert: VaultConnectivityLoss
+        expr: |
+          sum(count_over_time({service="ai-orchestrator"} |~ "(?i)vault.*(fail|error|timeout|unreachable)" | json | level=~"ERROR|WARN" [5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault connectivity issues detected"
+          description: "Detected {{ $value }} Vault connectivity errors in the last 5 minutes"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/vault-connectivity"
+
+      # Unhandled exceptions spike
+      - alert: UnhandledExceptionsHigh
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)(exception|error)" | json | level="ERROR" | __error__="" [5m])) > 10
+        for: 3m
+        labels:
+          severity: critical
+          category: reliability
+        annotations:
+          summary: "High rate of unhandled exceptions"
+          description: "Detected {{ $value }} unhandled exceptions per second"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/exception-handling"
+
+  - name: log_alerts_security
+    interval: 1m
+    rules:
+      # Authentication failure spike
+      - alert: AuthenticationFailuresSpike
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)authentication.*(fail|denied|invalid|unauthorized)" | json | level=~"WARN|ERROR" [5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High rate of authentication failures"
+          description: "Detected {{ $value }} authentication failures per second. Possible brute force attack."
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/auth-failures"
+
+      # Rate limit violations
+      - alert: RateLimitViolationsHigh
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)rate limit" | json | level=~"WARN|ERROR" [5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High rate of rate limit violations"
+          description: "Detected {{ $value }} rate limit violations per second"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/rate-limiting"
+
+      # Suspicious security events
+      - alert: SecurityEventsUnusual
+        expr: |
+          sum(rate({service="ai-orchestrator", category="security"} | json | level=~"WARN|ERROR" [10m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Unusual security event pattern detected"
+          description: "Detected {{ $value }} security events per second"
+          dashboard: "http://grafana:3000/d/logs-overview"
+
+  - name: log_alerts_application
+    interval: 2m
+    rules:
+      # AI agent execution failures
+      - alert: AIAgentExecutionFailuresHigh
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)(agent|workflow).*(fail|error)" | json | level="ERROR" [10m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "High rate of AI agent execution failures"
+          description: "Detected {{ $value }} agent failures per second"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/agent-failures"
+
+      # Memory pressure indicators
+      - alert: OutOfMemoryIndicators
+        expr: |
+          sum(count_over_time({service="ai-orchestrator"} |~ "(?i)(OutOfMemory|heap|memory exhausted)" | json | level=~"ERROR|WARN" [5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Memory pressure indicators detected in logs"
+          description: "Found {{ $value }} memory-related warnings/errors"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/memory-pressure"
+
+      # GitHub API failures
+      - alert: GitHubAPIFailuresHigh
+        expr: |
+          sum(rate({service="ai-orchestrator"} |~ "(?i)github.*(fail|error|timeout|rate limit)" | json | level=~"ERROR|WARN" [10m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: integration
+        annotations:
+          summary: "High rate of GitHub API failures"
+          description: "Detected {{ $value }} GitHub API errors per second"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/github-api"
+
+  - name: log_alerts_infrastructure
+    interval: 2m
+    rules:
+      # SSL/TLS errors
+      - alert: SSLTLSErrors
+        expr: |
+          sum(count_over_time({service="ai-orchestrator"} |~ "(?i)(ssl|tls).*(error|fail|handshake)" | json | level="ERROR" [10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "SSL/TLS errors detected"
+          description: "Found {{ $value }} SSL/TLS errors in logs"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/ssl-errors"
+
+      # Circuit breaker events
+      - alert: CircuitBreakerTriggered
+        expr: |
+          sum(count_over_time({service="ai-orchestrator"} |~ "(?i)circuit breaker.*(open|triggered)" | json | level=~"WARN|ERROR" [5m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+          category: resilience
+        annotations:
+          summary: "Circuit breaker triggered"
+          description: "Circuit breaker has been triggered {{ $value }} times"
+          dashboard: "http://grafana:3000/d/logs-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/circuit-breaker"

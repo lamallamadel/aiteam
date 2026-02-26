@@ -6,6 +6,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -28,6 +30,13 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             
             CorrelationIdHolder.setCorrelationId(correlationId);
             response.setHeader(CORRELATION_ID_HEADER, correlationId);
+            
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated() && 
+                !"anonymousUser".equals(authentication.getPrincipal())) {
+                String userId = authentication.getName();
+                CorrelationIdHolder.setUserId(userId);
+            }
             
             filterChain.doFilter(request, response);
         } finally {

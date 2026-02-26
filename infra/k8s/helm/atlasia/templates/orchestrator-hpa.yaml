@@ -1,0 +1,56 @@
+{{- if .Values.orchestrator.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "atlasia.fullname" . }}-orchestrator
+  labels:
+    {{- include "atlasia.orchestrator.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "atlasia.fullname" . }}-orchestrator
+  minReplicas: {{ .Values.orchestrator.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.orchestrator.autoscaling.maxReplicas }}
+  metrics:
+  {{- if .Values.orchestrator.autoscaling.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.orchestrator.autoscaling.targetCPUUtilizationPercentage }}
+  {{- end }}
+  {{- if .Values.orchestrator.autoscaling.targetMemoryUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.orchestrator.autoscaling.targetMemoryUtilizationPercentage }}
+  {{- end }}
+  {{- if .Values.orchestrator.autoscaling.metrics }}
+  {{- toYaml .Values.orchestrator.autoscaling.metrics | nindent 2 }}
+  {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+{{- end }}

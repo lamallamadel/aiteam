@@ -83,12 +83,49 @@ ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST"
     fi
     
     echo "💾 Creating pre-deployment backup..."
-    BACKUP_DIR="./backups/\$(date +%Y%m%d_%H%M%S)"
-    mkdir -p \$BACKUP_DIR
     
-    if docker-compose -f infra/deployments/prod/docker-compose.yml ps | grep -q "aiteam_db_prod"; then
-        docker-compose -f infra/deployments/prod/docker-compose.yml exec -T ai-db pg_dump -U ${DB_USER:-aiteam_prod_user} ${DB_NAME:-aiteam_prod} | gzip > \$BACKUP_DIR/db_backup.sql.gz
-        echo "   ✅ Database backup created: \$BACKUP_DIR/db_backup.sql.gz"
+    # Create pre-deployment backup directory
+    PREDEPLOYMENT_DIR="./backups/predeployment/\$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "\$PREDEPLOYMENT_DIR"
+    
+    # Use the automated backup script if available
+    if [[ -f "./infra/ci-cd/scripts/backup.sh" ]] && [[ -x "./infra/ci-cd/scripts/backup.sh" ]]; then
+        echo "   Using automated backup script..."
+        BACKUP_DIR="./backups" ./infra/ci-cd/scripts/backup.sh prod 2>&1 | tee "\$PREDEPLOYMENT_DIR/backup.log" || {
+            echo "   ⚠️  Automated backup encountered issues, creating fallback backup"
+            if docker ps --format '{{.Names}}' | grep -q "aiteam_db_prod"; then
+                docker exec aiteam_db_prod pg_dump -U ${DB_USER:-aiteam_prod_user} ${DB_NAME:-aiteam_prod} | gzip > "\$PREDEPLOYMENT_DIR/db_backup.sql.gz"
+                echo "   ✅ Fallback backup created: \$PREDEPLOYMENT_DIR/db_backup.sql.gz"
+            else
+                echo "   ⚠️  Database container not running, skipping backup"
+            fi
+        }
+        # Copy the latest daily backup to pre-deployment directory for safety
+        if [[ -d "./backups/daily" ]]; then
+            LATEST_BACKUP=\$(ls -t ./backups/daily/backup_*.sql.gz 2>/dev/null | head -1)
+            if [[ -n "\$LATEST_BACKUP" ]]; then
+                cp "\$LATEST_BACKUP" "\$PREDEPLOYMENT_DIR/" 2>/dev/null || true
+                echo "   ✅ Latest daily backup copied to pre-deployment directory"
+            fi
+        fi
+    else
+        echo "   Backup script not found, using direct database dump..."
+        if docker ps --format '{{.Names}}' | grep -q "aiteam_db_prod"; then
+            docker exec aiteam_db_prod pg_dump -U ${DB_USER:-aiteam_prod_user} ${DB_NAME:-aiteam_prod} | gzip > "\$PREDEPLOYMENT_DIR/db_backup.sql.gz"
+            echo "   ✅ Database backup created: \$PREDEPLOYMENT_DIR/db_backup.sql.gz"
+        else
+            echo "   ⚠️  Database container not running, skipping backup"
+        fi
+    fi
+    
+    echo "   📁 Pre-deployment backup location: \$PREDEPLOYMENT_DIR"
+    
+    # Save current deployment tags for rollback
+    mkdir -p ./backups/rollback
+    if docker ps --format '{{.Names}}' | grep -q "aiteam_backend_prod"; then
+        CURRENT_TAG=\$(docker inspect aiteam_backend_prod --format='{{.Config.Image}}' | cut -d':' -f2)
+        echo "\$(date +%Y%m%d_%H%M%S),\$CURRENT_TAG,\$CURRENT_TAG" >> ./backups/rollback/deployment_tags.log
+        echo "   ✅ Current deployment tag saved for rollback: \$CURRENT_TAG"
     fi
     
     echo "🐳 Pulling latest images from GHCR..."

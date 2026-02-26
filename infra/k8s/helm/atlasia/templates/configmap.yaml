@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "atlasia.fullname" . }}-config
+  labels:
+    {{- include "atlasia.labels" . | nindent 4 }}
+data:
+  region: {{ .Values.config.region | quote }}
+  repo-allowlist: {{ .Values.config.orchestrator.repoAllowlist | quote }}
+  workflow-protect-prefix: {{ .Values.config.orchestrator.workflowProtectPrefix | quote }}
+  max-concurrent-bolts: {{ .Values.config.orchestrator.maxConcurrentBolts | quote }}
+  sse-timeout-minutes: {{ .Values.config.orchestrator.sseTimeoutMinutes | quote }}
+  default-mode: {{ .Values.config.orchestrator.defaultMode | quote }}
+  enabled-agents: {{ .Values.config.orchestrator.enabledAgents | quote }}
+  cors-allowed-origins: {{ .Values.config.cors.allowedOrigins | quote }}
+  jwt-access-token-expiration-minutes: {{ .Values.config.jwt.accessTokenExpirationMinutes | quote }}
+  jwt-refresh-token-expiration-days: {{ .Values.config.jwt.refreshTokenExpirationDays | quote }}
+  jwt-issuer: {{ .Values.config.jwt.issuer | quote }}
+  llm-endpoint: {{ .Values.config.llm.endpoint | quote }}
+  llm-model: {{ .Values.config.llm.model | quote }}
+  llm-fallback-endpoint: {{ .Values.config.llm.fallbackEndpoint | quote }}
+  database-url: {{ printf "jdbc:postgresql://%s:%s/%s?ssl=true&sslmode=require" (include "atlasia.postgresql.host" .) (include "atlasia.postgresql.port" . | toString) (include "atlasia.postgresql.database" .) | quote }}
+  database-username: {{ .Values.config.database.username | quote }}
+  tracing-sampling-probability: {{ .Values.config.tracing.samplingProbability | quote }}
+  otel-exporter-otlp-endpoint: {{ .Values.config.tracing.otlpEndpoint | quote }}
+  crdt-mesh-peers: {{ .Values.config.crdt.meshPeers | quote }}
+  vault-enabled: {{ .Values.vault.enabled | quote }}
+  vault-address: {{ .Values.vault.address | quote }}
+  vault-role: {{ .Values.vault.role | quote }}
+  vault-path: {{ .Values.vault.path | quote }}

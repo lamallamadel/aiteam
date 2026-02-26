@@ -9,6 +9,10 @@ import com.atlasia.ai.persistence.PersistedCollaborationMessageRepository;
 import com.atlasia.ai.persistence.RunRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +35,7 @@ public class CollaborationService {
     private final CrdtDocumentManager crdtDocumentManager;
     private final CrdtSyncService crdtSyncService;
     private final CrdtSnapshotService crdtSnapshotService;
+    private final Tracer tracer;
     
     private final Map<UUID, Set<String>> activeUsers = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, String>> cursorPositions = new ConcurrentHashMap<>();
@@ -50,7 +55,8 @@ public class CollaborationService {
             AuditTrailService auditTrailService,
             CrdtDocumentManager crdtDocumentManager,
             CrdtSyncService crdtSyncService,
-            CrdtSnapshotService crdtSnapshotService) {
+            CrdtSnapshotService crdtSnapshotService,
+            Tracer tracer) {
         this.eventRepository = eventRepository;
         this.messageRepository = messageRepository;
         this.runRepository = runRepository;
@@ -61,34 +67,52 @@ public class CollaborationService {
         this.crdtDocumentManager = crdtDocumentManager;
         this.crdtSyncService = crdtSyncService;
         this.crdtSnapshotService = crdtSnapshotService;
+        this.tracer = tracer;
     }
 
     @Transactional
     public void handleGraftMutation(UUID runId, String userId, Map<String, Object> graftData) {
-        CrdtDocumentState stateBefore = crdtDocumentManager.getState(runId);
-        
-        byte[] crdtChanges = crdtDocumentManager.applyGraftMutation(runId, userId, graftData);
-        
-        CrdtDocumentState stateAfter = crdtDocumentManager.getState(runId);
-        
-        long lamportTimestamp = incrementLamportClock(runId);
-        String eventData = serializeEventData(graftData);
-        
-        CollaborationEventEntity event = new CollaborationEventEntity(
-                runId, userId, "GRAFT", eventData, Instant.now(), 
-                crdtChanges, crdtSyncService.getLocalRegion(), lamportTimestamp);
-        
-        event.setStateBefore(crdtDocumentManager.serializeState(stateBefore));
-        event.setStateAfter(crdtDocumentManager.serializeState(stateAfter));
-        
-        auditTrailService.updateCollaborationEventHash(event);
-        eventRepository.save(event);
+        Span span = tracer.spanBuilder("collaboration.graft")
+                .setAttribute("run.id", runId.toString())
+                .setAttribute("user.id", userId)
+                .setAttribute("event.type", "GRAFT")
+                .startSpan();
 
-        applyGraftToRun(runId, stateAfter);
-        
-        crdtSnapshotService.incrementEventCount(runId);
-        crdtSyncService.broadcastChanges(runId, crdtChanges);
-        broadcastEvent(runId, "GRAFT", userId, graftData, lamportTimestamp);
+        try (Scope scope = span.makeCurrent()) {
+            CrdtDocumentState stateBefore = crdtDocumentManager.getState(runId);
+            
+            byte[] crdtChanges = crdtDocumentManager.applyGraftMutation(runId, userId, graftData);
+            
+            CrdtDocumentState stateAfter = crdtDocumentManager.getState(runId);
+            
+            long lamportTimestamp = incrementLamportClock(runId);
+            String eventData = serializeEventData(graftData);
+            
+            CollaborationEventEntity event = new CollaborationEventEntity(
+                    runId, userId, "GRAFT", eventData, Instant.now(), 
+                    crdtChanges, crdtSyncService.getLocalRegion(), lamportTimestamp);
+            
+            event.setStateBefore(crdtDocumentManager.serializeState(stateBefore));
+            event.setStateAfter(crdtDocumentManager.serializeState(stateAfter));
+            
+            auditTrailService.updateCollaborationEventHash(event);
+            eventRepository.save(event);
+
+            applyGraftToRun(runId, stateAfter);
+            
+            crdtSnapshotService.incrementEventCount(runId);
+            crdtSyncService.broadcastChanges(runId, crdtChanges);
+            broadcastEvent(runId, "GRAFT", userId, graftData, lamportTimestamp);
+
+            span.setStatus(StatusCode.OK);
+            span.setAttribute("lamport.timestamp", lamportTimestamp);
+        } catch (Exception e) {
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            span.recordException(e);
+            throw e;
+        } finally {
+            span.end();
+        }
     }
 
     @Transactional
@@ -146,18 +170,34 @@ public class CollaborationService {
     }
 
     public void handleUserJoin(UUID runId, String userId) {
-        activeUsers.computeIfAbsent(runId, k -> ConcurrentHashMap.newKeySet()).add(userId);
-        cursorPositions.computeIfAbsent(runId, k -> new ConcurrentHashMap<>());
+        Span span = tracer.spanBuilder("collaboration.user_join")
+                .setAttribute("run.id", runId.toString())
+                .setAttribute("user.id", userId)
+                .startSpan();
 
-        crdtSnapshotService.restoreFromSnapshot(runId);
+        try (Scope scope = span.makeCurrent()) {
+            activeUsers.computeIfAbsent(runId, k -> ConcurrentHashMap.newKeySet()).add(userId);
+            cursorPositions.computeIfAbsent(runId, k -> new ConcurrentHashMap<>());
 
-        Map<String, Object> presenceData = new HashMap<>();
-        presenceData.put("activeUsers", new ArrayList<>(activeUsers.get(runId)));
-        
-        CrdtDocumentState currentState = crdtDocumentManager.getState(runId);
-        presenceData.put("crdtState", currentState);
-        
-        broadcastEvent(runId, "USER_JOIN", userId, presenceData, incrementLamportClock(runId));
+            crdtSnapshotService.restoreFromSnapshot(runId);
+
+            Map<String, Object> presenceData = new HashMap<>();
+            presenceData.put("activeUsers", new ArrayList<>(activeUsers.get(runId)));
+            
+            CrdtDocumentState currentState = crdtDocumentManager.getState(runId);
+            presenceData.put("crdtState", currentState);
+            
+            broadcastEvent(runId, "USER_JOIN", userId, presenceData, incrementLamportClock(runId));
+
+            span.setStatus(StatusCode.OK);
+            span.setAttribute("active_users.count", activeUsers.get(runId).size());
+        } catch (Exception e) {
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            span.recordException(e);
+            throw e;
+        } finally {
+            span.end();
+        }
     }
 
     public void handleUserLeave(UUID runId, String userId) {

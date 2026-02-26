@@ -1,0 +1,369 @@
+global:
+  environment: production
+  region: us-east-1
+
+replicaCount:
+  orchestrator: 3
+  frontend: 2
+
+image:
+  orchestrator:
+    repository: atlasia/ai-orchestrator
+    pullPolicy: IfNotPresent
+    tag: "0.1.0"
+  frontend:
+    repository: atlasia/frontend
+    pullPolicy: IfNotPresent
+    tag: "0.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/actuator/prometheus"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+orchestrator:
+  port: 8080
+  service:
+    type: ClusterIP
+    port: 8080
+    targetPort: 8080
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    metrics:
+      - type: Pods
+        pods:
+          metric:
+            name: ai_tasks_queue_depth
+          target:
+            type: AverageValue
+            averageValue: "50"
+  livenessProbe:
+    httpGet:
+      path: /actuator/health/liveness
+      port: 8080
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /actuator/health/readiness
+      port: 8080
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  env:
+    - name: SPRING_PROFILES_ACTIVE
+      value: "prod"
+    - name: JAVA_OPTS
+      value: "-XX:+UseG1GC -XX:MaxRAMPercentage=75.0 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof"
+    - name: OTEL_SERVICE_NAME
+      value: "ai-orchestrator"
+    - name: REGION
+      valueFrom:
+        configMapKeyRef:
+          name: atlasia-config
+          key: region
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: logs
+      emptyDir: {}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: logs
+      mountPath: /app/logs
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+frontend:
+  port: 80
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  autoscaling:
+    enabled: false
+  livenessProbe:
+    httpGet:
+      path: /index.html
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /index.html
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+  volumes:
+    - name: nginx-cache
+      emptyDir: {}
+    - name: nginx-run
+      emptyDir: {}
+  volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run/nginx
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+postgresql:
+  enabled: true
+  auth:
+    username: ai
+    database: ai
+    existingSecret: atlasia-postgresql-secret
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      runAsNonRoot: true
+    initdb:
+      scripts:
+        init.sql: |
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    podDisruptionBudget:
+      create: true
+      minAvailable: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+  postgresqlSharedPreloadLibraries: "pg_stat_statements"
+  postgresqlParameters:
+    max_connections: "200"
+    shared_buffers: "256MB"
+    effective_cache_size: "1GB"
+    maintenance_work_mem: "64MB"
+    checkpoint_completion_target: "0.9"
+    wal_buffers: "16MB"
+    default_statistics_target: "100"
+    random_page_cost: "1.1"
+    effective_io_concurrency: "200"
+    work_mem: "2621kB"
+    min_wal_size: "1GB"
+    max_wal_size: "4GB"
+
+vault:
+  enabled: true
+  address: "http://vault:8200"
+  role: "atlasia-orchestrator"
+  path: "secret/data/atlasia"
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: atlasia.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: orchestrator
+        - path: /actuator
+          pathType: Prefix
+          backend: orchestrator
+        - path: /ws
+          pathType: Prefix
+          backend: orchestrator
+        - path: /
+          pathType: Prefix
+          backend: frontend
+  tls:
+    - secretName: atlasia-tls
+      hosts:
+        - atlasia.example.com
+
+config:
+  region: us-east-1
+  orchestrator:
+    repoAllowlist: "backend/,frontend/,docs/,infra/,ai/"
+    workflowProtectPrefix: ".github/workflows/"
+    maxConcurrentBolts: "5"
+    sseTimeoutMinutes: "30"
+    defaultMode: "EXECUTION"
+    enabledAgents: "PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER"
+  cors:
+    allowedOrigins: "https://atlasia.example.com"
+  jwt:
+    accessTokenExpirationMinutes: "15"
+    refreshTokenExpirationDays: "7"
+    issuer: "atlasia-ai-orchestrator"
+  llm:
+    endpoint: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+    fallbackEndpoint: "https://api.deepseek.com/v1"
+  database:
+    url: "jdbc:postgresql://atlasia-postgresql:5432/ai?ssl=true&sslmode=require"
+    username: "ai"
+  tracing:
+    samplingProbability: "0.1"
+    otlpEndpoint: "http://jaeger:4317"
+  crdt:
+    meshPeers: ""
+
+secrets:
+  existingSecret: ""
+  orchestratorToken: ""
+  dbPassword: ""
+  jwtSecret: ""
+  encryptionKey: ""
+  vaultToken: ""
+  llmApiKey: ""
+  llmFallbackApiKey: ""
+  githubWebhookSecret: ""
+  githubPrivateKeyPath: ""
+  oauth2:
+    github:
+      clientId: ""
+      clientSecret: ""
+    google:
+      clientId: ""
+      clientSecret: ""
+    gitlab:
+      clientId: ""
+      clientSecret: ""
+  mail:
+    username: ""
+    password: ""
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - atlasia
+          topologyKey: kubernetes.io/hostname
+
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 80
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+  prometheusRule:
+    enabled: false
+
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  retention: 30

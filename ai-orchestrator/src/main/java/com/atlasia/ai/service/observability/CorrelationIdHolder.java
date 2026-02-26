@@ -7,6 +7,7 @@ import java.util.UUID;
 public class CorrelationIdHolder {
     private static final String CORRELATION_ID_KEY = "correlationId";
     private static final String RUN_ID_KEY = "runId";
+    private static final String USER_ID_KEY = "userId";
     private static final String AGENT_NAME_KEY = "agentName";
     private static final String GITHUB_TOKEN_KEY = "githubToken";
 
@@ -29,6 +30,16 @@ public class CorrelationIdHolder {
 
     public static String getRunId() {
         return MDC.get(RUN_ID_KEY);
+    }
+
+    public static void setUserId(String userId) {
+        if (userId != null) {
+            MDC.put(USER_ID_KEY, userId);
+        }
+    }
+
+    public static String getUserId() {
+        return MDC.get(USER_ID_KEY);
     }
 
     public static void setAgentName(String agentName) {
@@ -54,6 +65,7 @@ public class CorrelationIdHolder {
     public static void clear() {
         MDC.remove(CORRELATION_ID_KEY);
         MDC.remove(RUN_ID_KEY);
+        MDC.remove(USER_ID_KEY);
         MDC.remove(AGENT_NAME_KEY);
         MDC.remove(GITHUB_TOKEN_KEY);
     }

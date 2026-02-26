@@ -1,0 +1,62 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'production'
+    environment: 'prod'
+
+scrape_configs:
+  # AI Orchestrator Spring Boot application
+  - job_name: 'ai-orchestrator'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['ai-orchestrator:8080']
+        labels:
+          application: 'ai-orchestrator'
+          service: 'orchestrator-api'
+          tier: 'backend'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # PostgreSQL database metrics
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+          tier: 'database'
+    scrape_interval: 15s
+
+  # System metrics from Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+          tier: 'infrastructure'
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+          tier: 'monitoring'
+    metrics_path: '/metrics'
+
+rule_files:
+  - 'alerts.yml'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

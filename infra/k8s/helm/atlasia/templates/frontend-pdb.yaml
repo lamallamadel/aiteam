@@ -1,0 +1,13 @@
+{{- if .Values.frontend.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "atlasia.fullname" . }}-frontend
+  labels:
+    {{- include "atlasia.frontend.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "atlasia.frontend.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -39,6 +39,7 @@ insights/
 .env
 .env.*
 !.env.example
+!.env.backup.example
 
 # HashiCorp Vault
 vault_data/
@@ -77,3 +78,22 @@ plugins/
 
 # Compliance reports (audit trail exports)
 compliance-reports/
+
+# Backup files
+backups/
+*.sql
+*.sql.gz
+*.dump
+*.backup
+
+# Load test results (k6)
+ai-orchestrator/target/load-test-results/
+load-test-results/
+*.k6.json
+
+# Kubernetes / Helm
+*.tgz
+Chart.lock
+infra/k8s/helm/atlasia/charts/
+infra/k8s/secrets.yaml
+infra/k8s/sealed-secrets.yaml

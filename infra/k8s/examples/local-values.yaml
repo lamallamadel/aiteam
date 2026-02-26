@@ -1,0 +1,97 @@
+# Example values for local development (Minikube/Kind)
+global:
+  environment: local
+  region: local
+
+replicaCount:
+  orchestrator: 1
+  frontend: 1
+
+image:
+  orchestrator:
+    repository: atlasia/ai-orchestrator
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  frontend:
+    repository: atlasia/frontend
+    pullPolicy: IfNotPresent
+    tag: "latest"
+
+orchestrator:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+
+frontend:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  podDisruptionBudget:
+    enabled: false
+
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+    podDisruptionBudget:
+      create: false
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: localhost
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: orchestrator
+        - path: /actuator
+          pathType: Prefix
+          backend: orchestrator
+        - path: /ws
+          pathType: Prefix
+          backend: orchestrator
+        - path: /
+          pathType: Prefix
+          backend: frontend
+  tls: []
+
+config:
+  region: local
+  cors:
+    allowedOrigins: "http://localhost:4200,http://localhost:8080,http://localhost"
+  tracing:
+    samplingProbability: "1.0"
+    otlpEndpoint: "http://localhost:4317"
+
+vault:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+monitoring:
+  enabled: false

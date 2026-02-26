@@ -1,0 +1,113 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki-prod:3100/loki/api/v1/push
+    backoff_config:
+      min_period: 100ms
+      max_period: 10s
+      max_retries: 10
+
+scrape_configs:
+  # AI Orchestrator application logs (JSON format)
+  - job_name: ai-orchestrator
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(ai-orchestrator|orchestrator-app).*'
+        action: keep
+      - source_labels: ['__meta_docker_container_name']
+        target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+    pipeline_stages:
+      # Parse JSON logs from Spring Boot with logstash encoder
+      - json:
+          expressions:
+            timestamp: '@timestamp'
+            level: level
+            logger: logger
+            message: message
+            thread: thread
+            correlationId: correlationId
+            runId: runId
+            userId: userId
+            agentName: agentName
+            service: service
+            environment: environment
+            category: category
+            stack_trace: stack_trace
+      
+      # Convert timestamp to Loki format
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      
+      # Extract log level
+      - labels:
+          level:
+          service:
+          environment:
+          correlationId:
+          runId:
+          userId:
+          agentName:
+          category:
+      
+      # Add retention labels based on log level and category
+      - labels:
+          retention:
+      - template:
+          source: retention
+          template: |
+            {{- if eq .category "security" -}}
+              security
+            {{- else if or (eq .level "ERROR") (eq .level "WARN") -}}
+              error_warn
+            {{- else -}}
+              info
+            {{- end -}}
+      
+      # Output structured metadata
+      - output:
+          source: message
+
+  # System logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d+:\d+:\d+)\s+(?P<hostname>\S+)\s+(?P<process>\S+)\[(?P<pid>\d+)\]:\s+(?P<message>.*)$'
+      - labels:
+          process:
+      - timestamp:
+          source: timestamp
+          format: Jan _2 15:04:05
+
+  # Docker container logs (fallback for non-JSON logs)
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
+    pipeline_stages:
+      - docker: {}
+      - labels:
+          container:
+          stream:

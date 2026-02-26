@@ -84,11 +84,22 @@ class WorkflowEngineTest {
         @Mock
         private GraftExecutionService graftExecutionService;
 
+        @Mock
+        private io.opentelemetry.api.trace.Tracer tracer;
+
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
 
         @BeforeEach
         void setUp() {
+                io.opentelemetry.api.trace.Span mockSpan = mock(io.opentelemetry.api.trace.Span.class);
+                io.opentelemetry.api.trace.SpanBuilder mockBuilder = mock(io.opentelemetry.api.trace.SpanBuilder.class);
+                lenient().when(tracer.spanBuilder(any())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(any(String.class), any(String.class))).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(any(String.class), anyInt())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.startSpan()).thenReturn(mockSpan);
+                lenient().when(mockSpan.makeCurrent()).thenReturn(mock(io.opentelemetry.context.Scope.class));
+                
                 workflowEngine = new WorkflowEngine(
                                 runRepository,
                                 schemaValidator,
@@ -104,7 +115,8 @@ class WorkflowEngineTest {
                                 agentBindingService,
                                 new com.atlasia.ai.service.InterruptDecisionStore(),
                                 new ObjectMapper(),
-                                graftExecutionService);
+                                graftExecutionService,
+                                tracer);
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
 
                 // Wire the factory to return the appropriate step mocks

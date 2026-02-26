@@ -1,0 +1,132 @@
+global:
+  resolve_timeout: 5m
+  # Configure SMTP for email notifications (update with actual values)
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'alertmanager@atlasia.ai'
+  smtp_auth_username: 'alertmanager@atlasia.ai'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+# Templates for alert formatting
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree for alerts
+route:
+  receiver: 'default-receiver'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 10s
+      repeat_interval: 4h
+      continue: true
+    
+    # Database alerts
+    - match:
+        category: database
+      receiver: 'database-alerts'
+      group_wait: 30s
+      repeat_interval: 6h
+    
+    # JVM/Performance alerts
+    - match:
+        category: jvm
+      receiver: 'performance-alerts'
+      group_wait: 1m
+      repeat_interval: 8h
+    
+    # Resource alerts
+    - match:
+        category: resources
+      receiver: 'resource-alerts'
+      group_wait: 2m
+      repeat_interval: 8h
+    
+    # Security alerts
+    - match:
+        category: security
+      receiver: 'security-alerts'
+      group_wait: 10s
+      repeat_interval: 2h
+
+# Alert inhibition rules
+inhibit_rules:
+  # Inhibit warning alerts if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+  
+  # Inhibit specific database alerts if database is down
+  - source_match:
+      alertname: 'PostgreSQLDown'
+    target_match:
+      category: 'database'
+    equal: ['instance']
+  
+  # Inhibit deployment-related alerts if service is down
+  - source_match:
+      alertname: 'DeploymentFailure'
+    target_match:
+      environment: 'production'
+    equal: ['job']
+
+# Receiver configurations
+receivers:
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook'
+        send_resolved: true
+    # Uncomment and configure for email notifications
+    # email_configs:
+    #   - to: 'team@atlasia.ai'
+    #     headers:
+    #       Subject: '[Atlasia Alert] {{ .GroupLabels.alertname }}'
+  
+  - name: 'critical-alerts'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook/critical'
+        send_resolved: true
+    # Uncomment for PagerDuty integration
+    # pagerduty_configs:
+    #   - service_key: '${PAGERDUTY_SERVICE_KEY}'
+    #     description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+    # Uncomment for Slack integration
+    # slack_configs:
+    #   - api_url: '${SLACK_WEBHOOK_URL}'
+    #     channel: '#alerts-critical'
+    #     title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    #     send_resolved: true
+  
+  - name: 'database-alerts'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook/database'
+        send_resolved: true
+    # email_configs:
+    #   - to: 'dba-team@atlasia.ai'
+  
+  - name: 'performance-alerts'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook/performance'
+        send_resolved: true
+  
+  - name: 'resource-alerts'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook/resources'
+        send_resolved: true
+  
+  - name: 'security-alerts'
+    webhook_configs:
+      - url: 'http://ai-orchestrator:8080/api/alerts/webhook/security'
+        send_resolved: true
+    # email_configs:
+    #   - to: 'security-team@atlasia.ai'

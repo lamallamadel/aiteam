@@ -1,0 +1,21 @@
+apiVersion: v2
+name: atlasia
+description: Atlasia AI Orchestrator - Autonomous Engineering Platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai-orchestrator
+  - autonomous-engineering
+  - spring-boot
+  - angular
+maintainers:
+  - name: Atlasia Team
+home: https://github.com/atlasia/ai-orchestrator
+sources:
+  - https://github.com/atlasia/ai-orchestrator
+dependencies:
+  - name: postgresql
+    version: "12.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled

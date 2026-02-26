@@ -3,7 +3,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <property name="CONSOLE_LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [agent=%X{agentName:-N/A}] - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] [agent=%X{agentName:-N/A}] - %msg%n"/>
 
     <!-- Dev profile: plain console + file output -->
     <springProfile name="default,dev">
@@ -39,23 +39,96 @@
         </root>
     </springProfile>
 
-    <!-- Production profile: structured JSON logging for log aggregation -->
+    <!-- Production profile: structured JSON logging for Loki aggregation -->
     <springProfile name="prod,production">
         <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <!-- MDC context propagation -->
                 <includeMdcKeyName>correlationId</includeMdcKeyName>
                 <includeMdcKeyName>runId</includeMdcKeyName>
+                <includeMdcKeyName>userId</includeMdcKeyName>
                 <includeMdcKeyName>agentName</includeMdcKeyName>
+                
+                <!-- Additional context -->
+                <includeContext>true</includeContext>
+                <includeCallerData>false</includeCallerData>
+                
+                <!-- Field name customization -->
                 <fieldNames>
                     <timestamp>@timestamp</timestamp>
                     <version>[ignore]</version>
+                    <message>message</message>
+                    <logger>logger</logger>
+                    <thread>thread</thread>
+                    <level>level</level>
+                    <levelValue>[ignore]</levelValue>
                 </fieldNames>
-                <customFields>{"service":"ai-orchestrator"}</customFields>
+                
+                <!-- Custom fields -->
+                <customFields>{"service":"ai-orchestrator","environment":"production"}</customFields>
+                
+                <!-- Exception handling -->
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxDepthPerThrowable>20</maxDepthPerThrowable>
+                    <maxLength>2048</maxLength>
+                    <shortenedClassNameLength>30</shortenedClassNameLength>
+                    <exclude>sun\.reflect\..*</exclude>
+                    <exclude>java\.lang\.reflect\..*</exclude>
+                    <rootCauseFirst>true</rootCauseFirst>
+                </throwableConverter>
             </encoder>
         </appender>
 
+        <!-- Separate appender for security events (auth failures, rate limits, etc.) -->
+        <appender name="JSON_SECURITY" class="ch.qos.logback.core.ConsoleAppender">
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>WARN</level>
+            </filter>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+                <includeMdcKeyName>runId</includeMdcKeyName>
+                <includeMdcKeyName>userId</includeMdcKeyName>
+                <includeMdcKeyName>agentName</includeMdcKeyName>
+                <includeContext>true</includeContext>
+                <customFields>{"service":"ai-orchestrator","environment":"production","category":"security"}</customFields>
+            </encoder>
+        </appender>
+
+        <!-- Security-specific loggers -->
+        <logger name="com.atlasia.ai.service.AuthenticationService" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON_SECURITY"/>
+        </logger>
+        
+        <logger name="com.atlasia.ai.service.JwtAuthenticationFilter" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON_SECURITY"/>
+        </logger>
+        
+        <logger name="com.atlasia.ai.config.RateLimitingFilter" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON_SECURITY"/>
+        </logger>
+        
+        <logger name="com.atlasia.ai.config.SecurityConfig" level="INFO" additivity="false">
+            <appender-ref ref="JSON_CONSOLE"/>
+            <appender-ref ref="JSON_SECURITY"/>
+        </logger>
+
+        <!-- Database operation loggers -->
+        <logger name="com.atlasia.ai.persistence" level="WARN"/>
+        <logger name="org.hibernate.SQL" level="WARN"/>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="WARN"/>
+
+        <!-- Vault operations -->
+        <logger name="com.atlasia.ai.service.VaultSecretsService" level="INFO"/>
+        <logger name="com.atlasia.ai.service.SecretRotationScheduler" level="INFO"/>
+
+        <!-- Application loggers -->
         <logger name="com.atlasia.ai" level="INFO"/>
         <logger name="org.springframework" level="WARN"/>
+        <logger name="org.springframework.security" level="WARN"/>
+        <logger name="io.github.resilience4j" level="WARN"/>
 
         <root level="INFO">
             <appender-ref ref="JSON_CONSOLE"/>
