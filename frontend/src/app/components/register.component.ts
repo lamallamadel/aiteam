@@ -16,9 +16,10 @@ interface RegisterRequest {
 }
 
 interface RegisterResponse {
-  accessToken: string;
-  refreshToken: string;
   userId: string;
+  username: string;
+  email: string;
+  message: string;
 }
 
 @Component({
@@ -331,14 +332,21 @@ export class RegisterComponent {
     };
 
     this.http.post<RegisterResponse>('/api/auth/register', request).subscribe({
-      next: (response) => {
-        this.loading.set(false);
-        this.success.set('Account created successfully! Redirecting...');
-        this.toastService.show('Account created successfully! Redirecting...', 'success');
-        this.authService.storeTokens(response.accessToken, response.refreshToken);
-        setTimeout(() => {
-          this.router.navigate(['/onboarding']);
-        }, 1500);
+      next: () => {
+        this.authService.login(this.username, this.password).subscribe({
+          next: () => {
+            this.loading.set(false);
+            this.success.set('Account created successfully! Redirecting...');
+            this.toastService.show('Account created successfully! Redirecting...', 'success');
+            setTimeout(() => {
+              this.router.navigate(['/onboarding']);
+            }, 1500);
+          },
+          error: () => {
+            this.loading.set(false);
+            this.router.navigate(['/auth/login']);
+          }
+        });
       },
       error: (err) => {
         this.loading.set(false);

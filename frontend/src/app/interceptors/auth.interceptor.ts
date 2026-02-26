@@ -7,6 +7,7 @@ import { Router } from '@angular/router';
 
 export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, next: HttpHandlerFn) => {
     const authService = inject(AuthService);
+    const router = inject(Router);
     const token = authService.getAccessToken();
 
     const headers: { [key: string]: string } = {};
@@ -31,7 +32,7 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
     return next(clonedReq).pipe(
         catchError((error: HttpErrorResponse) => {
             if (error.status === 401 && !req.url.includes('/api/auth/login') && !req.url.includes('/api/auth/refresh')) {
-                return handle401Error(clonedReq, next, authService);
+                return handle401Error(clonedReq, next, authService, router);
             }
             return throwError(() => error);
         })
@@ -41,10 +42,10 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
 function handle401Error(
     request: HttpRequest<unknown>,
     next: HttpHandlerFn,
-    authService: AuthService
+    authService: AuthService,
+    router: Router
 ): Observable<any> {
-    const router = inject(Router);
-    
+
     if (!authService.refreshing$.value) {
         authService.refreshing$.next(true);
 

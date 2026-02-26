@@ -855,7 +855,7 @@ interface AgentWithVersionInfo extends AgentCard {
   `]
 })
 export class AgentMarketplaceComponent implements OnInit, OnDestroy {
-  agents = signal<AgentCard[]>([]);
+  agents = signal<AgentWithVersionInfo[]>([]);
   allCapabilities = signal<string[]>([]);
   selectedCapabilities = signal<Set<string>>(new Set());
   statusFilter = signal<'all' | 'installed' | 'available'>('all');
@@ -923,7 +923,12 @@ export class AgentMarketplaceComponent implements OnInit, OnDestroy {
     
     this.orchestratorService.listAgents().subscribe({
       next: (agents) => {
-        this.agents.set(agents);
+        this.agents.set(agents.map(agent => ({
+          ...agent,
+          availableVersion: agent.version,
+          isInstalled: agent.vendor === 'atlasia' || agent.transport === 'local',
+          updateAvailable: false,
+        })));
         this.loading.set(false);
       },
       error: (err) => {

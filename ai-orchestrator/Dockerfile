@@ -27,8 +27,8 @@ RUN apk add --no-cache curl && \
 # Create non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Create logs directory with proper permissions
-RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+# Create logs and plugins directories with proper permissions
+RUN mkdir -p /app/logs /app/plugins && chown -R appuser:appgroup /app/logs /app/plugins
 
 # Copy JAR from builder
 COPY --from=builder --chown=appuser:appgroup /build/app.jar .

@@ -57,6 +57,16 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key-change-me}
       REPO_ALLOWLIST: ${REPO_ALLOWLIST:-backend/,frontend/,docs/,infra/,ai/}
       WORKFLOW_PROTECT: ${WORKFLOW_PROTECT:-.github/workflows/}
+      # Disable Vault in dev (no Vault server running locally)
+      SPRING_CLOUD_VAULT_ENABLED: "false"
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
+      # OAuth2 placeholders - social login disabled in dev, JWT auth still works
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_ID: dev-placeholder
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITHUB_CLIENT_SECRET: dev-placeholder
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: dev-placeholder
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: dev-placeholder
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITLAB_CLIENT_ID: dev-placeholder
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITLAB_CLIENT_SECRET: dev-placeholder
       # Debug settings
       LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       LOGGING_LEVEL_COM_EXAMPLE: ${LOGGING_LEVEL_COM_EXAMPLE:-DEBUG}

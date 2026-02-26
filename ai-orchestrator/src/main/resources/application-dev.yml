@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://ai-db:5432/ai_dev
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: dev-placeholder
+            client-secret: dev-placeholder
+          google:
+            client-id: dev-placeholder
+            client-secret: dev-placeholder
+          gitlab:
+            client-id: dev-placeholder
+            client-secret: dev-placeholder
