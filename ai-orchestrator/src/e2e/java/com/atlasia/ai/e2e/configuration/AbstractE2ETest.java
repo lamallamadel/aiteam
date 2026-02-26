@@ -5,7 +5,9 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.TestInfo;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -16,6 +18,7 @@ import org.springframework.test.context.DynamicPropertySource;
 public abstract class AbstractE2ETest {
 
     protected static WireMockServer wireMockServer;
+    protected static E2ETestReporter testReporter = new E2ETestReporter();
 
     @BeforeAll
     static void beforeAll() {
@@ -30,7 +33,12 @@ public abstract class AbstractE2ETest {
         if (wireMockServer != null) {
             wireMockServer.stop();
         }
-        // Testcontainers will automatically stop the container when the JVM shuts down
+        testReporter.generateReport();
+    }
+
+    @AfterEach
+    void afterEach(TestInfo testInfo) {
+        testReporter.recordTestResult(testInfo);
     }
 
     @DynamicPropertySource
