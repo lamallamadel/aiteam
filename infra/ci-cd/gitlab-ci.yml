@@ -1,0 +1,315 @@
+# ─────────────────────────────────────────────────────────────
+# AITEAM — GitLab CI/CD Pipeline (Infrastructure Focused)
+#
+# Location: infra/ci-cd/gitlab-ci.yml
+# This file is included from root .gitlab-ci.yml
+#
+# Stages:
+#   build   — Build backend JAR + frontend dist + Docker images
+#   test    — Run tests (Maven verify + Playwright E2E)
+#   deploy  — Deploy to dev/prod via SSH + docker-compose
+#
+# Environment Variables Required:
+#   - DEPLOY_SSH_KEY   — private ed25519 key (base64 encoded)
+#   - DEPLOY_HOST      — production server IP/hostname
+#   - DEPLOY_USER      — SSH username (e.g., root, ubuntu, deploy)
+#   - DEPLOY_DIR       — deployment directory (e.g., /opt/aiteam)
+#   - GHCR_TOKEN       — GitHub token for GHCR (base64)
+#   - GHCR_USERNAME    — GitHub username
+#   - DB_PASSWORD      — Production database password
+#   - ORCHESTRATOR_TOKEN — Production orchestrator token
+#   - LLM_API_KEY      — Production LLM API key
+#   - GITHUB_REPO      — GitHub repo (org/aiteam)
+#   - DOMAIN           — Production domain
+# ─────────────────────────────────────────────────────────────
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DEPLOY_HOST: "${DEPLOY_HOST}"
+  DEPLOY_USER: "${DEPLOY_USER}"
+  DEPLOY_DIR: "${DEPLOY_DIR}"
+  GHCR_REGISTRY: "ghcr.io"
+  GHCR_IMAGE_BACKEND: "${GHCR_REGISTRY}/${CI_PROJECT_NAMESPACE}/ai-orchestrator"
+  GHCR_IMAGE_FRONTEND: "${GHCR_REGISTRY}/${CI_PROJECT_NAMESPACE}/ai-dashboard"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# ── Reusable SSH setup ────────────────────────────────────────
+.ssh_setup:
+  image: debian:bookworm-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq openssh-client rsync git 2>/dev/null
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOY_SSH_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+    - chmod 644 ~/.ssh/known_hosts
+
+# ── Reusable Docker setup ─────────────────────────────────────
+.docker_setup:
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo "$GHCR_TOKEN" | base64 -d | docker login -u "$GHCR_USERNAME" --password-stdin $GHCR_REGISTRY
+
+# ─────────────────────────────────────────────────────────────
+# BUILD
+# ─────────────────────────────────────────────────────────────
+
+build-backend:
+  stage: build
+  image: maven:3.9-eclipse-temurin-17-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - ai-orchestrator/**/*
+        - infra/ci-cd/gitlab-ci.yml
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull-push
+  script:
+    - echo "🔨 Building backend JAR..."
+    - cd ai-orchestrator
+    - mvn clean package -DskipTests -q
+    - ls -lh target/*.jar
+    - echo "✅ Backend JAR built successfully"
+  artifacts:
+    name: "backend-jar-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/*.jar
+    expire_in: 1 hour
+
+build-frontend:
+  stage: build
+  image: node:22-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - frontend/**/*
+        - infra/ci-cd/gitlab-ci.yml
+  cache:
+    key: "npm-$CI_COMMIT_REF_SLUG"
+    paths:
+      - frontend/node_modules/
+    policy: pull-push
+  script:
+    - echo "🔨 Building frontend dist..."
+    - cd frontend
+    - npm ci --prefer-offline
+    - npm run build -- --configuration production
+    - ls -lh dist/dashboard/browser/
+    - echo "✅ Frontend dist built successfully"
+  artifacts:
+    name: "frontend-dist-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - frontend/dist/dashboard/browser/
+    expire_in: 1 hour
+
+# ─────────────────────────────────────────────────────────────
+# TEST
+# ─────────────────────────────────────────────────────────────
+
+test-backend:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17-alpine
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - ai-orchestrator/**/*
+        - infra/ci-cd/gitlab-ci.yml
+  cache:
+    key: "maven-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository/
+    policy: pull
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+  script:
+    - echo "🧪 Running backend tests..."
+    - cd ai-orchestrator
+    - mvn verify -q -Dspring.profiles.active=test
+    - echo "✅ Backend tests passed"
+  artifacts:
+    name: "backend-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/surefire-reports/
+      - ai-orchestrator/target/failsafe-reports/
+    reports:
+      junit: ai-orchestrator/target/*-reports/*.xml
+    expire_in: 30 days
+    when: always
+
+test-frontend:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.40.0-focal
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      changes:
+        - frontend/**/*
+        - infra/ci-cd/gitlab-ci.yml
+  cache:
+    key: "npm-$CI_COMMIT_REF_SLUG"
+    paths:
+      - frontend/node_modules/
+    policy: pull
+  script:
+    - echo "🧪 Running frontend E2E tests..."
+    - cd frontend
+    - npm ci --prefer-offline
+    - npx playwright install --with-deps
+    - npm run e2e
+    - echo "✅ Frontend E2E tests passed"
+  artifacts:
+    name: "frontend-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - frontend/test-results/
+      - frontend/playwright-report/
+    reports:
+      junit: frontend/test-results/junit.xml
+    expire_in: 30 days
+    when: always
+
+# ─────────────────────────────────────────────────────────────
+# DEPLOY
+# ─────────────────────────────────────────────────────────────
+
+deploy-dev:
+  stage: deploy
+  extends: .ssh_setup
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: manual
+  script:
+    - echo "🚀 Deploying aiteam to development..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR/dev"
+    - chmod +x infra/ci-cd/scripts/deploy-dev.sh
+    - |
+      ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        echo '📍 Connecting to dev server...'
+        echo '🔄 Pulling latest code...'
+        cd $DEPLOY_DIR/dev || mkdir -p $DEPLOY_DIR/dev && cd $DEPLOY_DIR/dev
+        git pull origin develop --quiet || git clone -b develop ${GIT_REPO} .
+        
+        echo '🚀 Starting dev environment...'
+        docker-compose -f ../../infra/deployments/dev/docker-compose.yml \
+          --env-file ../../infra/deployments/dev/.env.dev \
+          up -d --build
+        
+        echo '✅ Dev deployment complete'
+        docker-compose -f ../../infra/deployments/dev/docker-compose.yml ps
+      "
+    - echo "✅ Development deployment successful"
+  environment:
+    name: development
+    url: http://dev.$DEPLOY_HOST
+    auto_stop_in: never
+
+deploy-prod:
+  stage: deploy
+  extends: .ssh_setup
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  script:
+    - echo "🚀 Deploying aiteam to production..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR"
+    - chmod +x infra/ci-cd/scripts/deploy-prod.sh
+    - |
+      ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        echo '📍 Connecting to production server...'
+        cd $DEPLOY_DIR
+        
+        echo '🔄 Pulling latest code from main...'
+        git pull origin main --quiet
+        
+        echo '💾 Creating pre-deployment backup...'
+        mkdir -p backups/\$(date +%Y%m%d_%H%M%S)
+        docker-compose -f infra/deployments/prod/docker-compose.yml exec -T ai-db pg_dump -U ${DB_USER} ${DB_NAME} | gzip > backups/\$(date +%Y%m%d_%H%M%S)/db_backup.sql.gz || true
+        
+        echo '🐳 Pulling latest images from GHCR...'
+        docker-compose -f infra/deployments/prod/docker-compose.yml pull
+        
+        echo '🚀 Starting production services...'
+        docker-compose \
+          -f infra/deployments/prod/docker-compose.yml \
+          --env-file infra/deployments/prod/.env.prod \
+          up -d
+        
+        echo '⏳ Waiting for services to be healthy...'
+        sleep 10
+        
+        echo '✅ Deployment complete'
+        docker-compose -f infra/deployments/prod/docker-compose.yml ps
+      "
+    - echo "✅ Production deployment successful"
+  environment:
+    name: production
+    url: https://$DOMAIN
+    auto_stop_in: never
+
+# ─────────────────────────────────────────────────────────────
+# ROLLBACK
+# ─────────────────────────────────────────────────────────────
+
+rollback-prod:
+  stage: deploy
+  extends: .ssh_setup
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  script:
+    - echo "⚠️  ROLLBACK: Restoring production to previous version..."
+    - echo "   Host: $DEPLOY_HOST"
+    - echo "   User: $DEPLOY_USER"
+    - echo "   Dir: $DEPLOY_DIR"
+    - |
+      ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DEPLOY_USER@$DEPLOY_HOST" "
+        set -e
+        cd $DEPLOY_DIR
+        
+        echo '🔍 Checking for available backups...'
+        LATEST_BACKUP=\$(ls -t backups/*/db_backup.sql.gz 2>/dev/null | head -n 1)
+        
+        if [ -z \"\$LATEST_BACKUP\" ]; then
+          echo '❌ No backup found for rollback'
+          exit 1
+        fi
+        
+        echo '🔄 Stopping services...'
+        docker-compose -f infra/deployments/prod/docker-compose.yml down
+        
+        echo '💾 Restoring database from: \$LATEST_BACKUP'
+        docker-compose -f infra/deployments/prod/docker-compose.yml up -d ai-db
+        sleep 5
+        zcat \$LATEST_BACKUP | docker-compose -f infra/deployments/prod/docker-compose.yml exec -T ai-db psql -U ${DB_USER} ${DB_NAME}
+        
+        echo '🚀 Starting services with previous image...'
+        git checkout HEAD~1
+        docker-compose -f infra/deployments/prod/docker-compose.yml pull
+        docker-compose -f infra/deployments/prod/docker-compose.yml up -d
+        
+        echo '✅ Rollback complete'
+        docker-compose -f infra/deployments/prod/docker-compose.yml ps
+      "
+    - echo "✅ Production rollback successful"
+  environment:
+    name: production
+    action: rollback

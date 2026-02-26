@@ -1,0 +1,132 @@
+version: "3.9"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PRODUCTION ENVIRONMENT - AITEAM
+# ═════════════════════════════════════════════════════════════════════════════
+# Deploy: docker-compose -f infra/deployments/prod/docker-compose.yml up -d
+# Logs:   docker-compose -f infra/deployments/prod/docker-compose.yml logs -f
+# Stop:   docker-compose -f infra/deployments/prod/docker-compose.yml down
+# ═════════════════════════════════════════════════════════════════════════════
+
+services:
+  ai-db:
+    image: postgres:16-alpine
+    container_name: aiteam_db_prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:?error - DB_NAME not set}
+      POSTGRES_USER: ${DB_USER:?error - DB_USER not set}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?error - DB_PASSWORD not set}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --data-checksums"
+    volumes:
+      - ai_db_prod_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai_prod_network
+    # Resource limits for shared server (~$10-30/mo)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ai-orchestrator:
+    image: ghcr.io/${GITHUB_REPO}/ai-orchestrator:latest
+    container_name: aiteam_backend_prod
+    restart: always
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      DB_URL: jdbc:postgresql://ai-db:5432/${DB_NAME:?error - DB_NAME not set}
+      DB_USER: ${DB_USER:?error - DB_USER not set}
+      DB_PASSWORD: ${DB_PASSWORD:?error - DB_PASSWORD not set}
+      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:?error - ORCHESTRATOR_TOKEN not set}
+      LLM_API_KEY: ${LLM_API_KEY:?error - LLM_API_KEY not set}
+      REPO_ALLOWLIST: ${REPO_ALLOWLIST:-backend/,frontend/,docs/,infra/,ai/}
+      WORKFLOW_PROTECT: ${WORKFLOW_PROTECT:-.github/workflows/}
+      # Production logging
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-WARN}
+      LOGGING_LEVEL_COM_EXAMPLE: ${LOGGING_LEVEL_COM_EXAMPLE:-INFO}
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - ai_prod_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 768M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ai-dashboard:
+    image: ghcr.io/${GITHUB_REPO}/ai-dashboard:latest
+    container_name: aiteam_frontend_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx-prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/${DOMAIN}/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/${DOMAIN}/privkey.pem:/etc/ssl/private/privkey.pem:ro
+    depends_on:
+      ai-orchestrator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ai_prod_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  ai_prod_network:
+    driver: bridge
+
+volumes:
+  ai_db_prod_data:
+    driver: local

@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: infisical-db
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: infisical_secure_password_change_me
+      POSTGRES_DB: infisical
+    volumes:
+      - infisical-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  infisical:
+    image: infisical/infisical:latest
+    container_name: infisical
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION_URI: postgresql://infisical:infisical_secure_password_change_me@postgres:5432/infisical
+      NODE_ENV: production
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  infisical-db:
+    driver: local

@@ -1,0 +1,103 @@
+# ═════════════════════════════════════════════════════════════════════════════
+# DEVELOPMENT ENVIRONMENT - AITEAM
+# ═════════════════════════════════════════════════════════════════════════════
+# Start: docker-compose -f infra/deployments/dev/docker-compose.yml up -d
+# Logs:  docker-compose -f infra/deployments/dev/docker-compose.yml logs -f
+# Stop:  docker-compose -f infra/deployments/dev/docker-compose.yml down
+# ═════════════════════════════════════════════════════════════════════════════
+
+services:
+  ai-db:
+    image: postgres:16-alpine
+    container_name: aiteam_db_dev
+    env_file: .env.dev
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ai_dev}
+      POSTGRES_USER: ${DB_USER:-ai_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password_change_me_12345}
+    volumes:
+      - ai_db_dev_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ai_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai_dev_network
+    restart: unless-stopped
+
+  ai-orchestrator:
+    build:
+      context: ../../../ai-orchestrator
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: aiteam_backend_dev
+    env_file: .env.dev
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DB_URL: jdbc:postgresql://ai-db:5432/${DB_NAME:-ai_dev}
+      DB_USER: ${DB_USER:-ai_dev}
+      DB_PASSWORD: ${DB_PASSWORD:-dev_password_change_me_12345}
+      ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:-dev-token-change-me}
+      LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key-change-me}
+      REPO_ALLOWLIST: ${REPO_ALLOWLIST:-backend/,frontend/,docs/,infra/,ai/}
+      WORKFLOW_PROTECT: ${WORKFLOW_PROTECT:-.github/workflows/}
+      # Debug settings
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
+      LOGGING_LEVEL_COM_EXAMPLE: ${LOGGING_LEVEL_COM_EXAMPLE:-DEBUG}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005}
+    depends_on:
+      ai-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "${JAVA_DEBUG_PORT:-5005}:5005"
+    networks:
+      - ai_dev_network
+    restart: unless-stopped
+    profiles:
+      - full
+      - backend
+
+  ai-dashboard:
+    build:
+      context: ../../../frontend
+      dockerfile: Dockerfile.dev
+    container_name: aiteam_frontend_dev
+    env_file: .env.dev
+    environment:
+      NG_CLI_ANALYTICS: ci
+      ANGULAR_ENVIRONMENT: ${ANGULAR_ENVIRONMENT:-development}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=4096}
+    ports:
+      - "4200:4200"
+    volumes:
+      # Bind mount source for hot reload
+      - ../../../frontend/src:/app/src
+      - ../../../frontend/angular.json:/app/angular.json
+      - ../../../frontend/tsconfig.json:/app/tsconfig.json
+      - ../../../frontend/tsconfig.app.json:/app/tsconfig.app.json
+      - ../../../frontend/tsconfig.spec.json:/app/tsconfig.spec.json
+      - ../../../frontend/nginx.conf:/app/nginx.conf
+      - ../../../frontend/proxy.conf.json:/app/proxy.conf.json
+    depends_on:
+      ai-orchestrator:
+        condition: service_started
+    networks:
+      - ai_dev_network
+    restart: unless-stopped
+    profiles:
+      - full
+      - frontend
+
+networks:
+  ai_dev_network:
+    driver: bridge
+
+volumes:
+  ai_db_dev_data:
+    driver: local
