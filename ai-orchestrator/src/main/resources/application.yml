@@ -74,6 +74,15 @@ spring:
             user-info-uri: https://gitlab.com/api/v4/user
             user-name-attribute: id
 
+logging:
+  level:
+    root: INFO
+    com.atlasia.ai: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] - %msg%n"
+
 management:
   endpoints:
     web:

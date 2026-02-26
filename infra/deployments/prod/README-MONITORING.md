@@ -1,13 +1,16 @@
 # Production Monitoring Stack
 
-Complete production monitoring setup for AI Orchestrator using Prometheus, Grafana, Node Exporter, and PostgreSQL Exporter.
+Complete production monitoring setup for AI Orchestrator using Prometheus, Grafana, Loki, Promtail, Jaeger, Node Exporter, and PostgreSQL Exporter.
 
 ## Architecture
 
 The monitoring stack includes:
 
 - **Prometheus**: Time-series database and metrics collector
-- **Grafana**: Visualization and dashboarding platform
+- **Grafana**: Unified visualization platform for metrics, logs, and traces
+- **Loki**: Centralized log aggregation system
+- **Promtail**: Log collection agent for Loki
+- **Jaeger**: Distributed tracing backend
 - **Node Exporter**: System-level metrics (CPU, memory, disk, network)
 - **PostgreSQL Exporter**: Database metrics and connection pool statistics
 - **Alertmanager**: Alert routing and notification management
@@ -37,6 +40,8 @@ docker-compose -f docker-compose-monitoring.yml up -d
 
 - **Prometheus**: http://localhost:9090
 - **Grafana**: http://localhost:3001 (or https://${DOMAIN}/grafana)
+- **Loki**: http://localhost:3100 (API only)
+- **Jaeger**: http://localhost:16686 (or https://${DOMAIN}/jaeger)
 - **Alertmanager**: http://localhost:9093
 
 Default Grafana credentials:
@@ -45,7 +50,7 @@ Default Grafana credentials:
 
 ## Grafana Dashboards
 
-Four pre-configured production dashboards are automatically provisioned:
+Five pre-configured production dashboards are automatically provisioned:
 
 ### 1. JVM Metrics Dashboard
 **UID**: `jvm-metrics-prod`
@@ -113,6 +118,37 @@ Monitors infrastructure resources:
 - Disk usage gauge
 - Network throughput by interface
 
+### 5. Logs Overview Dashboard
+**UID**: `logs-overview`
+
+Centralized log visualization with Loki:
+- Log volume by level (time series)
+- Authentication failures
+- AI agent execution errors
+- Rate limit violations
+- Database connectivity issues
+- Vault connectivity problems
+- Unhandled exceptions
+- Security events (90-day retention)
+
+**Key Features**:
+- Structured JSON log parsing
+- MDC context (correlationId, runId, userId)
+- Tiered retention (7d INFO, 30d WARN/ERROR, 90d security)
+- LogQL query examples in panel descriptions
+
+**Common Queries**:
+```logql
+# All errors
+{service="ai-orchestrator"} | json | level="ERROR"
+
+# Track workflow
+{service="ai-orchestrator"} | json | runId="<run-id>"
+
+# User activity
+{service="ai-orchestrator"} | json | userId="user@example.com"
+```
+
 ## Alerting Rules
 
 ### High Error Rate (>5%)
@@ -144,6 +180,33 @@ Monitors infrastructure resources:
 - **Severity**: Warning at 85%, Critical at 95%
 - **Action**: Review heap allocation, tune JVM settings, scale if needed
 
+### Log-Based Alerts (Loki)
+
+#### Database Connection Failures (>5/sec)
+- **Severity**: Critical
+- **Duration**: 2 minutes
+- **Action**: Check database connectivity, connection pool settings
+
+#### Vault Connectivity Loss
+- **Severity**: Critical
+- **Duration**: 2 minutes
+- **Action**: Verify Vault is running, check network connectivity
+
+#### Unhandled Exceptions (>10/sec)
+- **Severity**: Critical
+- **Duration**: 3 minutes
+- **Action**: Review application logs, investigate exception root cause
+
+#### Authentication Failures Spike (>2/sec)
+- **Severity**: Warning
+- **Duration**: 5 minutes
+- **Action**: Possible brute force attack, review authentication logs
+
+#### Rate Limit Violations (>5/sec)
+- **Severity**: Warning
+- **Duration**: 5 minutes
+- **Action**: Identify clients hitting rate limits, adjust limits if needed
+
 ## Configuration Files
 
 ### Prometheus Configuration
@@ -160,7 +223,7 @@ Retention: 90 days
 ### Alert Rules
 **Files**: 
 - `alerts-prod.yml` (production-specific)
-- `../../monitoring/alerts.yml` (shared base alerts)
+- `../../monitoring/alerts.yml` (shared base alerts with log-based rules)
 
 Alert groups:
 - `production_critical_alerts`: High error rates, pool exhaustion, memory
@@ -169,6 +232,44 @@ Alert groups:
 - `production_http_alerts`: Latency, error rates
 - `production_system_alerts`: CPU, memory, disk
 - `production_postgres_alerts`: Database health
+- `orchestrator_logs`: Log-based alerts from Loki
+
+### Loki Configuration
+**File**: `config/loki-config.yml`
+
+Features:
+- BoltDB shipper storage backend
+- 90-day retention with compaction
+- Log retention policies by level
+- Ruler for log-based alerting
+- Query limits and rate limiting
+
+Storage:
+- Chunks directory: `/loki/chunks`
+- Index directory: `/loki/boltdb-shipper-active`
+- Rules directory: `/loki/rules`
+
+### Promtail Configuration
+**File**: `config/promtail-config.yml`
+
+Scrape jobs:
+- `ai-orchestrator`: Docker containers with JSON log parsing
+- `system`: System syslog
+- `docker`: General Docker container logs
+
+Features:
+- Automatic MDC context extraction (correlationId, runId, userId)
+- Retention label assignment based on level/category
+- JSON log parsing with structured field extraction
+
+### Loki Alert Rules
+**File**: `config/loki-rules.yml`
+
+Log-based alert groups:
+- `log_alerts_critical`: Database failures, Vault issues, exceptions
+- `log_alerts_security`: Auth failures, rate limits
+- `log_alerts_application`: Agent errors, memory pressure
+- `log_alerts_infrastructure`: SSL/TLS, circuit breakers
 
 ### PostgreSQL Exporter Queries
 **File**: `postgres-exporter-queries.yaml`
@@ -237,6 +338,29 @@ Monitor these metrics to determine when to scale:
 3. Check service ports are exposed correctly
 4. Review Prometheus logs: `docker logs orchestrator-prometheus-prod`
 
+### No Logs in Loki
+
+1. Check Promtail is running: `docker ps | grep promtail`
+2. Check Promtail logs: `docker logs promtail-prod --tail 50`
+3. Verify Loki connectivity: `docker exec promtail-prod wget -O- http://loki-prod:3100/ready`
+4. Check application JSON logs: `docker logs ai-orchestrator | head -1 | jq .`
+5. Verify Promtail targets: `curl http://localhost:9080/targets`
+6. Check Loki ingestion: `curl http://localhost:3100/loki/api/v1/labels | jq`
+
+### Loki Disk Space Issues
+
+1. Check disk usage: `docker exec loki-prod du -sh /loki/*`
+2. Trigger compaction: `curl -X POST http://localhost:3100/loki/api/v1/compact`
+3. Reduce retention in `config/loki-config.yml` and restart
+4. Check for stuck compaction: `docker logs loki-prod | grep compactor`
+
+### Slow Log Queries
+
+1. Always use label filters: `{service="ai-orchestrator"}`
+2. Limit time ranges: `[5m]` instead of `[24h]`
+3. Avoid unbounded queries
+4. Check Loki metrics: `curl http://localhost:3100/metrics | grep loki_request_duration`
+
 ### Missing Metrics
 
 1. Verify Spring Boot Actuator is enabled: `/actuator/prometheus`
@@ -284,6 +408,30 @@ docker run --rm -v prometheus-prod-data:/data -v $(pwd):/backup alpine tar czf /
 # Start Prometheus
 docker-compose -f docker-compose-monitoring.yml start prometheus
 ```
+
+### Backup Loki Data
+
+```bash
+# Stop Loki
+docker-compose -f docker-compose-monitoring.yml stop loki
+
+# Backup data directory
+docker run --rm -v loki-prod-data:/data -v $(pwd):/backup alpine tar czf /backup/loki-backup.tar.gz /data
+
+# Start Loki
+docker-compose -f docker-compose-monitoring.yml start loki
+```
+
+## Further Reading
+
+- **Complete Observability Guide**: `../../docs/OBSERVABILITY.md`
+- **Logging Quick Start**: `LOGGING_QUICKSTART.md`
+- **Prometheus Metrics**: `../../docs/PROMETHEUS_METRICS.md`
+- **WebSocket Monitoring**: `../../docs/WEBSOCKET_MONITORING.md`
+- **Loki Documentation**: https://grafana.com/docs/loki/latest/
+- **LogQL Reference**: https://grafana.com/docs/loki/latest/logql/
+- **Prometheus Documentation**: https://prometheus.io/docs/
+- **Grafana Documentation**: https://grafana.com/docs/
 
 ### Update Alert Rules
 

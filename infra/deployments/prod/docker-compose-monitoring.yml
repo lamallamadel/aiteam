@@ -45,15 +45,18 @@ services:
     volumes:
       - grafana-prod-data:/var/lib/grafana
       - ./config/datasources-prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./config/datasources-loki.yml:/etc/grafana/provisioning/datasources/loki.yml:ro
       - ./config/dashboards-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./config/dashboard-jvm-metrics.json:/var/lib/grafana/dashboards/jvm-metrics.json:ro
       - ./config/dashboard-http-metrics.json:/var/lib/grafana/dashboards/http-metrics.json:ro
       - ./config/dashboard-database-pool.json:/var/lib/grafana/dashboards/database-pool.json:ro
       - ./config/dashboard-system-resources.json:/var/lib/grafana/dashboards/system-resources.json:ro
+      - ./config/dashboard-logs-overview.json:/var/lib/grafana/dashboards/logs-overview.json:ro
     ports:
       - "3001:3000"
     depends_on:
       - prometheus
+      - loki
     networks:
       - monitoring-prod
     restart: unless-stopped
@@ -174,6 +177,52 @@ services:
           cpus: '0.5'
           memory: 512M
 
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: loki-prod
+    volumes:
+      - ./config/loki-config.yml:/etc/loki/config.yml:ro
+      - ./config/loki-rules.yml:/loki/rules/fake/loki-rules.yml:ro
+      - loki-prod-data:/loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config.yml
+    networks:
+      - monitoring-prod
+      - ai_prod_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: promtail-prod
+    volumes:
+      - ./config/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring-prod
+      - ai_prod_network
+    depends_on:
+      - loki
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
 volumes:
   prometheus-prod-data:
     driver: local
@@ -182,6 +231,8 @@ volumes:
   alertmanager-prod-data:
     driver: local
   jaeger-prod-data:
+    driver: local
+  loki-prod-data:
     driver: local
 
 networks:
