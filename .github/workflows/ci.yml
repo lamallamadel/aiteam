@@ -24,7 +24,7 @@ jobs:
           cache: maven
       - name: Backend - Verify
         run: |
-          cd backend
+          cd ai-orchestrator
           ./mvnw -B clean verify
 
   frontend:

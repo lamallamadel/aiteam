@@ -198,14 +198,14 @@ deploy-production:
         git pull origin main --quiet
         
         echo '🐳 Pulling latest images from GHCR...'
-        docker-compose -f docker-compose.prod.yml pull
+        docker-compose -f infra/deployments/prod/docker-compose.yml pull
         
         echo '💾 Running pre-deployment backup...'
-        ./scripts/deploy.sh prod
+        ./infra/ci-cd/scripts/deploy-prod.sh
         
         echo '✅ Deployment complete'
         echo '📊 Service status:'
-        docker-compose -f docker-compose.prod.yml ps
+        docker-compose -f infra/deployments/prod/docker-compose.yml ps
       "
     - echo "✅ Production deployment successful"
   environment:
@@ -234,14 +234,14 @@ deploy-staging:
         git pull origin develop --quiet
         
         echo '🐳 Pulling latest images from GHCR...'
-        docker-compose -f docker-compose.dev.yml pull
+        docker-compose -f infra/deployments/dev/docker-compose.yml pull
         
         echo '🚀 Starting staging environment...'
-        docker-compose -f docker-compose.dev.yml up -d
+        docker-compose -f infra/deployments/dev/docker-compose.yml up -d
         
         echo '✅ Staging deployment complete'
         echo '📊 Service status:'
-        docker-compose -f docker-compose.dev.yml ps
+        docker-compose -f infra/deployments/dev/docker-compose.yml ps
       "
     - echo "✅ Staging deployment successful"
   environment:
@@ -269,10 +269,10 @@ rollback-production:
         set -e
         cd $DEPLOY_DIR
         echo '🔄 Running rollback script...'
-        ./scripts/rollback.sh prod
+        ./infra/ci-cd/scripts/deploy-prod.sh
         echo '✅ Rollback complete'
         echo '📊 Service status after rollback:'
-        docker-compose -f docker-compose.prod.yml ps
+        docker-compose -f infra/deployments/prod/docker-compose.yml ps
       "
     - echo "✅ Production rollback successful"
   environment:
