@@ -1,0 +1,31 @@
+{
+  "name": "atlasia-load-tests",
+  "version": "1.0.0",
+  "description": "K6 load tests for Atlasia AI Orchestrator",
+  "scripts": {
+    "test:smoke": "k6 run smoke-test.js",
+    "test:api": "k6 run api-load-test.js",
+    "test:a2a": "k6 run a2a-load-test.js",
+    "test:websocket": "k6 run websocket-load-test.js",
+    "test:all": "k6 run smoke-test.js && k6 run api-load-test.js && k6 run a2a-load-test.js && k6 run websocket-load-test.js",
+    "test:local": "BASE_URL=http://localhost:8088 WS_URL=ws://localhost:8088 npm run test:all",
+    "test:docker": "docker run --rm --network host -v $(pwd):/scripts -e BASE_URL=http://localhost:8088 -e WS_URL=ws://localhost:8088 grafana/k6:0.49.0 run",
+    "analyze": "../../../infra/ci-cd/scripts/analyze-load-results.sh ../../../target/load-test-results"
+  },
+  "keywords": [
+    "k6",
+    "load-testing",
+    "performance",
+    "atlasia"
+  ],
+  "author": "Atlasia Team",
+  "license": "MIT",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atlasia/ai-orchestrator"
+  },
+  "bugs": {
+    "url": "https://github.com/atlasia/ai-orchestrator/issues"
+  }
+}

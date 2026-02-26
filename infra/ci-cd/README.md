@@ -112,7 +112,12 @@ chmod +x infra/deployments/prod/*.sh
    - Run backend tests (Maven verify)
    - Run frontend E2E tests (Playwright)
 
-3. **Deploy** (manual trigger)
+3. **Load Test** (manual trigger)
+   - Run k6 load tests against staging
+   - Run k6 load tests against production
+   - Performance regression detection
+
+4. **Deploy** (manual trigger)
    - Deploy to development (develop branch)
    - Deploy to production (main branch)
    - Rollback production (manual trigger)
@@ -138,6 +143,14 @@ Set these in GitLab Settings → CI/CD → Variables:
 - `LLM_API_KEY` - LLM provider API key (OpenAI, DeepSeek, etc.)
 - `GITHUB_REPO` - GitHub repo path (e.g., `myorg/aiteam`)
 - `DOMAIN` - Production domain (e.g., `api.example.com`)
+
+**Load Testing:**
+- `LOAD_TEST_URL` - Staging API URL for load tests
+- `LOAD_TEST_WS_URL` - Staging WebSocket URL
+- `PRODUCTION_URL` - Production API URL for load tests
+- `PRODUCTION_WS_URL` - Production WebSocket URL
+- `AUTH_TOKEN` - Test authentication token
+- `A2A_TOKEN` - A2A protocol authentication token
 
 ### Generate Base64 Encoded Values
 
@@ -712,15 +725,109 @@ sudo certbot renew
 sudo systemctl status certbot.timer
 ```
 
+## 🔬 Load Testing
+
+### Overview
+
+The platform includes comprehensive load testing using [k6](https://k6.io/) to validate performance under realistic load conditions.
+
+### Quick Start
+
+```bash
+# Run all load tests locally
+cd infra/ci-cd/scripts
+./load-test.sh all local
+
+# Run specific test
+./load-test.sh api local        # API endpoints only
+./load-test.sh a2a local        # A2A protocol only
+./load-test.sh websocket local  # WebSocket collaboration only
+```
+
+### Test Scenarios
+
+1. **API Load Test** (`api-load-test.js`)
+   - Tests: `/api/runs` endpoints
+   - Users: 100+ concurrent
+   - Duration: ~20 minutes
+   - Baseline: p95 < 500ms
+
+2. **A2A Protocol Test** (`a2a-load-test.js`)
+   - Tests: `/api/a2a/tasks` endpoints
+   - Agents: 100+ concurrent
+   - Duration: ~18 minutes
+   - Baseline: p95 < 500ms (submission), < 2s (execution)
+
+3. **WebSocket Test** (`websocket-load-test.js`)
+   - Tests: `/ws/runs/{runId}/collaboration`
+   - Connections: 50+ concurrent
+   - Duration: ~18 minutes
+   - Baseline: p95 < 1s (connection), < 100ms (messages)
+
+### CI/CD Integration
+
+Load tests are available as manual jobs in GitLab CI:
+
+```yaml
+# In .gitlab-ci.yml
+load-test:
+  stage: load-test
+  when: manual
+  script:
+    - bash infra/ci-cd/scripts/load-test.sh all staging
+
+load-test-production:
+  stage: load-test
+  when: manual
+  script:
+    - bash infra/ci-cd/scripts/load-test.sh all production
+```
+
+**Trigger manually**:
+- GitLab UI: Pipeline → load-test stage → load-test job → ▶ Run
+- Results stored in artifacts for 30 days (staging) or 90 days (production)
+
+### Performance Baselines
+
+| Metric | Baseline | Test |
+|--------|----------|------|
+| API p95 latency | < 500ms | `api-load-test.js` |
+| AI p95 latency | < 2s | `api-load-test.js` |
+| WebSocket connection | < 1s | `websocket-load-test.js` |
+| WebSocket messages | < 100ms | `websocket-load-test.js` |
+| Error rate | < 1% | All tests |
+
+### Results Analysis
+
+```bash
+# Analyze results (automatic after test run)
+./infra/ci-cd/scripts/analyze-load-results.sh ../../../ai-orchestrator/target/load-test-results
+
+# View HTML report
+open ai-orchestrator/target/load-test-results/load-test-report.html
+
+# Extract metrics
+jq '.metrics.http_req_duration.values.p95' results/*_summary.json
+```
+
+### Related Documentation
+
+- [PERFORMANCE_BENCHMARKS.md](../../docs/PERFORMANCE_BENCHMARKS.md) - **Complete performance documentation**
+- [LOAD_TESTING_QUICKREF.md](scripts/LOAD_TESTING_QUICKREF.md) - Quick reference guide
+- [Load Test Examples](../../ai-orchestrator/src/test/load/EXAMPLES.md) - Practical examples
+- [Load Test README](../../ai-orchestrator/src/test/load/README.md) - Test scenarios
+
 ## 📚 Related Documentation
 
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - **Implementation Overview & Summary**
 - [BACKUP_ROLLBACK_QUICKREF.md](BACKUP_ROLLBACK_QUICKREF.md) - **Backup & Rollback Quick Reference Card**
 - [BACKUP_ROLLBACK_README.md](scripts/BACKUP_ROLLBACK_README.md) - Detailed backup & rollback documentation
+- [LOAD_TESTING_QUICKREF.md](scripts/LOAD_TESTING_QUICKREF.md) - **Load Testing Quick Reference**
 - [DEPLOYMENT.md](../../DEPLOYMENT.md) - Full deployment guide
 - [DEPLOYMENT_QUICKREF.md](../../DEPLOYMENT_QUICKREF.md) - Quick reference
 - [DEV_SETUP.md](../../DEV_SETUP.md) - Local development setup
 - [SECURITY.md](../../SECURITY.md) - Security best practices
+- [PERFORMANCE_BENCHMARKS.md](../../docs/PERFORMANCE_BENCHMARKS.md) - **Performance benchmarks and load testing**
 
 ## 🔄 Migration from Root CI/CD
 

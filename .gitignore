@@ -85,3 +85,8 @@ backups/
 *.sql.gz
 *.dump
 *.backup
+
+# Load test results (k6)
+ai-orchestrator/target/load-test-results/
+load-test-results/
+*.k6.json

@@ -18,6 +18,7 @@
 stages:
   - build
   - test
+  - load-test
   - deploy
 
 variables:
@@ -173,6 +174,74 @@ test-frontend:
       junit: frontend/test-results/junit.xml
     expire_in: 30 days
     when: always
+
+# ─────────────────────────────────────────────────────────────
+# LOAD TEST
+# ─────────────────────────────────────────────────────────────
+
+load-test:
+  stage: load-test
+  image: grafana/k6:0.49.0
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"'
+      when: manual
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_DRIVER: overlay2
+    BASE_URL: "${LOAD_TEST_URL:-http://localhost:8088}"
+    WS_URL: "${LOAD_TEST_WS_URL:-ws://localhost:8088}"
+  before_script:
+    - apk add --no-cache bash jq bc curl
+    - chmod +x infra/ci-cd/scripts/load-test.sh
+    - chmod +x infra/ci-cd/scripts/analyze-load-results.sh
+  script:
+    - echo "🚀 Starting load tests..."
+    - echo "   Target URL: $BASE_URL"
+    - echo "   WebSocket URL: $WS_URL"
+    - |
+      # Start local environment if testing locally
+      if [ "$BASE_URL" = "http://localhost:8088" ]; then
+        echo "⚠️  Local testing mode - ensure services are running"
+      fi
+    - bash infra/ci-cd/scripts/load-test.sh all staging
+    - echo "✅ Load tests completed"
+  artifacts:
+    name: "load-test-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/load-test-results/
+    reports:
+      junit: ai-orchestrator/target/load-test-results/*_summary.json
+    expire_in: 30 days
+    when: always
+  allow_failure: true
+
+load-test-production:
+  stage: load-test
+  image: grafana/k6:0.49.0
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  variables:
+    BASE_URL: "${PRODUCTION_URL}"
+    WS_URL: "${PRODUCTION_WS_URL}"
+  before_script:
+    - apk add --no-cache bash jq bc curl
+    - chmod +x infra/ci-cd/scripts/load-test.sh
+    - chmod +x infra/ci-cd/scripts/analyze-load-results.sh
+  script:
+    - echo "🚀 Starting production load tests..."
+    - echo "   Target URL: $BASE_URL"
+    - bash infra/ci-cd/scripts/load-test.sh all production
+    - echo "✅ Production load tests completed"
+  artifacts:
+    name: "load-test-prod-results-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - ai-orchestrator/target/load-test-results/
+    expire_in: 90 days
+    when: always
+  allow_failure: false
 
 # ─────────────────────────────────────────────────────────────
 # DEPLOY
