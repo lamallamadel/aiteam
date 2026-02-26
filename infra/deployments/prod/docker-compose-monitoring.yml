@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: orchestrator-prometheus-prod
+    volumes:
+      - ./prometheus-prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts-prod.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-prod-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    networks:
+      - monitoring-prod
+      - ai_prod_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: orchestrator-grafana-prod
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?error - GRAFANA_ADMIN_PASSWORD not set}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${DOMAIN}/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_SECURITY_STRICT_TRANSPORT_SECURITY=true
+      - GF_SNAPSHOTS_EXTERNAL_ENABLED=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - grafana-prod-data:/var/lib/grafana
+      - ./config/datasources-prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./config/dashboards-provisioning.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./config/dashboard-jvm-metrics.json:/var/lib/grafana/dashboards/jvm-metrics.json:ro
+      - ./config/dashboard-http-metrics.json:/var/lib/grafana/dashboards/http-metrics.json:ro
+      - ./config/dashboard-database-pool.json:/var/lib/grafana/dashboards/database-pool.json:ro
+      - ./config/dashboard-system-resources.json:/var/lib/grafana/dashboards/system-resources.json:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter-prod
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.netclass.ignored-devices=^(veth.*|docker.*|br-.*)$$'
+      - '--collector.netdev.device-exclude=^(veth.*|docker.*|br-.*)$$'
+    volumes:
+      - /:/host:ro,rslave
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - monitoring-prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter-prod
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER:-aiteam}:${DB_PASSWORD:?error - DB_PASSWORD not set}@ai-db:5432/${DB_NAME:-aiteam}?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres_exporter/queries.yaml
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
+      PG_EXPORTER_INCLUDE_DATABASES: "${DB_NAME:-aiteam}"
+      PG_EXPORTER_EXCLUDE_DATABASES: "template0,template1"
+    volumes:
+      - ./postgres-exporter-queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    ports:
+      - "9187:9187"
+    networks:
+      - monitoring-prod
+      - ai_prod_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager-prod
+    volumes:
+      - ./alertmanager-prod.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-prod-data:/alertmanager
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://${DOMAIN}/alertmanager'
+    networks:
+      - monitoring-prod
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+volumes:
+  prometheus-prod-data:
+    driver: local
+  grafana-prod-data:
+    driver: local
+  alertmanager-prod-data:
+    driver: local
+
+networks:
+  monitoring-prod:
+    driver: bridge
+  ai_prod_network:
+    external: true

@@ -1,0 +1,288 @@
+groups:
+  - name: production_critical_alerts
+    interval: 30s
+    rules:
+      # High Error Rate Alert (>5%)
+      - alert: HighErrorRateProduction
+        expr: (sum(rate(http_server_requests_seconds_count{status=~"5..",job="ai-orchestrator"}[5m])) / sum(rate(http_server_requests_seconds_count{job="ai-orchestrator"}[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          category: reliability
+          environment: production
+        annotations:
+          summary: "High HTTP error rate in production"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%). Service may be degraded."
+          dashboard: "http://grafana:3000/d/http-metrics-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/high-error-rate"
+
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolExhausted
+        expr: (hikaricp_connections_active{job="ai-orchestrator"} / hikaricp_connections_max{job="ai-orchestrator"}) > 0.9
+        for: 3m
+        labels:
+          severity: critical
+          category: database
+          environment: production
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Connection pool is {{ $value | humanizePercentage }} full (threshold: 90%). Database operations may start failing."
+          dashboard: "http://grafana:3000/d/database-pool-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/db-pool-exhaustion"
+
+      # High Memory Usage (>85%)
+      - alert: HighMemoryUsageProduction
+        expr: (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          environment: production
+        annotations:
+          summary: "High memory usage on production host"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 85%). System may experience performance degradation."
+          dashboard: "http://grafana:3000/d/system-resources-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/high-memory-usage"
+
+      # Critical Memory Usage (>95%)
+      - alert: CriticalMemoryUsageProduction
+        expr: (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: resources
+          environment: production
+        annotations:
+          summary: "CRITICAL: Memory exhaustion imminent"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 95%). System stability at risk."
+          dashboard: "http://grafana:3000/d/system-resources-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/critical-memory"
+
+      # Deployment Failure Detection
+      - alert: DeploymentFailure
+        expr: up{job="ai-orchestrator"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: deployment
+          environment: production
+        annotations:
+          summary: "AI Orchestrator deployment failed or service down"
+          description: "Service has been unreachable for 2+ minutes. Deployment may have failed."
+          dashboard: "http://grafana:3000/d/deployment-status-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/deployment-failure"
+
+  - name: production_jvm_alerts
+    interval: 30s
+    rules:
+      # High JVM Heap Usage
+      - alert: HighJVMHeapUsage
+        expr: (sum(jvm_memory_used_bytes{area="heap",job="ai-orchestrator"}) / sum(jvm_memory_max_bytes{area="heap",job="ai-orchestrator"})) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: jvm
+          environment: production
+        annotations:
+          summary: "High JVM heap memory usage"
+          description: "Heap usage is {{ $value | humanizePercentage }} (threshold: 85%). Application may experience GC pressure."
+          dashboard: "http://grafana:3000/d/jvm-metrics-prod"
+
+      # Critical JVM Heap Usage
+      - alert: CriticalJVMHeapUsage
+        expr: (sum(jvm_memory_used_bytes{area="heap",job="ai-orchestrator"}) / sum(jvm_memory_max_bytes{area="heap",job="ai-orchestrator"})) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: jvm
+          environment: production
+        annotations:
+          summary: "CRITICAL: JVM heap nearly exhausted"
+          description: "Heap usage is {{ $value | humanizePercentage }} (threshold: 95%). OutOfMemoryError imminent."
+          dashboard: "http://grafana:3000/d/jvm-metrics-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/jvm-heap-exhaustion"
+
+      # High GC Time
+      - alert: HighGCTime
+        expr: rate(jvm_gc_pause_seconds_sum{job="ai-orchestrator"}[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          category: jvm
+          environment: production
+        annotations:
+          summary: "High garbage collection time"
+          description: "GC is consuming {{ $value | humanizePercentage }} of CPU time (threshold: 10%). Application performance degraded."
+          dashboard: "http://grafana:3000/d/jvm-metrics-prod"
+
+  - name: production_database_alerts
+    interval: 30s
+    rules:
+      # Database Connection Pool Low
+      - alert: DatabaseConnectionPoolLow
+        expr: (hikaricp_connections_active{job="ai-orchestrator"} / hikaricp_connections_max{job="ai-orchestrator"}) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+          environment: production
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Connection pool is {{ $value | humanizePercentage }} full (threshold: 75%)."
+          dashboard: "http://grafana:3000/d/database-pool-prod"
+
+      # Long-running database queries
+      - alert: LongRunningDatabaseQueries
+        expr: pg_stat_activity_max_tx_duration{job="postgresql"} > 300
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          environment: production
+        annotations:
+          summary: "Long-running database transaction detected"
+          description: "Transaction has been running for {{ $value }}s (threshold: 300s). May indicate a stuck query."
+          dashboard: "http://grafana:3000/d/database-pool-prod"
+
+      # Database connection errors
+      - alert: DatabaseConnectionErrors
+        expr: rate(hikaricp_connections_creation_errors_total{job="ai-orchestrator"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: database
+          environment: production
+        annotations:
+          summary: "Database connection creation errors"
+          description: "Connection errors at {{ $value }}/sec (threshold: 0.1/sec). Database may be unavailable."
+          dashboard: "http://grafana:3000/d/database-pool-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/db-connection-errors"
+
+  - name: production_http_alerts
+    interval: 30s
+    rules:
+      # High HTTP Request Latency P95
+      - alert: HighHTTPLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job="ai-orchestrator"}[5m])) by (le)) > 2
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+          environment: production
+        annotations:
+          summary: "High HTTP request latency (P95)"
+          description: "P95 latency is {{ $value }}s (threshold: 2s). Users experiencing slow response times."
+          dashboard: "http://grafana:3000/d/http-metrics-prod"
+
+      # High HTTP Request Latency P99
+      - alert: HighHTTPLatencyP99
+        expr: histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job="ai-orchestrator"}[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+          environment: production
+        annotations:
+          summary: "CRITICAL: High HTTP request latency (P99)"
+          description: "P99 latency is {{ $value }}s (threshold: 5s). Severe performance degradation."
+          dashboard: "http://grafana:3000/d/http-metrics-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/high-latency"
+
+      # High HTTP Request Rate
+      - alert: HTTPRequestRateSpike
+        expr: rate(http_server_requests_seconds_count{job="ai-orchestrator"}[5m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          category: traffic
+          environment: production
+        annotations:
+          summary: "Unusual HTTP request rate spike"
+          description: "Request rate is {{ $value }}/sec (threshold: 100/sec). May indicate traffic spike or DDoS."
+          dashboard: "http://grafana:3000/d/http-metrics-prod"
+
+  - name: production_system_alerts
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle",job="node-exporter"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          environment: production
+        annotations:
+          summary: "High CPU usage on production host"
+          description: "CPU usage is {{ $value | humanizePercentage }} (threshold: 85%)."
+          dashboard: "http://grafana:3000/d/system-resources-prod"
+
+      # High Disk Usage
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/"})) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+          environment: production
+        annotations:
+          summary: "High disk usage on production host"
+          description: "Disk usage is {{ $value | humanizePercentage }} (threshold: 85%)."
+          dashboard: "http://grafana:3000/d/system-resources-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/high-disk-usage"
+
+      # Critical Disk Usage
+      - alert: CriticalDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/"} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/"})) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: resources
+          environment: production
+        annotations:
+          summary: "CRITICAL: Disk nearly full"
+          description: "Disk usage is {{ $value | humanizePercentage }} (threshold: 95%). System may become unresponsive."
+          dashboard: "http://grafana:3000/d/system-resources-prod"
+          runbook: "https://docs.atlasia.ai/runbooks/critical-disk-usage"
+
+  - name: production_postgres_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL Down
+      - alert: PostgreSQLDown
+        expr: up{job="postgresql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+          environment: production
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL has been unreachable for 1+ minute."
+          runbook: "https://docs.atlasia.ai/runbooks/postgres-down"
+
+      # Too many database connections
+      - alert: TooManyDatabaseConnections
+        expr: sum(pg_stat_activity_count{job="postgresql"}) > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+          environment: production
+        annotations:
+          summary: "High number of database connections"
+          description: "Active connections: {{ $value }} (threshold: 80). May indicate connection leak."
+          dashboard: "http://grafana:3000/d/database-pool-prod"
+
+      # High database cache miss ratio
+      - alert: HighDatabaseCacheMissRatio
+        expr: (pg_stat_database_blks_read{job="postgresql"} / (pg_stat_database_blks_read{job="postgresql"} + pg_stat_database_blks_hit{job="postgresql"})) > 0.1
+        for: 15m
+        labels:
+          severity: warning
+          category: database
+          environment: production
+        annotations:
+          summary: "High database cache miss ratio"
+          description: "Cache miss ratio is {{ $value | humanizePercentage }} (threshold: 10%). Database performance degraded."
+          dashboard: "http://grafana:3000/d/database-pool-prod"

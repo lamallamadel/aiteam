@@ -1,0 +1,380 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "gridPos": {"h": 3, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "content": "# JVM Metrics Dashboard - Production\n\nComprehensive monitoring of JVM heap, garbage collection, threads, and memory pools for AI Orchestrator production environment.",
+        "mode": "markdown"
+      },
+      "title": "Overview",
+      "type": "text"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.75},
+              {"color": "orange", "value": 0.85},
+              {"color": "red", "value": 0.95}
+            ]
+          },
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 3},
+      "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\",job=\"ai-orchestrator\"}) / sum(jvm_memory_max_bytes{area=\"heap\",job=\"ai-orchestrator\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Heap Usage",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Memory (MB)",
+            "axisPlacement": "auto",
+            "fillOpacity": 20,
+            "lineWidth": 2
+          },
+          "unit": "decmbytes"
+        }
+      },
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 3},
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\",job=\"ai-orchestrator\"}) / 1048576",
+          "legendFormat": "Heap Used",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(jvm_memory_committed_bytes{area=\"heap\",job=\"ai-orchestrator\"}) / 1048576",
+          "legendFormat": "Heap Committed",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\",job=\"ai-orchestrator\"}) / 1048576",
+          "legendFormat": "Heap Max",
+          "refId": "C"
+        }
+      ],
+      "title": "Heap Memory Trend",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.75},
+              {"color": "red", "value": 0.85}
+            ]
+          },
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 9},
+      "id": 4,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"nonheap\",job=\"ai-orchestrator\"}) / sum(jvm_memory_max_bytes{area=\"nonheap\",job=\"ai-orchestrator\"})",
+          "refId": "A"
+        }
+      ],
+      "title": "Non-Heap Usage",
+      "type": "gauge"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Collections/sec",
+            "axisPlacement": "auto",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_count{job=\"ai-orchestrator\"}[5m])",
+          "legendFormat": "{{action}} - {{cause}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Garbage Collection Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Duration (ms)",
+            "axisPlacement": "auto",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_sum{job=\"ai-orchestrator\"}[5m]) * 1000 / rate(jvm_gc_pause_seconds_count{job=\"ai-orchestrator\"}[5m])",
+          "legendFormat": "{{action}} - {{cause}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Average GC Pause Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red", "value": 200}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 23},
+      "id": 7,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_threads_live{job=\"ai-orchestrator\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Live Threads",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Thread Count",
+            "axisPlacement": "auto",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 23},
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_threads_live{job=\"ai-orchestrator\"}",
+          "legendFormat": "Live Threads",
+          "refId": "A"
+        },
+        {
+          "expr": "jvm_threads_daemon{job=\"ai-orchestrator\"}",
+          "legendFormat": "Daemon Threads",
+          "refId": "B"
+        },
+        {
+          "expr": "jvm_threads_peak{job=\"ai-orchestrator\"}",
+          "legendFormat": "Peak Threads",
+          "refId": "C"
+        }
+      ],
+      "title": "Thread Statistics",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Memory (MB)",
+            "axisPlacement": "auto",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "decmbytes"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31},
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=\"ai-orchestrator\"} / 1048576",
+          "legendFormat": "{{id}} - {{area}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory Pool Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisLabel": "Classes",
+            "axisPlacement": "auto",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31},
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "expr": "jvm_classes_loaded{job=\"ai-orchestrator\"}",
+          "legendFormat": "Loaded Classes",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(jvm_classes_unloaded_total{job=\"ai-orchestrator\"}[5m])",
+          "legendFormat": "Unload Rate",
+          "refId": "B"
+        }
+      ],
+      "title": "Class Loading",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["jvm", "production", "performance"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "JVM Metrics - Production",
+  "uid": "jvm-metrics-prod",
+  "version": 1
+}

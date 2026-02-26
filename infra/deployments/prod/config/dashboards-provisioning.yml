@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'Production Dashboards'
+    orgId: 1
+    folder: 'AI Orchestrator Production'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

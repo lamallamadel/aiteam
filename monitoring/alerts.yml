@@ -217,3 +217,127 @@ groups:
           summary: "High agent step error rate"
           description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
           dashboard: "http://grafana:3000/d/metrics-overview"
+
+      # High HTTP Error Rate (>5%)
+      - alert: HighHTTPErrorRate
+        expr: (sum(rate(http_server_requests_seconds_count{status=~"5..",job="ai-orchestrator"}[5m])) / sum(rate(http_server_requests_seconds_count{job="ai-orchestrator"}[5m]))) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          category: reliability
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "HTTP 5xx error rate is {{ $value | humanizePercentage }} (threshold: 5%). Service may be degraded."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/high-error-rate"
+
+  - name: orchestrator_database
+    interval: 30s
+    rules:
+      # Database Connection Pool Exhaustion
+      - alert: DatabaseConnectionPoolExhausted
+        expr: (hikaricp_connections_active{job="ai-orchestrator"} / hikaricp_connections_max{job="ai-orchestrator"}) > 0.9
+        for: 3m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "Connection pool is {{ $value | humanizePercentage }} full (threshold: 90%). Database operations may start failing."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/db-pool-exhaustion"
+
+      # Database Connection Pool Warning
+      - alert: DatabaseConnectionPoolHigh
+        expr: (hikaricp_connections_active{job="ai-orchestrator"} / hikaricp_connections_max{job="ai-orchestrator"}) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Database connection pool usage high"
+          description: "Connection pool is {{ $value | humanizePercentage }} full (threshold: 75%)."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+
+  - name: orchestrator_resources
+    interval: 30s
+    rules:
+      # High Memory Usage (>85%)
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High memory usage on host"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 85%). System may experience performance degradation."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/high-memory-usage"
+
+      # Critical Memory Usage (>95%)
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: resources
+        annotations:
+          summary: "CRITICAL: Memory exhaustion imminent"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 95%). System stability at risk."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/critical-memory"
+
+      # High JVM Heap Usage (>85%)
+      - alert: HighJVMHeapUsage
+        expr: (sum(jvm_memory_used_bytes{area="heap",job="ai-orchestrator"}) / sum(jvm_memory_max_bytes{area="heap",job="ai-orchestrator"})) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          category: jvm
+        annotations:
+          summary: "High JVM heap memory usage"
+          description: "Heap usage is {{ $value | humanizePercentage }} (threshold: 85%). Application may experience GC pressure."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+
+      # Critical JVM Heap Usage (>95%)
+      - alert: CriticalJVMHeapUsage
+        expr: (sum(jvm_memory_used_bytes{area="heap",job="ai-orchestrator"}) / sum(jvm_memory_max_bytes{area="heap",job="ai-orchestrator"})) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: jvm
+        annotations:
+          summary: "CRITICAL: JVM heap nearly exhausted"
+          description: "Heap usage is {{ $value | humanizePercentage }} (threshold: 95%). OutOfMemoryError imminent."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/jvm-heap-exhaustion"
+
+  - name: orchestrator_deployment
+    interval: 30s
+    rules:
+      # Deployment Failure Detection
+      - alert: DeploymentFailure
+        expr: up{job="ai-orchestrator"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: deployment
+        annotations:
+          summary: "AI Orchestrator deployment failed or service down"
+          description: "Service has been unreachable for 2+ minutes. Deployment may have failed."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/deployment-failure"
+
+      # Frequent Restarts
+      - alert: FrequentRestarts
+        expr: changes(process_start_time_seconds{job="ai-orchestrator"}[15m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: deployment
+        annotations:
+          summary: "Frequent application restarts detected"
+          description: "Application has restarted {{ $value }} times in the last 15 minutes. May indicate stability issues."
+          dashboard: "http://grafana:3000/d/metrics-overview"
+          runbook: "https://docs.atlasia.ai/runbooks/frequent-restarts"
