@@ -27,16 +27,16 @@ import { MfaSetupComponent } from './components/mfa-setup.component';
 import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
-  { path: '', redirectTo: '/chat', pathMatch: 'full' },
+  { path: '', redirectTo: '/onboarding', pathMatch: 'full' },
   { path: 'auth/login', component: LoginComponent },
   { path: 'auth/register', component: RegisterComponent },
   { path: 'auth/forgot-password', component: ForgotPasswordComponent },
   { path: 'auth/reset-password', component: ResetPasswordComponent },
   { path: 'auth/callback', component: OAuth2CallbackComponent },
   { path: 'onboarding', component: OnboardingFlowComponent },
-  { path: 'chat', component: ChatDashboardComponent },
-  { path: 'chat/:id', component: ChatDashboardComponent },
-  { path: 'chat/gem/:persona', component: ChatDashboardComponent },
+  { path: 'chat', component: ChatDashboardComponent, canActivate: [authGuard] },
+  { path: 'chat/:id', component: ChatDashboardComponent, canActivate: [authGuard] },
+  { path: 'chat/gem/:persona', component: ChatDashboardComponent, canActivate: [authGuard] },
   { path: 'dashboard', component: DashboardHomeComponent, canActivate: [authGuard] },
   { path: 'runs', component: RunListComponent, canActivate: [authGuard] },
   { path: 'runs/:id', component: RunDetailComponent, canActivate: [authGuard] },

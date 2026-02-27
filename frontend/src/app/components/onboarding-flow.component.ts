@@ -874,7 +874,9 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
   autoLogin() {
     this.authService.login(this.username(), this.password()).subscribe({
       next: (response) => {
-        this.authService.storeTokens(response.accessToken, response.refreshToken);
+        if (response.accessToken && response.refreshToken) {
+          this.authService.storeTokens(response.accessToken, response.refreshToken);
+        }
         this.isRegistering.set(false);
         this.nextStep();
       },

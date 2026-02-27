@@ -2,7 +2,9 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.api.dto.UserRegistrationRequest;
 import com.atlasia.ai.api.dto.UserRegistrationResponse;
+import com.atlasia.ai.model.RoleEntity;
 import com.atlasia.ai.model.UserEntity;
+import com.atlasia.ai.persistence.RoleRepository;
 import com.atlasia.ai.persistence.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,12 +23,15 @@ public class UserRegistrationService {
     
     private final UserRepository userRepository;
     private final PasswordService passwordService;
+    private final RoleRepository roleRepository;
 
     public UserRegistrationService(
             UserRepository userRepository,
-            PasswordService passwordService) {
+            PasswordService passwordService,
+            RoleRepository roleRepository) {
         this.userRepository = userRepository;
         this.passwordService = passwordService;
+        this.roleRepository = roleRepository;
     }
 
     @Transactional
@@ -66,6 +71,11 @@ public class UserRegistrationService {
         String passwordHash = passwordService.hashPassword(password);
         
         UserEntity user = new UserEntity(username, email, passwordHash);
+        
+        RoleEntity userRole = roleRepository.findByName("USER")
+                .orElseGet(() -> roleRepository.save(new RoleEntity("USER", "Default user role")));
+        user.addRole(userRole);
+        
         UserEntity savedUser = userRepository.save(user);
         
         passwordService.savePasswordToHistory(savedUser.getId(), passwordHash);

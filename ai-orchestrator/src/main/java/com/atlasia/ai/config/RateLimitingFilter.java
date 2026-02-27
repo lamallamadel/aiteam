@@ -55,25 +55,17 @@ public class RateLimitingFilter implements Filter {
         String path = httpRequest.getRequestURI();
         String method = httpRequest.getMethod();
         
-        try {
-            if (isAuthEndpoint(path)) {
-                String ipAddress = getClientIp(httpRequest);
-                RateLimiter rateLimiter = getIpRateLimiter(ipAddress, "auth");
-                
-                rateLimiter.executeRunnable(() -> {});
-                addRateLimitHeaders(httpResponse, rateLimiter);
-                
-            } else if (isUploadEndpoint(path)) {
-                String userId = getCurrentUserId();
-                if (userId != null) {
-                    RateLimiter rateLimiter = getUserRateLimiter(userId, "upload");
-                    
-                    rateLimiter.executeRunnable(() -> {});
-                    addRateLimitHeaders(httpResponse, rateLimiter);
-                }
-                
-            } else if (isApiEndpoint(path)) {
-                String userId = getCurrentUserId();
+                try {
+                    if (isUploadEndpoint(path)) {
+                        String userId = getCurrentUserId();
+                        if (userId != null) {
+                            RateLimiter rateLimiter = getUserRateLimiter(userId, "upload");
+                            
+                            rateLimiter.executeRunnable(() -> {});
+                            addRateLimitHeaders(httpResponse, rateLimiter);
+                        }
+                        
+                    } else if (isApiEndpoint(path)) {                String userId = getCurrentUserId();
                 if (userId != null) {
                     RateLimiter rateLimiter = getUserRateLimiter(userId, "api");
                     

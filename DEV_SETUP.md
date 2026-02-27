@@ -133,3 +133,32 @@ docker compose -f docker-compose.dev.yml down -v
 docker compose -f docker-compose.dev.yml build --no-cache
 docker compose -f docker-compose.dev.yml up
 ```
+
+---
+
+## Java / JDK (local dev)
+
+If you use the Java backend locally, ensure your development environment points to a JDK (recommended: Java 17).
+
+- Preferred: set the `java.jdt.ls.java.home` VS Code workspace setting to your JDK install path. Example (Windows):
+
+```json
+{
+	"java.jdt.ls.java.home": "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot"
+}
+```
+
+- Alternative: set `JDK_HOME` or `JAVA_HOME` environment variable to your JDK path.
+
+PowerShell examples:
+```powershell
+setx JDK_HOME "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot"
+setx JAVA_HOME "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.18.8-hotspot"
+```
+
+- After changing VS Code settings or environment variables, reload the window (Ctrl+Shift+P → `Reload Window`) and verify with:
+```powershell
+java -version
+```
+
+Note: For shared or multi-OS repos we recommend NOT committing `.vscode/settings.json`; instead document the preferred JDK in this file so each developer can configure their local environment.
