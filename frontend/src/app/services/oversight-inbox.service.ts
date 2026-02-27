@@ -1,6 +1,7 @@
-import { Injectable, OnDestroy, signal, computed } from '@angular/core';
+import { Injectable, OnDestroy, signal, computed, effect } from '@angular/core';
 import { interval, Subscription } from 'rxjs';
 import { OrchestratorService } from './orchestrator.service';
+import { AuthService } from './auth.service';
 import { PendingInterrupt, InterruptDecisionRequest } from '../models/orchestrator.model';
 
 @Injectable({ providedIn: 'root' })
@@ -10,13 +11,32 @@ export class OversightInboxService implements OnDestroy {
   readonly pendingInterrupts = signal<PendingInterrupt[]>([]);
   readonly interruptCount = computed(() => this.pendingInterrupts().length);
 
-  constructor(private orchestratorService: OrchestratorService) {
-    this.startPolling();
+  constructor(
+    private orchestratorService: OrchestratorService,
+    private authService: AuthService
+  ) {
+    // Only start polling if user is logged in
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (user) {
+        if (!this.pollSub) {
+          this.startPolling();
+        }
+      } else {
+        this.stopPolling();
+        this.pendingInterrupts.set([]);
+      }
+    });
   }
 
   private startPolling() {
     this.fetchPending();
     this.pollSub = interval(5_000).subscribe(() => this.fetchPending());
+  }
+
+  private stopPolling() {
+    this.pollSub?.unsubscribe();
+    this.pollSub = null;
   }
 
   private fetchPending() {
@@ -45,6 +65,6 @@ export class OversightInboxService implements OnDestroy {
   }
 
   ngOnDestroy() {
-    this.pollSub?.unsubscribe();
+    this.stopPolling();
   }
 }

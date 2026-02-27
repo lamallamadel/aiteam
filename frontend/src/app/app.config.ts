@@ -9,7 +9,13 @@ import { firstValueFrom } from 'rxjs';
 import { routes } from './app.routes';
 
 export function initializeCsrf(authService: AuthService): () => Promise<void> {
-  return () => firstValueFrom(authService.fetchCsrfToken()).catch(() => {});
+  return () => firstValueFrom(authService.fetchCsrfToken())
+    .then(() => {
+      console.log('CSRF initialized');
+    })
+    .catch((err) => {
+      console.warn('CSRF initialization failed (this is normal if server is not reachable or first run):', err);
+    });
 }
 
 export function initializeTheme(themeService: ThemeService): () => void {

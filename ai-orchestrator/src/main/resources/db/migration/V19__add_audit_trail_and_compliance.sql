@@ -1,9 +1,8 @@
 -- Add tamper-proof audit trail with hash chain to collaboration_events
-ALTER TABLE collaboration_events
-ADD COLUMN retention_days INTEGER DEFAULT 2555,
-ADD COLUMN archived_at TIMESTAMP,
-ADD COLUMN previous_event_hash VARCHAR(64),
-ADD COLUMN event_hash VARCHAR(64);
+ALTER TABLE collaboration_events ADD COLUMN retention_days INTEGER DEFAULT 2555;
+ALTER TABLE collaboration_events ADD COLUMN archived_at TIMESTAMP;
+ALTER TABLE collaboration_events ADD COLUMN previous_event_hash VARCHAR(64);
+ALTER TABLE collaboration_events ADD COLUMN event_hash VARCHAR(64);
 
 CREATE INDEX idx_collaboration_events_event_hash ON collaboration_events(event_hash);
 CREATE INDEX idx_collaboration_events_archived_at ON collaboration_events(archived_at);

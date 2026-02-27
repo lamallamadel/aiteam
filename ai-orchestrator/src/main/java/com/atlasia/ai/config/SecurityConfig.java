@@ -119,9 +119,9 @@ public class SecurityConfig {
                                                 .anyRequest().authenticated())
                                 .oauth2Login(oauth2 -> oauth2
                                                 .successHandler(oauth2LoginSuccessHandler))
-                                .addFilterBefore(correlationIdFilter, RateLimitingFilter.class)
+                                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                                 .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
-                                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                                .addFilterBefore(correlationIdFilter, UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
         }

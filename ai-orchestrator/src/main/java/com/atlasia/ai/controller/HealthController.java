@@ -3,6 +3,7 @@ package com.atlasia.ai.controller;
 import com.atlasia.ai.config.OrchestratorProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,11 +34,11 @@ public class HealthController {
 
     public HealthController(
             JdbcTemplate jdbcTemplate,
-            VaultTemplate vaultTemplate,
+            ObjectProvider<VaultTemplate> vaultTemplateProvider,
             OrchestratorProperties properties,
             WebClient.Builder webClientBuilder) {
         this.jdbcTemplate = jdbcTemplate;
-        this.vaultTemplate = vaultTemplate;
+        this.vaultTemplate = vaultTemplateProvider.getIfAvailable();
         this.properties = properties;
         this.webClient = webClientBuilder.build();
     }
@@ -139,11 +140,10 @@ public class HealthController {
         Instant start = Instant.now();
         
         try {
-            // Check if Vault is enabled
-            String vaultEnabled = System.getProperty("spring.cloud.vault.enabled", "false");
-            if (!"true".equals(vaultEnabled) && !"true".equals(System.getenv("SPRING_CLOUD_VAULT_ENABLED"))) {
+            // Check if Vault is available/enabled
+            if (vaultTemplate == null) {
                 result.put("status", "UP");
-                result.put("message", "Vault is not enabled");
+                result.put("message", "Vault is not enabled or available in current environment");
                 result.put("enabled", false);
                 return result;
             }

@@ -1,5 +1,6 @@
 package com.atlasia.ai.config;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
@@ -12,6 +13,8 @@ import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +23,8 @@ import java.time.Duration;
 
 @Configuration
 public class OpenTelemetryConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenTelemetryConfig.class);
 
     @Value("${otel.service.name:ai-orchestrator}")
     private String serviceName;
@@ -55,14 +60,20 @@ public class OpenTelemetryConfig {
                 .setSampler(Sampler.traceIdRatioBased(samplingProbability))
                 .build();
 
-        OpenTelemetrySdk openTelemetry = OpenTelemetrySdk.builder()
+        OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
                 .setTracerProvider(sdkTracerProvider)
                 .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
-                .buildAndRegisterGlobal();
+                .build();
+
+        try {
+            GlobalOpenTelemetry.set(sdk);
+        } catch (IllegalStateException e) {
+            log.debug("GlobalOpenTelemetry already set, skipping registration");
+        }
 
         Runtime.getRuntime().addShutdownHook(new Thread(sdkTracerProvider::close));
 
-        return openTelemetry;
+        return sdk;
     }
 
     @Bean

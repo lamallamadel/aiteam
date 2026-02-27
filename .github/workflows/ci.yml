@@ -25,7 +25,7 @@ jobs:
       - name: Backend - Verify
         run: |
           cd ai-orchestrator
-          ./mvnw -B clean verify
+          ./mvnw -B clean verify -Psecurity-scan
 
   frontend:
     runs-on: ubuntu-latest

@@ -29,7 +29,8 @@ describe('App', () => {
     }
 
     orchestratorServiceMock = {
-      getPersonas: vi.fn().mockReturnValue(of([]))
+      getPersonas: vi.fn().mockReturnValue(of([])),
+      getPendingInterrupts: vi.fn().mockReturnValue(of([]))
     };
     escalationServiceMock = {};
 

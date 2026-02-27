@@ -298,7 +298,7 @@ class A2AContractIntegrationTest extends A2AContractTestBase {
             .then()
                 .statusCode(200)
                 .contentType("application/json")
-                .body("$[*].status", everyItem(equalTo("active")));
+                .body("status", everyItem(equalTo("active")));
     }
 
     @Test

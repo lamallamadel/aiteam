@@ -1,8 +1,7 @@
 -- Add CRDT support columns to collaboration_events table
-ALTER TABLE collaboration_events 
-ADD COLUMN crdt_changes BYTEA,
-ADD COLUMN source_region VARCHAR(50),
-ADD COLUMN lamport_timestamp BIGINT;
+ALTER TABLE collaboration_events ADD COLUMN crdt_changes BYTEA;
+ALTER TABLE collaboration_events ADD COLUMN source_region VARCHAR(50);
+ALTER TABLE collaboration_events ADD COLUMN lamport_timestamp BIGINT;
 
 -- Create index for lamport timestamp ordering
 CREATE INDEX idx_collaboration_events_lamport ON collaboration_events(run_id, lamport_timestamp);

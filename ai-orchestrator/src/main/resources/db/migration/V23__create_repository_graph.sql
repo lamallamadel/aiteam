@@ -1,7 +1,7 @@
 CREATE TABLE repository_graph (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     repo_url VARCHAR(500) NOT NULL UNIQUE,
-    dependencies JSONB NOT NULL DEFAULT '[]'::jsonb,
+    dependencies JSONB NOT NULL DEFAULT '[]',
     workspace_type VARCHAR(50),
     workspace_config JSONB,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,

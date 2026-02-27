@@ -133,7 +133,7 @@ test-backend:
   script:
     - echo "🧪 Running backend tests (mvn verify)..."
     - cd ai-orchestrator
-    - mvn verify -q -Dspring.profiles.active=test
+    - mvn verify -q -Dspring.profiles.active=test -Psecurity-scan
     - echo "✅ Backend tests passed"
   artifacts:
     name: "backend-test-results-$CI_COMMIT_SHORT_SHA"

@@ -95,8 +95,10 @@ class WorkflowEngineTest {
                 io.opentelemetry.api.trace.Span mockSpan = mock(io.opentelemetry.api.trace.Span.class);
                 io.opentelemetry.api.trace.SpanBuilder mockBuilder = mock(io.opentelemetry.api.trace.SpanBuilder.class);
                 lenient().when(tracer.spanBuilder(any())).thenReturn(mockBuilder);
-                lenient().when(mockBuilder.setAttribute(any(String.class), any(String.class))).thenReturn(mockBuilder);
-                lenient().when(mockBuilder.setAttribute(any(String.class), anyInt())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(anyString(), any())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(anyString(), anyString())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(anyString(), anyLong())).thenReturn(mockBuilder);
+                lenient().when(mockBuilder.setAttribute(anyString(), anyInt())).thenReturn(mockBuilder);
                 lenient().when(mockBuilder.startSpan()).thenReturn(mockSpan);
                 lenient().when(mockSpan.makeCurrent()).thenReturn(mock(io.opentelemetry.context.Scope.class));
                 

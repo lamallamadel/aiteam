@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { SettingsService } from '../services/settings.service';
 import { AuthService } from '../services/auth.service';
 import { OrchestratorService } from '../services/orchestrator.service';
@@ -18,209 +18,233 @@ interface AgentRole {
 @Component({
   selector: 'app-onboarding-flow',
   standalone: true,
-  imports: [CommonModule, FormsModule, PasswordStrengthComponent],
+  imports: [CommonModule, FormsModule, RouterLink, PasswordStrengthComponent],
   template: `
     <div class="onboarding-wrapper">
       <div class="onboarding-container">
-        <!-- Step 1: Registration -->
-        <div *ngIf="currentStep() === 1" class="chat-step">
-          <div class="message-block assistant">
-            <div class="message-header">
-              <span class="message-sender">ATLASIA ORCHESTRATOR</span>
-              <span class="message-timestamp">{{ timestamp }}</span>
-            </div>
-            <div class="message-body">
-              <div class="message-text">
-                <h2>Welcome to Atlasia Orchestrator</h2>
-                <p>Let's create your account to get started with AI-powered development automation.</p>
+        @if (currentStep() === 1) {
+          <!-- Step 1: Registration -->
+          <div class="chat-step">
+            <div class="message-block assistant">
+              <div class="message-header">
+                <span class="message-sender">ATLASIA ORCHESTRATOR</span>
+                <span class="message-timestamp">{{ timestamp }}</span>
+              </div>
+              <div class="message-body">
+                <div class="message-text">
+                  <h2>Welcome to Atlasia Orchestrator</h2>
+                  <p>Let's create your account to get started with AI-powered development automation.</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="form-section">
-            <div class="form-group">
-              <label>Username</label>
-              <input 
-                type="text" 
-                [ngModel]="username()"
-                (ngModelChange)="username.set($event)"
-                placeholder="Choose a username"
-                class="input-field"
-                [class.error]="usernameError() || (registrationError() && registrationError()!.toLowerCase().includes('username'))">
-              <span class="error-message" *ngIf="usernameError()">
-                {{ usernameError() }}
-              </span>
-            </div>
-
-            <div class="form-group">
-              <label>Email</label>
-              <input 
-                type="email" 
-                [ngModel]="email()"
-                (ngModelChange)="email.set($event)"
-                placeholder="your.email@example.com"
-                class="input-field"
-                [class.error]="emailError() || (registrationError() && registrationError()!.toLowerCase().includes('email'))">
-              <span class="error-message" *ngIf="emailError()">
-                {{ emailError() }}
-              </span>
-            </div>
-
-            <div class="form-group">
-              <label>Password</label>
-              <input 
-                type="password" 
-                [ngModel]="password()"
-                (ngModelChange)="password.set($event)"
-                placeholder="Choose a secure password"
-                class="input-field"
-                [class.error]="registrationError() && registrationError()!.toLowerCase().includes('password')">
-              <app-password-strength [password]="password()" />
-            </div>
-
-            <div class="form-group">
-              <label>Confirm Password</label>
-              <input 
-                type="password" 
-                [ngModel]="confirmPassword()"
-                (ngModelChange)="confirmPassword.set($event)"
-                placeholder="Re-enter your password"
-                class="input-field"
-                [class.error]="passwordMismatch()">
-              <span class="error-message" *ngIf="passwordMismatch()">
-                Passwords do not match
-              </span>
-            </div>
-
-            <div class="error-message" *ngIf="registrationError()">
-              {{ registrationError() }}
-            </div>
-
-            <div class="cta-section">
-              <button 
-                class="primary-btn" 
-                [disabled]="!canProceedFromRegistration() || isRegistering()"
-                (click)="register()">
-                {{ isRegistering() ? 'Creating Account...' : 'Create Account →' }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step 2: Git Provider Connection -->
-        <div *ngIf="currentStep() === 2" class="chat-step">
-          <div class="message-block assistant">
-            <div class="message-header">
-              <span class="message-sender">ATLASIA ORCHESTRATOR</span>
-              <span class="message-timestamp">{{ timestamp }}</span>
-            </div>
-            <div class="message-body">
-              <div class="message-text">
-                To get started, I'll need access to your code repository. Please connect your Git provider.
+            <div class="form-section">
+              <div class="form-group">
+                <label>Username</label>
+                <input 
+                  type="text" 
+                  [ngModel]="username()"
+                  (ngModelChange)="username.set($event)"
+                  placeholder="Choose a username"
+                  class="input-field"
+                  [class.error]="usernameError() || (registrationError() && registrationError()!.toLowerCase().includes('username'))">
+                @if (usernameError()) {
+                  <span class="error-message">
+                    {{ usernameError() }}
+                  </span>
+                }
               </div>
-            </div>
-          </div>
 
-          <div class="form-section">
-            <div class="form-group">
-              <label>Git Provider</label>
-              <div class="provider-selector">
+              <div class="form-group">
+                <label>Email</label>
+                <input 
+                  type="email" 
+                  [ngModel]="email()"
+                  (ngModelChange)="email.set($event)"
+                  placeholder="your.email@example.com"
+                  class="input-field"
+                  [class.error]="emailError() || (registrationError() && registrationError()!.toLowerCase().includes('email'))">
+                @if (emailError()) {
+                  <span class="error-message">
+                    {{ emailError() }}
+                  </span>
+                }
+              </div>
+
+              <div class="form-group">
+                <label>Password</label>
+                <input 
+                  type="password" 
+                  [ngModel]="password()"
+                  (ngModelChange)="password.set($event)"
+                  placeholder="Choose a secure password"
+                  class="input-field"
+                  [class.error]="registrationError() && registrationError()!.toLowerCase().includes('password')">
+                <app-password-strength [password]="password()" />
+              </div>
+
+              <div class="form-group">
+                <label>Confirm Password</label>
+                <input 
+                  type="password" 
+                  [ngModel]="confirmPassword()"
+                  (ngModelChange)="confirmPassword.set($event)"
+                  placeholder="Re-enter your password"
+                  class="input-field"
+                  [class.error]="passwordMismatch()">
+                @if (passwordMismatch()) {
+                  <span class="error-message">
+                    Passwords do not match
+                  </span>
+                }
+              </div>
+
+              @if (registrationError()) {
+                <div class="error-message">
+                  {{ registrationError() }}
+                  @if (registrationError()?.toLowerCase()?.includes('already exists')) {
+                    <a routerLink="/auth/login" class="inline-link">Sign in instead</a>
+                  }
+                </div>
+              }
+
+              <div class="cta-section">
+                <div class="login-suggestion">
+                  Already have an account? <a routerLink="/auth/login">Sign in</a>
+                </div>
                 <button 
-                  *ngFor="let provider of gitProviders"
-                  class="provider-btn"
-                  [class.selected]="selectedProvider() === provider.id"
-                  (click)="selectProvider(provider.id)">
-                  <span class="provider-icon">{{ provider.icon }}</span>
-                  <span class="provider-name">{{ provider.name }}</span>
+                  class="primary-btn" 
+                  [disabled]="!canProceedFromRegistration() || isRegistering()"
+                  (click)="register()">
+                  {{ isRegistering() ? 'Creating Account...' : 'Create Account →' }}
                 </button>
               </div>
             </div>
-
-            <div class="form-group">
-              <label>Access Token</label>
-              <input 
-                type="password" 
-                [ngModel]="gitToken()"
-                (ngModelChange)="gitToken.set($event)"
-                placeholder="Enter your personal access token"
-                class="input-field">
-              <span class="input-hint">
-                This token will be stored securely in your browser's local storage.
-              </span>
-            </div>
-
-            <div class="form-group" *ngIf="selectedProvider() === 'custom'">
-              <label>Custom Git URL (Optional)</label>
-              <input 
-                type="text" 
-                [ngModel]="customGitUrl()"
-                (ngModelChange)="customGitUrl.set($event)"
-                placeholder="https://git.example.com"
-                class="input-field">
-            </div>
-
-            <div class="cta-section">
-              <button class="secondary-btn" (click)="skipProvider()">Skip for Now</button>
-              <button 
-                class="primary-btn" 
-                [disabled]="!canProceedFromProvider()"
-                (click)="saveProviderAndNext()">
-                Continue →
-              </button>
-            </div>
           </div>
-        </div>
+        }
 
-        <!-- Step 3: Agent Role Selection -->
-        <div *ngIf="currentStep() === 3" class="chat-step">
-          <div class="message-block assistant">
-            <div class="message-header">
-              <span class="message-sender">ATLASIA ORCHESTRATOR</span>
-              <span class="message-timestamp">{{ timestamp }}</span>
+        @if (currentStep() === 2) {
+          <!-- Step 2: Git Provider Connection -->
+          <div class="chat-step">
+            <div class="message-block assistant">
+              <div class="message-header">
+                <span class="message-sender">ATLASIA ORCHESTRATOR</span>
+                <span class="message-timestamp">{{ timestamp }}</span>
+              </div>
+              <div class="message-body">
+                <div class="message-text">
+                  To get started, I'll need access to your code repository. Please connect your Git provider.
+                </div>
+              </div>
             </div>
-            <div class="message-body">
-              <div class="message-text">
-                Almost there! Choose your default AI agent role. This determines how the system approaches tasks, but you can always change it later or select different roles per task.
+
+            <div class="form-section">
+              <div class="form-group">
+                <label>Git Provider</label>
+                <div class="provider-selector">
+                  @for (provider of gitProviders; track provider.id) {
+                    <button 
+                      class="provider-btn"
+                      [class.selected]="selectedProvider() === provider.id"
+                      (click)="selectProvider(provider.id)">
+                      <span class="provider-icon">{{ provider.icon }}</span>
+                      <span class="provider-name">{{ provider.name }}</span>
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Access Token</label>
+                <input 
+                  type="password" 
+                  [ngModel]="gitToken()"
+                  (ngModelChange)="gitToken.set($event)"
+                  placeholder="Enter your personal access token"
+                  class="input-field">
+                <span class="input-hint">
+                  This token will be stored securely in your browser's local storage.
+                </span>
+              </div>
+
+              @if (selectedProvider() === 'custom') {
+                <div class="form-group">
+                  <label>Custom Git URL (Optional)</label>
+                  <input 
+                    type="text" 
+                    [ngModel]="customGitUrl()"
+                    (ngModelChange)="customGitUrl.set($event)"
+                    placeholder="https://git.example.com"
+                    class="input-field">
+                </div>
+              }
+
+              <div class="cta-section">
+                <button class="secondary-btn" (click)="skipProvider()">Skip for Now</button>
+                <button 
+                  class="primary-btn" 
+                  [disabled]="!canProceedFromProvider()"
+                  (click)="saveProviderAndNext()">
+                  Continue →
+                </button>
               </div>
             </div>
           </div>
+        }
 
-          <div class="role-selection-section">
-            <div class="role-grid">
-              <div 
-                *ngFor="let role of agentRoles"
-                class="role-card"
-                [class.selected]="selectedRole() === role.id"
-                (click)="selectRole(role.id)">
-                <div class="role-header">
-                  <span class="role-icon">{{ role.icon }}</span>
-                  <h3 class="role-name">{{ role.name }}</h3>
+        @if (currentStep() === 3) {
+          <!-- Step 3: Agent Role Selection -->
+          <div class="chat-step">
+            <div class="message-block assistant">
+              <div class="message-header">
+                <span class="message-sender">ATLASIA ORCHESTRATOR</span>
+                <span class="message-timestamp">{{ timestamp }}</span>
+              </div>
+              <div class="message-body">
+                <div class="message-text">
+                  Almost there! Choose your default AI agent role. This determines how the system approaches tasks, but you can always change it later or select different roles per task.
                 </div>
-                <p class="role-description">{{ role.description }}</p>
-                <div class="role-focus">
-                  <div class="focus-label">Focus Areas:</div>
-                  <div class="focus-tags">
-                    <span 
-                      *ngFor="let area of role.focusAreas" 
-                      class="focus-tag">
-                      {{ area }}
-                    </span>
+              </div>
+            </div>
+
+            <div class="role-selection-section">
+              <div class="role-grid">
+                @for (role of agentRoles; track role.id) {
+                  <div 
+                    class="role-card"
+                    [class.selected]="selectedRole() === role.id"
+                    (click)="selectRole(role.id)">
+                    <div class="role-header">
+                      <span class="role-icon">{{ role.icon }}</span>
+                      <h3 class="role-name">{{ role.name }}</h3>
+                    </div>
+                    <p class="role-description">{{ role.description }}</p>
+                    <div class="role-focus">
+                      <div class="focus-label">Focus Areas:</div>
+                      <div class="focus-tags">
+                        @for (area of role.focusAreas; track area) {
+                          <span class="focus-tag">
+                            {{ area }}
+                          </span>
+                        }
+                      </div>
+                    </div>
                   </div>
-                </div>
+                }
+              </div>
+
+              <div class="cta-section">
+                <button class="secondary-btn" (click)="skipRole()">Skip for Now</button>
+                <button 
+                  class="primary-btn" 
+                  [disabled]="!selectedRole()"
+                  (click)="completeOnboarding()">
+                  Complete Setup →
+                </button>
               </div>
             </div>
-
-            <div class="cta-section">
-              <button class="secondary-btn" (click)="skipRole()">Skip for Now</button>
-              <button 
-                class="primary-btn" 
-                [disabled]="!selectedRole()"
-                (click)="completeOnboarding()">
-                Complete Setup →
-              </button>
-            </div>
           </div>
-        </div>
+        }
 
         <!-- Progress Indicator -->
         <div class="progress-bar">
@@ -331,16 +355,6 @@ interface AgentRole {
       color: #94a3b8;
     }
 
-    .message-text ul {
-      margin: 12px 0;
-      padding-left: 24px;
-    }
-
-    .message-text li {
-      margin: 8px 0;
-      color: #94a3b8;
-    }
-
     .form-section {
       background: var(--surface);
       padding: 24px;
@@ -425,10 +439,6 @@ interface AgentRole {
       border-color: #ef4444;
     }
 
-    .input-field::placeholder {
-      color: #64748b;
-    }
-
     .input-hint {
       font-size: 0.75rem;
       color: #64748b;
@@ -438,7 +448,17 @@ interface AgentRole {
     .error-message {
       font-size: 0.85rem;
       color: #ef4444;
-      margin-top: -8px;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .inline-link {
+      color: #38bdf8;
+      text-decoration: underline;
+      font-weight: 600;
+      margin-left: 8px;
     }
 
     .role-selection-section {
@@ -533,9 +553,25 @@ interface AgentRole {
 
     .cta-section {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 12px;
-      justify-content: flex-end;
       margin-top: 8px;
+    }
+
+    .login-suggestion {
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+
+    .login-suggestion a {
+      color: #38bdf8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .login-suggestion a:hover {
+      text-decoration: underline;
     }
 
     .primary-btn,
@@ -663,6 +699,7 @@ interface AgentRole {
 
       .cta-section {
         flex-direction: column;
+        align-items: flex-start;
       }
 
       .primary-btn,
@@ -745,6 +782,16 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    // If onboarding already done, go to dashboard
+    if (localStorage.getItem(this.ONBOARDING_COMPLETE_KEY) === 'true') {
+      this.router.navigate(['/dashboard']);
+      return;
+    }
+
+    // If already authenticated, skip registration step
+    if (this.authService.isAuthenticated()) {
+      this.currentStep.set(2);
+    }
   }
 
   ngOnDestroy() {

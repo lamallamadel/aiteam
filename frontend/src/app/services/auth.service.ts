@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, BehaviorSubject, throwError } from 'rxjs';
+import { Observable, BehaviorSubject, throwError, of } from 'rxjs';
 import { tap, catchError, switchMap } from 'rxjs/operators';
 
 export interface LoginRequest {
@@ -64,8 +64,10 @@ export class AuthService {
         return this.http.post<LoginResponse>('/api/auth/login', request).pipe(
             tap(response => {
                 this.storeTokens(response.accessToken, response.refreshToken);
-                this.loadUserProfile();
             }),
+            switchMap(response => this.loadUserProfile().pipe(
+                switchMap(() => of(response))
+            )),
             catchError(this.handleError)
         );
     }
@@ -83,7 +85,7 @@ export class AuthService {
             }),
             catchError(error => {
                 this.clearTokens();
-                this.router.navigate(['/auth/login']);
+                this.router.navigate(['/onboarding']);
                 return throwError(() => error);
             })
         );
@@ -114,12 +116,12 @@ export class AuthService {
             tap(() => {
                 this.clearTokens();
                 this.currentUser.set(null);
-                this.router.navigate(['/auth/login']);
+                this.router.navigate(['/onboarding']);
             }),
             catchError(error => {
                 this.clearTokens();
                 this.currentUser.set(null);
-                this.router.navigate(['/auth/login']);
+                this.router.navigate(['/onboarding']);
                 return throwError(() => error);
             })
         );
@@ -198,14 +200,17 @@ export class AuthService {
         return this.hasToken() && this.currentUser() !== null;
     }
 
-    private loadUserProfile(): void {
+    loadUserProfile(): Observable<UserProfile | null> {
         if (this.hasToken()) {
-            this.getUserProfile().subscribe({
-                error: () => {
+            return this.getUserProfile().pipe(
+                tap(user => this.currentUser.set(user)),
+                catchError(() => {
                     this.currentUser.set(null);
-                }
-            });
+                    return of(null);
+                })
+            );
         }
+        return of(null);
     }
 
     private handleError(error: HttpErrorResponse): Observable<never> {

@@ -1,4 +1,10 @@
-import { TestBed } from '@angular/core/testing';
+import 'zone.js';
+import 'zone.js/testing';
+import { TestBed, getTestBed } from '@angular/core/testing';
+import {
+  BrowserDynamicTestingModule,
+  platformBrowserDynamicTesting
+} from '@angular/platform-browser-dynamic/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
@@ -9,6 +15,15 @@ describe('AuthService', () => {
   let service: AuthService;
 
   beforeEach(() => {
+    // Manually init environment if not already done
+    const testBed = getTestBed();
+    if (!testBed.platform) {
+      testBed.initTestEnvironment(
+        BrowserDynamicTestingModule,
+        platformBrowserDynamicTesting()
+      );
+    }
+
     TestBed.configureTestingModule({
       providers: [
         AuthService,

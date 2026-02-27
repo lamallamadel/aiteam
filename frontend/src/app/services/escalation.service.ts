@@ -1,7 +1,8 @@
-import { Injectable, OnDestroy, signal, computed } from '@angular/core';
+import { Injectable, OnDestroy, signal, computed, effect } from '@angular/core';
 import { interval, Subscription } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { OrchestratorService } from './orchestrator.service';
+import { AuthService } from './auth.service';
 import { RunResponse, ArtifactResponse } from '../models/orchestrator.model';
 
 @Injectable({ providedIn: 'root' })
@@ -14,14 +15,33 @@ export class EscalationService implements OnDestroy {
   // Cached last-artifact per run id
   readonly lastArtifacts = signal<Record<string, ArtifactResponse | null>>({});
 
-  constructor(private orchestratorService: OrchestratorService) {
-    this.startPolling();
+  constructor(
+    private orchestratorService: OrchestratorService,
+    private authService: AuthService
+  ) {
+    // Only start polling if user is logged in
+    effect(() => {
+      const user = this.authService.currentUser();
+      if (user) {
+        if (!this.pollSub) {
+          this.startPolling();
+        }
+      } else {
+        this.stopPolling();
+        this.escalatedRuns.set([]);
+      }
+    });
   }
 
   private startPolling() {
     // Immediate first fetch + poll every 10s
     this.fetchEscalated();
     this.pollSub = interval(10_000).subscribe(() => this.fetchEscalated());
+  }
+
+  private stopPolling() {
+    this.pollSub?.unsubscribe();
+    this.pollSub = null;
   }
 
   private fetchEscalated() {
@@ -67,6 +87,6 @@ export class EscalationService implements OnDestroy {
   }
 
   ngOnDestroy() {
-    this.pollSub?.unsubscribe();
+    this.stopPolling();
   }
 }

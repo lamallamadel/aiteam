@@ -130,6 +130,9 @@ interface RegisterResponse {
           @if (error()) {
             <div class="error-message" aria-live="polite">
               {{ error() }}
+              @if (error()?.includes('already exists')) {
+                <a routerLink="/auth/login" class="inline-link">Sign in instead</a>
+              }
             </div>
           }
 
@@ -232,14 +235,25 @@ interface RegisterResponse {
       border-color: #ef4444 !important;
     }
 
-    .field-error-message {
-      font-size: 0.75rem;
+    .error-message {
+      background: rgba(239, 68, 68, 0.1);
       color: #ef4444;
-      margin-top: -8px;
-      display: block;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      border: 1px solid rgba(239, 68, 68, 0.2);
     }
 
-    @media (max-width: 480px) {
+    .inline-link {
+      display: block;
+      margin-top: 4px;
+      color: #38bdf8;
+      text-decoration: underline;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .success-message {
       .register-card {
         padding: 32px 24px;
       }
@@ -344,6 +358,7 @@ export class RegisterComponent {
           },
           error: () => {
             this.loading.set(false);
+            this.toastService.show('Account created, but auto-login failed. Please login manually.', 'info');
             this.router.navigate(['/auth/login']);
           }
         });
@@ -351,8 +366,14 @@ export class RegisterComponent {
       error: (err) => {
         this.loading.set(false);
         const errorMessage = err.error?.message || 'Registration failed. Please try again.';
-        this.error.set(errorMessage);
-        this.toastService.show(errorMessage, 'error');
+        
+        if (errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('taken')) {
+          this.error.set('Username or Email already exists.');
+          this.toastService.show('This account already exists. Please sign in instead.', 'info');
+        } else {
+          this.error.set(errorMessage);
+          this.toastService.show(errorMessage, 'error');
+        }
       }
     });
   }
