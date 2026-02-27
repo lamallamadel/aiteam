@@ -546,10 +546,10 @@ export class UserProfileComponent implements OnInit {
   logout(): void {
     this.authService.logout().subscribe({
       next: () => {
-        this.router.navigate(['/onboarding']);
+        this.router.navigate(['/auth/login']);
       },
       error: () => {
-        this.router.navigate(['/onboarding']);
+        this.router.navigate(['/auth/login']);
       }
     });
   }

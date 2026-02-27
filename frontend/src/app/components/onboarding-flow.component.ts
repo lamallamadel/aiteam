@@ -782,12 +782,6 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    // If onboarding already done, go to dashboard
-    if (localStorage.getItem(this.ONBOARDING_COMPLETE_KEY) === 'true') {
-      this.router.navigate(['/dashboard']);
-      return;
-    }
-
     // If already authenticated, skip registration step
     if (this.authService.isAuthenticated()) {
       this.currentStep.set(2);
@@ -948,6 +942,6 @@ export class OnboardingFlowComponent implements OnInit, OnDestroy {
 
     localStorage.setItem(this.ONBOARDING_COMPLETE_KEY, 'true');
 
-    this.router.navigate(['/dashboard']);
+    this.authService.navigateToHome();
   }
 }

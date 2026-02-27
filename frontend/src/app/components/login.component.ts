@@ -261,20 +261,16 @@ export class LoginComponent {
     this.loading.set(true);
     this.error.set(null);
 
-    this.http.post<LoginResponse>('/api/auth/login', {
-      username: this.username,
-      password: this.password
-    }).subscribe({
+    this.authService.login(this.username, this.password).subscribe({
       next: (response) => {
         this.loading.set(false);
         
         if (response.mfaRequired && response.mfaToken) {
           this.mfaToken.set(response.mfaToken);
           this.showMfaChallenge.set(true);
-        } else if (response.accessToken && response.refreshToken) {
-          this.authService.storeTokens(response.accessToken, response.refreshToken);
+        } else {
           this.toastService.show('Login successful', 'success');
-          this.router.navigate(['/dashboard']);
+          this.authService.navigateToHome();
         }
       },
       error: (err) => {

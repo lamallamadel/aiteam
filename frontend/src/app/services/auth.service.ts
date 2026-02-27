@@ -10,8 +10,10 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-    accessToken: string;
-    refreshToken: string;
+    accessToken?: string;
+    refreshToken?: string;
+    mfaRequired?: boolean;
+    mfaToken?: string;
     tokenType?: string;
     expiresIn?: number;
 }
@@ -56,18 +58,27 @@ export class AuthService {
         private http: HttpClient,
         private router: Router
     ) {
-        this.loadUserProfile();
+        if (this.hasToken()) {
+            this.loadUserProfile().subscribe();
+        }
     }
 
     login(username: string, password: string): Observable<LoginResponse> {
         const request: LoginRequest = { username, password };
         return this.http.post<LoginResponse>('/api/auth/login', request).pipe(
             tap(response => {
-                this.storeTokens(response.accessToken, response.refreshToken);
+                if (!response.mfaRequired && response.accessToken && response.refreshToken) {
+                    this.storeTokens(response.accessToken, response.refreshToken);
+                }
             }),
-            switchMap(response => this.loadUserProfile().pipe(
-                switchMap(() => of(response))
-            )),
+            switchMap(response => {
+                if (response.mfaRequired) {
+                    return of(response);
+                }
+                return this.loadUserProfile().pipe(
+                    switchMap(() => of(response))
+                );
+            }),
             catchError(this.handleError)
         );
     }
@@ -85,7 +96,7 @@ export class AuthService {
             }),
             catchError(error => {
                 this.clearTokens();
-                this.router.navigate(['/onboarding']);
+                this.router.navigate(['/auth/login']);
                 return throwError(() => error);
             })
         );
@@ -105,7 +116,7 @@ export class AuthService {
             switchMap(response => [response.accessToken]),
             catchError(error => {
                 this.clearTokens();
-                this.router.navigate(['/onboarding']);
+                this.router.navigate(['/auth/login']);
                 return throwError(() => error);
             })
         );
@@ -116,12 +127,12 @@ export class AuthService {
             tap(() => {
                 this.clearTokens();
                 this.currentUser.set(null);
-                this.router.navigate(['/onboarding']);
+                this.router.navigate(['/auth/login']);
             }),
             catchError(error => {
                 this.clearTokens();
                 this.currentUser.set(null);
-                this.router.navigate(['/onboarding']);
+                this.router.navigate(['/auth/login']);
                 return throwError(() => error);
             })
         );
@@ -148,6 +159,10 @@ export class AuthService {
 
     hasToken(): boolean {
         return !!this.getAccessToken();
+    }
+
+    navigateToHome(): void {
+        this.router.navigate(['/dashboard']);
     }
 
     storeTokens(accessToken: string, refreshToken: string): void {

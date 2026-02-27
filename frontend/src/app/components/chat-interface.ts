@@ -80,25 +80,41 @@ interface Message {
       <app-neural-trace *ngIf="selectedRun" [steps]="assistantMessages"></app-neural-trace>
 
       <!-- New Run Form -->
-      <div *ngIf="!selectedRun && !selectedPersona" class="new-run-form">
-        <h2>Start New Orchestration</h2>
-        <div class="form-group">
-          <label>Repository</label>
-          <input type="text" [(ngModel)]="newRequest.repo" placeholder="owner/repo" />
+      <div *ngIf="!selectedRun && !selectedPersona && !isDuelMode" class="new-run-form">
+        <div class="form-header">
+          <span class="bolt-icon">⚡</span>
+          <h2>Launch New AI Bolt</h2>
+          <p>Provide a GitHub issue to start the autonomous agent pipeline.</p>
         </div>
-        <div class="form-group">
-          <label>Issue Number</label>
-          <input type="number" [(ngModel)]="newRequest.issueNumber" />
+        
+        <div class="form-body">
+          <div class="form-group">
+            <label>Repository Path</label>
+            <input type="text" [(ngModel)]="newRequest.repo" placeholder="owner/repo (e.g., lamallamadel/atlasia)" />
+          </div>
+          <div class="form-group">
+            <label>GitHub Issue #</label>
+            <input type="number" [(ngModel)]="newRequest.issueNumber" placeholder="Enter issue ID" />
+          </div>
+          <div class="form-group">
+            <label>Workflow Mode</label>
+            <div class="mode-selector">
+              <button 
+                [class.active]="newRequest.mode === 'PLANNING'" 
+                (click)="newRequest.mode = 'PLANNING'">
+                📋 Planning
+              </button>
+              <button 
+                [class.active]="newRequest.mode === 'EXECUTION'" 
+                (click)="newRequest.mode = 'EXECUTION'">
+                🚀 Execution
+              </button>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Mode</label>
-          <select [(ngModel)]="newRequest.mode">
-            <option value="PLANNING">Planning</option>
-            <option value="EXECUTION">Execution</option>
-          </select>
-        </div>
-        <button class="accent-gradient start-btn" (click)="openPreview()">
-          Launch Orchestrator
+        
+        <button class="accent-gradient start-btn" (click)="openPreview()" [disabled]="!newRequest.repo || !newRequest.issueNumber">
+          Confirm Intent & Launch
         </button>
       </div>
 
@@ -313,22 +329,65 @@ interface Message {
       }
 
       .new-run-form {
-        max-width: 500px;
+        max-width: 550px;
         margin: auto;
         padding: 40px;
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: 32px;
         width: 100%;
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: 16px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+      }
+      .form-header {
+        text-align: center;
+      }
+      .bolt-icon {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 16px;
+        filter: drop-shadow(0 0 10px #fbbf24);
       }
       .new-run-form h2 {
         margin: 0;
+        color: #f8fafc;
+        font-size: 1.75rem;
+        font-weight: 700;
+      }
+      .new-run-form .subtitle {
+        color: #94a3b8;
+        margin-top: 8px;
+      }
+      .form-body {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .mode-selector {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .mode-selector button {
+        padding: 12px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 600;
+      }
+      .mode-selector button:hover {
+        background: rgba(255,255,255,0.05);
+        border-color: #64748b;
+      }
+      .mode-selector button.active {
+        background: rgba(56, 189, 248, 0.1);
+        border-color: #38bdf8;
         color: #38bdf8;
-        text-align: center;
-        font-size: 1.5rem;
       }
       .form-group {
         display: flex;

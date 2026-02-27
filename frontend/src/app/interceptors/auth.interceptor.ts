@@ -31,7 +31,10 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
 
     return next(clonedReq).pipe(
         catchError((error: HttpErrorResponse) => {
-            if (error.status === 401 && !req.url.includes('/api/auth/login') && !req.url.includes('/api/auth/refresh')) {
+            const isPublicPage = router.url.includes('/auth/login') || router.url.includes('/auth/register');
+            const hasRefreshToken = !!authService.getRefreshToken();
+
+            if (error.status === 401 && !req.url.includes('/api/auth/login') && !req.url.includes('/api/auth/refresh') && !isPublicPage && hasRefreshToken) {
                 return handle401Error(clonedReq, next, authService, router);
             }
             return throwError(() => error);
@@ -56,7 +59,7 @@ function handle401Error(
             }),
             catchError((err) => {
                 authService.refreshing$.next(false);
-                router.navigate(['/onboarding']);
+                router.navigate(['/auth/login']);
                 return throwError(() => err);
             })
         );
@@ -69,7 +72,7 @@ function handle401Error(
                 if (newToken) {
                     return next(addTokenToRequest(request, newToken));
                 } else {
-                    router.navigate(['/onboarding']);
+                    router.navigate(['/auth/login']);
                     return throwError(() => new Error('No access token available after refresh'));
                 }
             })

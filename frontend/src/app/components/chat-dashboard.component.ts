@@ -13,11 +13,12 @@ import { SettingsService } from '../services/settings.service';
   imports: [CommonModule, FormsModule, ConversationListComponent, ChatInterfaceComponent],
   template: `
     <div class="dashboard-wrapper">
-      <app-conversation-list 
-        *ngIf="!selectedPersona"
-        (runSelected)="onRunSelected($event)"
-        (newChatRequested)="onNewChat()">
-      </app-conversation-list>
+      @if (!selectedPersona) {
+        <app-conversation-list 
+          (runSelected)="onRunSelected($event)"
+          (newChatRequested)="onNewChat()">
+        </app-conversation-list>
+      }
       
       <main class="chat-area">
         <div class="settings-bar">
@@ -59,10 +60,6 @@ export class ChatDashboardComponent implements OnInit {
         this.selectedRun = undefined;
       }
     });
-    
-    if (!this.settingsService.hasGitProviderConfigured()) {
-      this.router.navigate(['/onboarding']);
-    }
   }
 
   onRunSelected(run: RunResponse) {
