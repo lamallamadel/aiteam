@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM maven:3.9-eclipse-temurin-17-alpine AS builder
+FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /build
 
 # Copy Maven files first for better layer caching
@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     mv target/*.jar app.jar
 
 # Stage 2: Runtime
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Install curl for health checks, then remove unnecessary packages

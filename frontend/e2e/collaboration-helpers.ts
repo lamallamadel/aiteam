@@ -95,8 +95,46 @@ export class CollaborationPage {
   constructor(public page: Page) {}
   
   async setupUser(userId: string): Promise<void> {
+    await this.page.addInitScript(() => {
+      (window as any).__E2E_MOCK_COLLAB__ = true;
+      (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
+    });
+
+    await this.page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: userId,
+          username: userId,
+          email: `${userId}@e2e.local`,
+          roles: ['USER'],
+        }),
+      });
+    });
+
+    await this.page.addInitScript((id) => {
+      try {
+        localStorage.setItem('atlasia_access_token', 'e2e-access-token');
+        localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
+        localStorage.setItem('atlasia_user_id', id);
+        (window as any).__E2E_MOCK_COLLAB__ = true;
+        (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
+      } catch {
+        // no-op: localStorage can be unavailable on about:blank
+      }
+    }, userId);
+
     await this.page.evaluate((id) => {
-      localStorage.setItem('atlasia_user_id', id);
+      try {
+        localStorage.setItem('atlasia_access_token', 'e2e-access-token');
+        localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
+        localStorage.setItem('atlasia_user_id', id);
+        (window as any).__E2E_MOCK_COLLAB__ = true;
+        (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
+      } catch {
+        // no-op: value will still be set on next navigation via addInitScript
+      }
     }, userId);
   }
   
