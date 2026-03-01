@@ -59,7 +59,7 @@ jobs:
         with:
           name: dependency-check-report
           path: ai-orchestrator/target/dependency-check-report.*
-          retention-days: 30
+          retention-days: 1
       
       - name: Parse vulnerability results
         if: always()
@@ -156,7 +156,7 @@ jobs:
         with:
           name: sbom
           path: ai-orchestrator/target/bom.json
-          retention-days: 90
+          retention-days: 1
       
       - name: Display SBOM summary
         working-directory: ai-orchestrator

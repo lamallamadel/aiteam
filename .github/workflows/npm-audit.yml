@@ -100,7 +100,7 @@ jobs:
         with:
           name: npm-audit-results
           path: frontend/audit-results.json
-          retention-days: 30
+          retention-days: 1
       
       - name: Comment PR with results
         if: github.event_name == 'pull_request' && always()
