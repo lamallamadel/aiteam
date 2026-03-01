@@ -209,6 +209,7 @@ jobs:
           name: backend-e2e-log
           path: backend-e2e.log
           if-no-files-found: ignore
+          retention-days: 1
 
       - name: Upload Playwright report
         if: always()
@@ -219,3 +220,4 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
           if-no-files-found: ignore
+          retention-days: 1
