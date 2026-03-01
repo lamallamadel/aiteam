@@ -1,0 +1,39 @@
+name: Delete Old Workflow Runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Delete runs older than this many days (0 = delete all)'
+        required: false
+        default: '30'
+        type: string
+      minimum_runs:
+        description: 'Minimum number of recent runs to keep per workflow'
+        required: false
+        default: '5'
+        type: string
+      delete_workflow_pattern:
+        description: 'Workflow filename or name pattern to target (leave blank for all workflows)'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    # Runs on the first day of every month at 02:00 UTC
+    - cron: '0 2 1 * *'
+
+jobs:
+  delete-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete workflow runs (all statuses)
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: ${{ inputs.days || '30' }}
+          keep_minimum_runs: ${{ inputs.minimum_runs || '5' }}
+          delete_workflow_pattern: ${{ inputs.delete_workflow_pattern || '' }}
