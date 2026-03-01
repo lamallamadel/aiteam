@@ -8,6 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "vitest",
     "e2e": "playwright test --config=playwright.fast.config.ts",
+    "e2e:fast": "playwright test --config=playwright.fast.config.ts",
+    "lint": "tsc --noEmit",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix"
   },

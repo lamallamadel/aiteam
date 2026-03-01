@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:e2edb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false;MODE=PostgreSQL
+    username: sa
+    password: ''
+    driver-class-name: org.h2.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  h2:
+    console:
+      enabled: false
+  cloud:
+    vault:
+      enabled: false
+
+server:
+  ssl:
+    enabled: false
+
+atlasia:
+  jwt:
+    secret-key: 4aX9mK2pL8vN3qR7sT1uW6yZ0bC5dF8gH4jM2nP
+    access-token-expiration-minutes: 60
+    refresh-token-expiration-days: 1
+    issuer: atlasia-e2e-test
+  cors:
+    allowed-origins: http://127.0.0.1:4200,http://localhost:4200
+  orchestrator:
+    token: e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM
+  webhook:
+    github:
+      secret: e2e-hook-Vn5kP8rT2wX4yZ7bC1dF3gH6jL9mN0qS
+  encryption:
+    key: e2e-enc-K7mN2pQ5rT8vX1yZ4bC9dF3gH6jL0mP2qR
+
+logging:
+  level:
+    root: WARN
+    com.atlasia.ai: INFO
