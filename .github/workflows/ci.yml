@@ -22,10 +22,26 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+      - name: Get week number for NVD cache key
+        id: date
+        run: echo "week=$(date +'%Y-%U')" >> $GITHUB_OUTPUT
+      - name: Cache NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check/data
+          key: nvd-data-${{ runner.os }}-${{ steps.date.outputs.week }}
+          restore-keys: |
+            nvd-data-${{ runner.os }}-
       - name: Backend - Verify
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           cd ai-orchestrator
-          ./mvnw -B clean verify -Psecurity-scan
+          ARGS="-B clean verify -Psecurity-scan"
+          if [ -n "$NVD_API_KEY" ]; then
+            ARGS="$ARGS -Dnvd.api.key=$NVD_API_KEY"
+          fi
+          ./mvnw $ARGS
 
   frontend:
     runs-on: ubuntu-latest

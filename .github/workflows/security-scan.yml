@@ -28,10 +28,29 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: maven
-      
+
+      - name: Get week number for NVD cache key
+        id: date
+        run: echo "week=$(date +'%Y-%U')" >> $GITHUB_OUTPUT
+
+      - name: Cache NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check/data
+          key: nvd-data-${{ runner.os }}-${{ steps.date.outputs.week }}
+          restore-keys: |
+            nvd-data-${{ runner.os }}-
+
       - name: Run OWASP Dependency Check
         working-directory: ai-orchestrator
-        run: mvn dependency-check:check --batch-mode --no-transfer-progress
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ARGS="dependency-check:check --batch-mode --no-transfer-progress"
+          if [ -n "$NVD_API_KEY" ]; then
+            ARGS="$ARGS -Dnvd.api.key=$NVD_API_KEY"
+          fi
+          mvn $ARGS
         continue-on-error: true
       
       - name: Upload dependency check report
