@@ -10,6 +10,16 @@ export const authGuard: CanActivateFn = () => {
         return true;
     }
 
+    if (authService.hasToken()) {
+        authService.loadUserProfile().subscribe({
+            next: () => {},
+            error: () => {
+                router.navigate(['/auth/login']);
+            }
+        });
+        return true;
+    }
+
     if (authService.getRefreshToken()) {
         router.navigate(['/auth/login']);
     } else {

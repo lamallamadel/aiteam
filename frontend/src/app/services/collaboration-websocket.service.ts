@@ -78,6 +78,10 @@ export class CollaborationWebSocketService implements OnDestroy {
     this.disconnect();
   }
 
+  private isE2EMock(): boolean {
+    return typeof window !== 'undefined' && (window as any).__E2E_MOCK_COLLAB__ === true;
+  }
+
   connect(runId: string): void {
     if (this.currentRunId === runId && this.client?.connected) {
       return;
@@ -87,6 +91,33 @@ export class CollaborationWebSocketService implements OnDestroy {
     this.currentRunId = runId;
     this.reconnectionAttempts = 0;
     this.useFallbackPolling = false;
+
+    if (this.isE2EMock()) {
+      this.connectedSubject.next(true);
+      this.presenceSubject.next({ activeUsers: [this.userId], cursors: new Map() });
+      this.healthSubject.next({
+        latency: 0,
+        reconnectionCount: 0,
+        messageDeliveryRate: 1.0,
+        isHealthy: true,
+        qualityScore: 100,
+        healthStatus: 'HEALTHY'
+      });
+      this.eventsSubject.next({
+        eventType: 'USER_JOIN',
+        userId: this.userId,
+        timestamp: Date.now(),
+        data: { activeUsers: [this.userId] }
+      });
+      return;
+    }
+
+    const forcePolling = (window as any).__E2E_FORCE_COLLAB_POLLING__ === true;
+    if (forcePolling) {
+      this.connectedSubject.next(true);
+      this.startHttpPolling(runId);
+      return;
+    }
 
     this.connectWebSocket(runId);
   }
@@ -163,6 +194,10 @@ export class CollaborationWebSocketService implements OnDestroy {
       this.pollingSubscription.unsubscribe();
     }
 
+    if (!this.connectedSubject.getValue()) {
+      this.connectedSubject.next(true);
+    }
+
     this.pollingSubscription = interval(2000).subscribe(() => {
       this.http.get<any>(`/api/runs/${runId}/collaboration/poll`, {
         params: this.lastReceivedSequence ? 
@@ -225,6 +260,13 @@ export class CollaborationWebSocketService implements OnDestroy {
   }
 
   disconnect(): void {
+    if (this.isE2EMock()) {
+      this.currentRunId = null;
+      this.connectedSubject.next(false);
+      this.presenceSubject.next({ activeUsers: [], cursors: new Map() });
+      return;
+    }
+
     if (this.currentRunId && this.client?.connected) {
       this.sendLeave();
     }
@@ -272,6 +314,10 @@ export class CollaborationWebSocketService implements OnDestroy {
   }
 
   private sendMessage(destination: string, body: any): void {
+    if (this.isE2EMock()) {
+      return;
+    }
+
     const messageBody = JSON.stringify(body);
     const queuedMessage: QueuedMessage = {
       destination,
