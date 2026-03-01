@@ -76,7 +76,7 @@ jobs:
           git reset --hard origin/${{ steps.git_branch.outputs.branch }} --quiet
           
           echo "🐳 Pulling latest images from GHCR..."
-          docker-compose -f infra/deployments/prod/docker-compose.yml pull
+          docker compose -f infra/deployments/prod/docker-compose.yml pull
           
           echo "💾 Running deployment script..."
           if [ "${{ github.event.inputs.environment }}" = "production" ]; then
@@ -84,12 +84,12 @@ jobs:
           else
             # Staging deployment
             echo "🚀 Deploying to staging environment..."
-            docker-compose -f infra/deployments/prod/docker-compose.yml up -d
+            docker compose -f infra/deployments/prod/docker-compose.yml up -d
           fi
           
           echo "✅ Deployment complete"
           echo "📊 Service status:"
-          docker-compose -f infra/deployments/prod/docker-compose.yml ps
+          docker compose -f infra/deployments/prod/docker-compose.yml ps
           EOF
 
       - name: Notify Slack on success
