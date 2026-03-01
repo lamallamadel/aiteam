@@ -153,7 +153,7 @@ jobs:
 
       - name: Start backend (H2 + jwtmock) on :8080
         run: |
-          cd backend
+          cd ai-orchestrator
           nohup ./mvnw -B -DskipTests spring-boot:run                 -Dspring-boot.run.profiles=e2e                 -Dspring-boot.run.arguments="--server.port=8080"                 > ../backend-e2e.log 2>&1 &
 
       - name: Wait for backend
