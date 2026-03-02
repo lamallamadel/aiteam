@@ -80,6 +80,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y trivy
 
+      - name: Pre-download Trivy vulnerability DB
+        run: |
+          for i in 1 2 3; do
+            trivy image --download-db-only \
+              --cache-dir "$GITHUB_WORKSPACE/.cache/trivy" \
+              --timeout 15m && break
+            echo "Attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
+
       - name: Run Trivy on backend image
         uses: aquasecurity/trivy-action@0.34.1
         with:
@@ -91,6 +101,8 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
+          skip-db-update: true
+          timeout: '15m'
       
       - name: Upload backend Trivy results
         uses: github/codeql-action/upload-sarif@v4
@@ -110,6 +122,8 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
+          skip-db-update: true
+          timeout: '15m'
       
       - name: Upload frontend Trivy results
         uses: github/codeql-action/upload-sarif@v4
@@ -129,6 +143,8 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
+          skip-db-update: true
+          timeout: '15m'
       
       - name: Block on CRITICAL vulnerabilities (frontend)
         uses: aquasecurity/trivy-action@0.34.1
@@ -141,6 +157,8 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
+          skip-db-update: true
+          timeout: '15m'
 
   e2e:
     runs-on: ubuntu-latest
