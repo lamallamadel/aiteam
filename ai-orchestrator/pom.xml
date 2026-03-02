@@ -304,8 +304,10 @@
             <artifactId>dependency-check-maven</artifactId>
             <version>12.1.1</version>
             <configuration>
+              <dataDirectory>${user.home}/.dependency-check/data</dataDirectory>
               <nvdApiKey>${nvd.api.key}</nvdApiKey>
               <nvdMaxRetryCount>5</nvdMaxRetryCount>
+              <nvdApiDelay>6000</nvdApiDelay>
               <connectionTimeout>15000</connectionTimeout>
               <readTimeout>120000</readTimeout>
               <failBuildOnCVSS>7.0</failBuildOnCVSS>
