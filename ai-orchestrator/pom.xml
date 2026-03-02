@@ -304,6 +304,7 @@
             <artifactId>dependency-check-maven</artifactId>
             <version>12.1.1</version>
             <configuration>
+              <nvdApiKey>${nvd.api.key}</nvdApiKey>
               <failBuildOnCVSS>7.0</failBuildOnCVSS>
               <suppressionFile>dependency-check-suppressions.xml</suppressionFile>
               <assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
