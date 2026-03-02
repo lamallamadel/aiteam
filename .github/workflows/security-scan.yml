@@ -47,6 +47,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           ARGS="dependency-check:check -Psecurity-scan --batch-mode --no-transfer-progress"
+          ARGS="$ARGS -DdataDirectory=${HOME}/.dependency-check/data"
           if [ -n "$NVD_API_KEY" ]; then
             ARGS="$ARGS -Dnvd.api.key=$NVD_API_KEY"
           fi
