@@ -149,7 +149,7 @@ jobs:
       
       - name: Generate SBOM with CycloneDX
         working-directory: ai-orchestrator
-        run: mvn cyclonedx:makeAggregateBom --batch-mode --no-transfer-progress
+        run: mvn cyclonedx:makeAggregateBom --batch-mode --no-transfer-progress -Psecurity-scan
       
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
