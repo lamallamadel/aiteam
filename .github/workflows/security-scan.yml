@@ -46,11 +46,11 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          ARGS="dependency-check:check --batch-mode --no-transfer-progress"
+          ARGS="dependency-check:check -Psecurity-scan --batch-mode --no-transfer-progress"
           if [ -n "$NVD_API_KEY" ]; then
             ARGS="$ARGS -Dnvd.api.key=$NVD_API_KEY"
           fi
-          mvn $ARGS
+          ./mvnw $ARGS
         continue-on-error: true
       
       - name: Upload dependency check report
@@ -149,7 +149,7 @@ jobs:
       
       - name: Generate SBOM with CycloneDX
         working-directory: ai-orchestrator
-        run: mvn cyclonedx:makeAggregateBom --batch-mode --no-transfer-progress -Psecurity-scan
+        run: ./mvnw cyclonedx:makeAggregateBom --batch-mode --no-transfer-progress
       
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
