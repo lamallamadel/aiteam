@@ -23,6 +23,8 @@ jobs:
           java-version: "21"
           cache: maven
       - name: Backend - Verify
+        # Security scanning (OWASP Dependency-Check) runs in the dedicated
+        # security-scan.yml workflow to avoid NVD rate-limit failures here.
         run: |
           cd ai-orchestrator
           ./mvnw -B clean verify
