@@ -25,6 +25,13 @@ jobs:
           cd ai-orchestrator
           docker build -t ai-orchestrator:${{ github.sha }} .
 
+      - name: Install Trivy
+        run: |
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq
+          sudo apt-get install -y trivy
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.34.1
         with:
@@ -35,6 +42,7 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
@@ -53,6 +61,7 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
 
   scan-frontend:
     name: Scan Frontend Image
@@ -66,6 +75,13 @@ jobs:
           cd frontend
           docker build -t frontend:${{ github.sha }} .
 
+      - name: Install Trivy
+        run: |
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq
+          sudo apt-get install -y trivy
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.34.1
         with:
@@ -76,6 +92,7 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
@@ -94,3 +111,4 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
