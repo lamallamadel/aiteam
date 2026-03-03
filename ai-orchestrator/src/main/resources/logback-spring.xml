@@ -5,6 +5,23 @@
     <property name="CONSOLE_LOG_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] [agent=%X{agentName:-N/A}] - %msg%n"/>
 
+    <!-- E2E profile: plain console output (same as dev) -->
+    <springProfile name="e2e">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="com.atlasia.ai" level="INFO"/>
+        <logger name="org.springframework" level="INFO"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
     <!-- Dev profile: plain console + file output -->
     <springProfile name="default,dev">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
