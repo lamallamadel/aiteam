@@ -36,7 +36,17 @@ atlasia:
     github:
       secret: e2e-hook-Vn5kP8rT2wX4yZ7bC1dF3gH6jL9mN0qS
   encryption:
-    key: e2e-enc-K7mN2pQ5rT8vX1yZ4bC9dF3gH6jL0mP2qR
+    key: iYJ8GcY62kd7H6u262IokS4kxS8zfaj3XY3qEywIUdM=
+  oauth2:
+    github:
+      client-id: e2e-placeholder
+      client-secret: e2e-placeholder
+    google:
+      client-id: e2e-placeholder
+      client-secret: e2e-placeholder
+    gitlab:
+      client-id: e2e-placeholder
+      client-secret: e2e-placeholder
 
 logging:
   level:
