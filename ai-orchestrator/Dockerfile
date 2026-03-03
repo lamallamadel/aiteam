@@ -20,7 +20,8 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Install curl for health checks, then remove unnecessary packages
-RUN apk add --no-cache curl && \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl && \
     apk del --purge apk-tools && \
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 

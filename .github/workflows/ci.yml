@@ -73,8 +73,25 @@ jobs:
           cd frontend
           docker build -t frontend:${{ github.sha }} .
       
+      - name: Install Trivy
+        run: |
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq
+          sudo apt-get install -y trivy
+
+      - name: Pre-download Trivy vulnerability DB
+        run: |
+          for i in 1 2 3; do
+            trivy image --download-db-only \
+              --cache-dir "$GITHUB_WORKSPACE/.cache/trivy" \
+              --timeout 15m && break
+            echo "Attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
+
       - name: Run Trivy on backend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: ai-orchestrator:${{ github.sha }}
           format: 'sarif'
@@ -83,16 +100,18 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
+          timeout: '15m'
       
       - name: Upload backend Trivy results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-backend-results.sarif') != ''
         with:
           sarif_file: 'trivy-backend-results.sarif'
           category: 'container-backend'
       
       - name: Run Trivy on frontend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: frontend:${{ github.sha }}
           format: 'sarif'
@@ -101,16 +120,18 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
+          timeout: '15m'
       
       - name: Upload frontend Trivy results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-frontend-results.sarif') != ''
         with:
           sarif_file: 'trivy-frontend-results.sarif'
           category: 'container-frontend'
       
       - name: Block on CRITICAL vulnerabilities (backend)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: ai-orchestrator:${{ github.sha }}
           format: 'table'
@@ -119,9 +140,11 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
+          timeout: '15m'
       
       - name: Block on CRITICAL vulnerabilities (frontend)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: frontend:${{ github.sha }}
           format: 'table'
@@ -130,6 +153,8 @@ jobs:
           vuln-type: 'os,library'
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
+          skip-setup-trivy: true
+          timeout: '15m'
 
   e2e:
     runs-on: ubuntu-latest

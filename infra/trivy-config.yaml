@@ -10,11 +10,11 @@ db:
 
 # Scan Configuration
 scan:
-  # Security checks to enable
-  security-checks:
+  # Security checks to enable (use 'scanners', 'security-checks' is deprecated)
+  scanners:
     - vuln      # Vulnerabilities in OS packages and application dependencies
     - secret    # Secrets and sensitive data in images
-    - config    # Misconfigurations (e.g., exposed ports, insecure settings)
+    - misconfig # Misconfigurations (e.g., exposed ports, insecure settings)
   
   # Types of vulnerabilities to scan
   vuln-type:
@@ -87,9 +87,8 @@ output:
   format: "table"
 
 # Timeout Configuration
-timeout:
-  # Timeout for scanning (in seconds)
-  scan: 300
+# Go duration string - must be long enough for DB download (~90 MiB from ghcr.io)
+timeout: 15m
 
 # Cache Configuration
 cache:
@@ -124,8 +123,8 @@ platform:
 offline: false
 
 # Skip Update Check
-# Skip checking for Trivy updates
-skip-update: false
+# Skip checking for Trivy updates (note: skip-db-update controls DB update separately)
+skip-version-check: false
 
 # Additional Notes:
 # 1. Update suppression rules quarterly during security review

@@ -19,7 +19,8 @@ RUN npm run build -- --configuration production
 FROM nginx:1.27-alpine
 
 # Install curl for health checks, then remove unnecessary packages
-RUN apk add --no-cache curl && \
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl && \
     apk del --purge apk-tools && \
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 
