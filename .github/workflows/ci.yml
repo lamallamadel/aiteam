@@ -101,7 +101,6 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
-          skip-db-update: true
           timeout: '15m'
       
       - name: Upload backend Trivy results
@@ -122,7 +121,6 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
-          skip-db-update: true
           timeout: '15m'
       
       - name: Upload frontend Trivy results
@@ -143,7 +141,6 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
-          skip-db-update: true
           timeout: '15m'
       
       - name: Block on CRITICAL vulnerabilities (frontend)
@@ -157,7 +154,6 @@ jobs:
           scanners: 'vuln,secret,misconfig'
           trivy-config: 'infra/trivy-config.yaml'
           skip-setup-trivy: true
-          skip-db-update: true
           timeout: '15m'
 
   e2e:
