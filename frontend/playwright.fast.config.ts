@@ -42,7 +42,6 @@ export default defineConfig({
       ],
 
   webServer: {
-    command: `npm run start -- --host 127.0.0.1 --port 4200 --proxy-config ${isCI ? 'proxy.conf.e2e.json' : 'proxy.conf.json'}`,
     command: 'node --max-old-space-size=4096 ./node_modules/@angular/cli/bin/ng serve --host 127.0.0.1 --port 4200 --proxy-config proxy.e2e.conf.json',
     url: 'http://127.0.0.1:4200',
     reuseExistingServer: true,

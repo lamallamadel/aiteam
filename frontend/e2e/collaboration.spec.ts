@@ -152,7 +152,7 @@ async function setupUserSession(page: Page, userId: string): Promise<void> {
 async function waitForWebSocketConnection(page: Page, timeout: number = 5000): Promise<void> {
   const pathname = new URL(page.url()).pathname;
   if (!/^\/runs\//.test(pathname)) {
-    test.skip(`Run detail route not loaded (path: ${pathname}).`);
+    test.skip(true, `Run detail route not loaded (path: ${pathname}).`);
   }
 
   const isAuthScreen = await page
@@ -160,7 +160,7 @@ async function waitForWebSocketConnection(page: Page, timeout: number = 5000): P
     .isVisible()
     .catch(() => false);
   if (isAuthScreen) {
-    test.skip('Auth screen displayed instead of run detail (auth/profile API unavailable).');
+    test.skip(true, 'Auth screen displayed instead of run detail (auth/profile API unavailable).');
   }
 
   const storeReady = await page
@@ -168,7 +168,7 @@ async function waitForWebSocketConnection(page: Page, timeout: number = 5000): P
     .then(() => true)
     .catch(() => false);
   if (!storeReady) {
-    test.skip('workflowStreamStore is not initialized (likely missing backend dependencies).');
+    test.skip(true, 'workflowStreamStore is not initialized (likely missing backend dependencies).');
   }
 
   const connected = await page
@@ -183,7 +183,7 @@ async function waitForWebSocketConnection(page: Page, timeout: number = 5000): P
     .catch(() => false);
 
   if (!connected) {
-    test.skip('Collaboration WebSocket not connected; backend or mock unavailable.');
+    test.skip(true, 'Collaboration WebSocket not connected; backend or mock unavailable.');
   }
 }
 
@@ -857,42 +857,48 @@ test.describe('Multi-User Collaboration - Cursor Positions', () => {
       if (service && typeof service.handleIncomingEvent === 'function') {
         service.handleIncomingEvent({
           eventType: 'CURSOR_MOVE',
-        (window as any).__E2E_MOCK_COLLAB__ = true;
-        (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
           userId,
           runId,
           timestamp: new Date().toISOString(),
           data: {
             cursors: {
               [userId]: 'DEVELOPER',
+            },
           },
         });
-    expect(pathname, `Expected to be on run detail route, but got: ${pathname}`).toMatch(/^\/runs\//);
+      }
+    }, { userId: USER_1_ID, runId: TEST_RUN_ID });
+
     // Check that cursor move was sent
     await page.waitForFunction(
       () => {
         const store = (window as any).workflowStreamStore;
         const cursors = store.cursorPositions();
-    expect(isAuthScreen, 'Auth screen is displayed instead of run detail.').toBe(false);
+        return cursors.size > 0;
+      },
+      { timeout: 5000 }
     );
-    
+
     const state = await getCollaborationState(page);
     expect(state.cursorPositions.length).toBeGreaterThanOrEqual(1);
   });
-    expect(storeReady, 'workflowStreamStore is not initialized (backend dependencies unavailable).').toBe(true);
+
+  test('should show multiple cursors simultaneously', async ({ browser }) => {
+    const context1 = await browser.newContext();
     const context2 = await browser.newContext();
-    
+
     const page1 = await context1.newPage();
     const page2 = await context2.newPage();
 
     await injectMockWebSocket(page1);
     await injectMockWebSocket(page2);
-    
+
     await setupUserSession(page1, USER_1_ID);
     await setupUserSession(page2, USER_2_ID);
-    
+
     await navigateToRun(page1, TEST_RUN_ID);
-    expect(connected, 'Collaboration WebSocket not connected.').toBe(true);
+    await navigateToRun(page2, TEST_RUN_ID);
+    await page1.waitForFunction(() => Boolean((window as any).workflowStreamStore), { timeout: 10000 });
     await page2.waitForFunction(() => Boolean((window as any).workflowStreamStore), { timeout: 10000 });
     
     // Both users move to same node
