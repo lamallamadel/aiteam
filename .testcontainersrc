@@ -1,0 +1,19 @@
+# Testcontainers Cloud Agent Configuration
+# Place this file in your project root or home directory (~/.testcontainersrc)
+
+# Enable Testcontainers Cloud
+tc_enabled=true
+
+# Cloud token (get from https://app.testcontainers.cloud)
+# You can set this as environment variable instead: TESTCONTAINERS_CLOUD_TOKEN
+tc_cloud_enabled=true
+
+# Agent connection settings
+tc_agent_enabled=true
+tc_agent_socket=~/.testcontainers/agent.sock
+
+# Debug logging
+tc_debug=false
+
+# Docker host (auto-detected by default)
+# DOCKER_HOST=unix:///var/run/docker.sock
