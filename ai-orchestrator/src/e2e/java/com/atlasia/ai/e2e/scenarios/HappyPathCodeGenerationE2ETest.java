@@ -227,7 +227,7 @@ public class HappyPathCodeGenerationE2ETest extends AbstractE2ETest {
                         var savedRun = runs.get(0);
 
                         assertEquals(RunStatus.DONE, savedRun.getStatus(),
-                                        "Run should eventually hit DONE status: " + savedRun.getStatus());
+                                        "Run should eventually hit DONE status: " + runFailureDiagnostic(savedRun));
                         assertTrue(savedRun.getArtifacts().size() >= 1, "Should have generated artifacts");
                 });
 

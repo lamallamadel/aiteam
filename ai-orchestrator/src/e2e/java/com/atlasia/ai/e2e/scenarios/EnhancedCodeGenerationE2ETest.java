@@ -67,7 +67,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
             var savedRun = runs.get(0);
 
             assertEquals(RunStatus.DONE, savedRun.getStatus(),
-                    "Run should eventually hit DONE status: " + savedRun.getStatus());
+                    "Run should eventually hit DONE status: " + runFailureDiagnostic(savedRun));
             assertTrue(savedRun.getArtifacts().size() >= 1, "Should have generated artifacts");
         });
 
@@ -95,7 +95,8 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofSeconds(2)).untilAsserted(() -> {
             var runs = runRepository.findAll();
             var savedRun = runs.get(0);
-            assertEquals(RunStatus.DONE, savedRun.getStatus());
+            assertEquals(RunStatus.DONE, savedRun.getStatus(),
+                    "Run should eventually hit DONE: " + runFailureDiagnostic(savedRun));
         });
 
         verify(moreThanOrExactly(2), postRequestedFor(urlPathEqualTo("/repos/test-owner/test-repo/git/blobs")));
@@ -118,7 +119,8 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofSeconds(2)).untilAsserted(() -> {
             var runs = runRepository.findAll();
             var savedRun = runs.get(0);
-            assertEquals(RunStatus.DONE, savedRun.getStatus());
+            assertEquals(RunStatus.DONE, savedRun.getStatus(),
+                    "Run should eventually hit DONE: " + runFailureDiagnostic(savedRun));
 
             List<RunArtifactEntity> artifacts = savedRun.getArtifacts();
             boolean hasReviewArtifact = artifacts.stream()
@@ -144,7 +146,8 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofSeconds(2)).untilAsserted(() -> {
             var runs = runRepository.findAll();
             var savedRun = runs.get(0);
-            assertEquals(RunStatus.DONE, savedRun.getStatus());
+            assertEquals(RunStatus.DONE, savedRun.getStatus(),
+                    "Run should eventually hit DONE: " + runFailureDiagnostic(savedRun));
         });
 
         verify(1, postRequestedFor(urlPathEqualTo("/repos/test-owner/test-repo/git/refs"))
@@ -168,7 +171,8 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofSeconds(2)).untilAsserted(() -> {
             var runs = runRepository.findAll();
             var savedRun = runs.get(0);
-            assertEquals(RunStatus.DONE, savedRun.getStatus());
+            assertEquals(RunStatus.DONE, savedRun.getStatus(),
+                    "Run should eventually hit DONE: " + runFailureDiagnostic(savedRun));
         });
 
         verify(moreThanOrExactly(1), getRequestedFor(urlPathMatching("/repos/test-owner/test-repo/commits/.*/check-runs")));
@@ -192,7 +196,8 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
             var runs = runRepository.findAll();
             assertFalse(runs.isEmpty());
             var savedRun = runs.get(0);
-            assertEquals(RunStatus.DONE, savedRun.getStatus());
+            assertEquals(RunStatus.DONE, savedRun.getStatus(),
+                    "Run should eventually hit DONE: " + runFailureDiagnostic(savedRun));
 
             List<RunArtifactEntity> artifacts = savedRun.getArtifacts();
             assertTrue(artifacts.size() >= 1, "Should have at least one artifact");

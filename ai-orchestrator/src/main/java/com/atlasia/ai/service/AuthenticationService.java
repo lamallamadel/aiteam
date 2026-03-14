@@ -50,35 +50,37 @@ public class AuthenticationService {
     @Transactional
     public AuthTokenResponse authenticate(LoginRequest loginRequest) {
         try {
-            if (bruteForceProtectionService.isBlocked(loginRequest.getUsername())) {
-                logger.warn("Authentication blocked: Account temporarily locked due to failed attempts for user {}", 
-                    loginRequest.getUsername());
+            String login = loginRequest.getUsername();
+            if (bruteForceProtectionService.isBlocked(login)) {
+                logger.warn("Authentication blocked: Account temporarily locked due to failed attempts for user {}", login);
                 throw new LockedException("Account is temporarily locked due to multiple failed login attempts. Please try again later.");
             }
 
-            UserEntity user = userDetailsService.loadUserEntityByUsername(loginRequest.getUsername());
+            UserEntity user = login.contains("@")
+                    ? userDetailsService.loadUserEntityByEmail(login)
+                    : userDetailsService.loadUserEntityByUsername(login);
 
             if (!user.isEnabled()) {
-                logger.warn("Authentication failed: Account disabled for user {}", loginRequest.getUsername());
-                bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
+                logger.warn("Authentication failed: Account disabled for user {}", login);
+                bruteForceProtectionService.recordFailedLogin(login);
                 throw new DisabledException("Account is disabled");
             }
 
             if (user.isLocked()) {
-                logger.warn("Authentication failed: Account locked for user {}", loginRequest.getUsername());
+                logger.warn("Authentication failed: Account locked for user {}", login);
                 throw new LockedException("Account is locked");
             }
 
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPasswordHash())) {
-                logger.warn("Authentication failed: Invalid credentials for user {}", loginRequest.getUsername());
-                bruteForceProtectionService.recordFailedLogin(loginRequest.getUsername());
+                logger.warn("Authentication failed: Invalid credentials for user {}", login);
+                bruteForceProtectionService.recordFailedLogin(login);
                 throw new BadCredentialsException("Invalid username or password");
             }
 
-            bruteForceProtectionService.resetFailedAttempts(loginRequest.getUsername());
+            bruteForceProtectionService.resetFailedAttempts(login);
 
             if (user.isMfaEnabled()) {
-                logger.info("MFA required for user: {}", loginRequest.getUsername());
+                logger.info("MFA required for user: {}", user.getUsername());
                 throw new MfaRequiredException(user.getId(), user.getUsername());
             }
 
@@ -92,7 +94,7 @@ public class AuthenticationService {
 
             long expiresIn = TimeUnit.MINUTES.toSeconds(jwtProperties.getAccessTokenExpirationMinutes());
 
-            logger.info("User authenticated successfully: {}", loginRequest.getUsername());
+            logger.info("User authenticated successfully: {}", user.getUsername());
 
             return new AuthTokenResponse(accessToken, refreshToken, expiresIn);
 

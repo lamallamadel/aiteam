@@ -37,8 +37,11 @@ export class OrchestratorService {
         return this.http.get<ArtifactResponse[]>(`${this.apiUrl}/${id}/artifacts`);
     }
 
+    /** Backend accepts mode only "code" or "chat"; map UI values (PLANNING/EXECUTION) to "code". */
     createRun(request: RunRequest): Observable<RunResponse> {
-        return this.http.post<RunResponse>(this.apiUrl, request);
+        const mode = request.mode === 'EXECUTION' || request.mode === 'PLANNING' ? 'code' : request.mode;
+        const body = { ...request, mode };
+        return this.http.post<RunResponse>(this.apiUrl, body);
     }
 
     getPersonas(): Observable<Persona[]> {

@@ -89,6 +89,12 @@ services:
       - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
     profiles:
       - full
       - backend
@@ -102,7 +108,8 @@ services:
     environment:
       NG_CLI_ANALYTICS: ci
       ANGULAR_ENVIRONMENT: ${ANGULAR_ENVIRONMENT:-development}
-      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=4096}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=8192}
+      WATCHMAN_DISABLE: true
     ports:
       - "4200:4200"
     volumes:

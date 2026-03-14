@@ -116,7 +116,7 @@ public class WebSocketCollaborationE2ETest extends AbstractE2ETest {
         );
         testRun = runRepository.save(testRun);
 
-        wsUrl = "http://localhost:" + port + "/ws/runs/" + testRun.getId() + "/collaboration";
+        wsUrl = "http://127.0.0.1:" + port + "/ws/collaboration";
     }
 
     @Test
@@ -623,6 +623,7 @@ public class WebSocketCollaborationE2ETest extends AbstractE2ETest {
         handshakeHeaders.add("Authorization", "Bearer " + token);
         
         StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.add("X-Run-Id", testRun.getId().toString());
 
         return client.connectAsync(wsUrl, handshakeHeaders, connectHeaders, new StompSessionHandlerAdapter() {
         }).get(5, TimeUnit.SECONDS);

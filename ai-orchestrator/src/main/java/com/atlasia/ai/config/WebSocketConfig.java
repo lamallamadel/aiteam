@@ -28,6 +28,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.addEndpoint("/ws/runs/{runId}/collaboration")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();
+        // Fixed path for E2E and clients that pass runId in STOMP header X-Run-Id
+        registry.addEndpoint("/ws/collaboration")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
     }
 
     @Override

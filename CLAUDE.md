@@ -19,6 +19,10 @@ mvn clean install          # Install dependencies
 mvn clean verify           # Build + run tests
 mvn test                   # Run tests only
 mvn spring-boot:run        # Start dev server
+
+# Run a single test class or method
+mvn test -Dtest=DeveloperStepTest
+mvn test -Dtest=DeveloperStepTest#testExecute_createsSuccessfulImplementation
 ```
 
 ### Frontend (`frontend/` — Angular 21)
@@ -30,6 +34,9 @@ npm run build              # Production build
 npm test                   # Unit tests (Vitest)
 npm run e2e                # E2E tests (Playwright, playwright.fast.config.ts)
 npm run lint               # Lint
+
+# Run a single test file (Vitest)
+npx vitest run src/app/services/auth.service.spec.ts
 ```
 
 ### Infrastructure
@@ -39,7 +46,24 @@ docker compose -f infra/docker-compose.ai.yml up -d   # Start local PostgreSQL
 docker compose up -d                                    # Production deployment
 ./scripts/deploy.sh [staging|prod]                     # Deploy
 ./scripts/rollback.sh                                  # Rollback
+infra/vault-init.sh                                    # Initialize HashiCorp Vault secrets
 ```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `DB_URL` | PostgreSQL connection URL | `jdbc:postgresql://localhost:5432/ai` |
+| `DB_USER` / `DB_PASSWORD` | Database credentials | `ai` / `ai` |
+| `ORCHESTRATOR_TOKEN` | API authentication token | `changeme` |
+| `LLM_ENDPOINT` | Primary LLM API endpoint | `https://api.openai.com/v1` |
+| `LLM_MODEL` | LLM model identifier | `gpt-4o-mini` |
+| `LLM_API_KEY` | LLM API key | — |
+| `LLM_FALLBACK_ENDPOINT` / `LLM_FALLBACK_API_KEY` | Fallback LLM (DeepSeek) | — |
+| `GITHUB_APP_ID` / `GITHUB_PRIVATE_KEY_PATH` / `GITHUB_INSTALLATION_ID` | GitHub App credentials | — |
+| `GITHUB_WEBHOOK_SECRET` | GitHub webhook HMAC secret | — |
+| `REPO_ALLOWLIST` | Modifiable paths (CSV) | `backend/,frontend/,docs/,infra/,ai/` |
+| `WORKFLOW_PROTECT` | Protected path prefix | `.github/workflows/` |
 
 ## Architecture
 
@@ -83,6 +107,17 @@ monitoring/          Prometheus + Grafana dashboards
 ### Backend Package Structure
 
 `com.atlasia.ai.{controller,model,persistence,api,config}`
+
+### Key API Endpoints
+
+- `POST /api/runs` — Trigger a full orchestration pipeline
+- `GET /api/runs` — List all runs
+- `GET /api/personas` — List available AI Review Roles
+- `POST /api/chat/{personaName}` — Chat directly with a persona
+- `GET /actuator/health` — Health check
+- `WS /ws/runs/{runId}/collaboration` — Real-time STOMP/SockJS collaboration (CRDT-based)
+- `GET/POST /api/admin/websocket/*` — WebSocket admin monitoring
+- `GET/POST /api/multi-repo/*` — Multi-repository orchestration
 
 ### Orchestration Patterns
 
@@ -135,3 +170,9 @@ monitoring/          Prometheus + Grafana dashboards
 - Persistent flaky tests (>= 2 runs)
 - Conflicts between ADR / business rules / naming conventions
 - Quality gate impossible to satisfy without arbitration
+
+### Règle anti-décharge sur l'environnement
+
+- Si une commande échoue pour cause d'environnement (JDK, dépendances, services), vérifier d'abord que tous les scripts et procédures du projet ont été exécutés (`scripts/*.ps1`, `*.sh`, README/AGENTS.md/CLAUDE.md).
+- Ne jamais conclure « tu dois lancer X sur ta machine » si le dépôt contient un script ou une instruction pour faire X : l'assistant doit exécuter cette étape avant de reporter l'échec ou de déléguer à l'utilisateur.
+- En cas d'échec après avoir suivi les procédures du projet, le message doit indiquer explicitement : « J'ai exécuté [script/commande] puis [commande] ; l'échec persiste parce que [raison]. »

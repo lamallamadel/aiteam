@@ -81,4 +81,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         return userRepository.findByUsernameWithRolesAndPermissions(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
+
+    public UserEntity loadUserEntityByEmail(String email) throws UsernameNotFoundException {
+        return userRepository.findByEmailWithRolesAndPermissions(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
+    }
 }

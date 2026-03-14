@@ -1,5 +1,6 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.config.OpenTelemetryTestConfig;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 
 import java.time.Instant;
 import java.util.*;
@@ -19,6 +21,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest
+@Import(OpenTelemetryTestConfig.class)
 @org.springframework.test.context.TestPropertySource(properties = {
         "atlasia.orchestrator.repo-allowlist=src/,docs/,pom.xml",
         "atlasia.orchestrator.workflow-protect-prefix=.github/workflows/"
@@ -99,7 +102,7 @@ class DeveloperStepIntegrationTest {
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenReturn(llmResponse);
 
-        String result = developerStep.execute(context);
+        var result = developerStep.execute(context);
 
         assertNotNull(result);
         assertTrue(result.contains("github.com"));
@@ -137,7 +140,7 @@ class DeveloperStepIntegrationTest {
                         }
                         """);
 
-        String result = developerStep.execute(context);
+        var result = developerStep.execute(context);
 
         assertNotNull(result);
         verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap());
@@ -150,7 +153,7 @@ class DeveloperStepIntegrationTest {
         when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
                 .thenThrow(new RuntimeException("LLM service down"));
 
-        String result = developerStep.execute(context);
+        var result = developerStep.execute(context);
 
         assertNotNull(result);
         verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap());
@@ -233,7 +236,7 @@ class DeveloperStepIntegrationTest {
 
         setupRestOfSuccessfulFlow();
 
-        String result = developerStep.execute(context);
+        var result = developerStep.execute(context);
 
         assertNotNull(result);
         verify(gitHubApiClient).compareCommits("test-owner", "test-repo", "main-sha-123", "old-branch-sha");
@@ -310,14 +313,14 @@ class DeveloperStepIntegrationTest {
 
         developerStep.execute(context);
 
-        List<com.atlasia.ai.model.RunArtifactEntity> artifacts = runEntity.getArtifacts();
+        var artifacts = runEntity.getArtifacts();
         assertEquals(1, artifacts.size());
 
-        com.atlasia.ai.model.RunArtifactEntity artifact = artifacts.get(0);
+        var artifact = artifacts.getFirst();
         assertEquals("developer", artifact.getAgentName());
         assertEquals("reasoning_trace", artifact.getArtifactType());
 
-        String payload = artifact.getPayload();
+        var payload = artifact.getPayload();
         assertTrue(payload.contains("code_generation"));
         assertTrue(payload.contains("Implementation with reasoning"));
     }

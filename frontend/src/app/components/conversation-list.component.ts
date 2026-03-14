@@ -1,6 +1,7 @@
-import { Component, OnInit, Output, EventEmitter } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { RunResponse, Persona } from '../models/orchestrator.model';
 
@@ -75,23 +76,18 @@ export class ConversationListComponent implements OnInit {
 
   constructor(
     private orchestratorService: OrchestratorService,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) { }
 
   ngOnInit() {
-    this.loadRuns();
-    this.loadPersonas();
-  }
-
-  loadRuns() {
-    this.orchestratorService.getRuns().subscribe((runs: RunResponse[]) => {
+    forkJoin({
+      runs: this.orchestratorService.getRuns(),
+      personas: this.orchestratorService.getPersonas(),
+    }).subscribe(({ runs, personas }) => {
       this.runs = runs;
-    });
-  }
-
-  loadPersonas() {
-    this.orchestratorService.getPersonas().subscribe((personas: Persona[]) => {
       this.personas = personas;
+      this.cdr.markForCheck();
     });
   }
 

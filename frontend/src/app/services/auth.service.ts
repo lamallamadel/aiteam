@@ -46,6 +46,9 @@ export class AuthService {
     private readonly TOKEN_KEY = 'atlasia_access_token';
     private readonly REFRESH_TOKEN_KEY = 'atlasia_refresh_token';
     private readonly CSRF_TOKEN_COOKIE = 'XSRF-TOKEN';
+
+    /** CSRF token from API response body (reliable when cookie is not set due to proxy/origin). */
+    private csrfTokenFromApi: string | null = null;
     
     private isRefreshing = false;
     private refreshTokenSubject = new BehaviorSubject<string | null>(null);
@@ -75,10 +78,10 @@ export class AuthService {
                 if (response.mfaRequired) {
                     return of(response);
                 }
-                return this.loadUserProfile().pipe(
+                return this.fetchCsrfToken().pipe(
+                    switchMap(() => this.loadUserProfile()),
                     switchMap(() => of(response)),
                     catchError(() => {
-                        // Even if profile load fails, we have tokens
                         return of(response);
                     })
                 );
@@ -182,12 +185,19 @@ export class AuthService {
     clearTokens(): void {
         localStorage.removeItem(this.TOKEN_KEY);
         localStorage.removeItem(this.REFRESH_TOKEN_KEY);
+        this.csrfTokenFromApi = null;
     }
 
     fetchCsrfToken(): Observable<void> {
-        return this.http.get<void>('/api/auth/csrf', {
+        return this.http.get<{ token: string }>('/api/auth/csrf', {
             withCredentials: true
         }).pipe(
+            tap((res) => {
+                if (res?.token) {
+                    this.csrfTokenFromApi = res.token;
+                }
+            }),
+            map(() => void 0),
             catchError(() => {
                 return throwError(() => new Error('Failed to fetch CSRF token'));
             })
@@ -195,10 +205,12 @@ export class AuthService {
     }
 
     getCsrfToken(): string | null {
+        if (this.csrfTokenFromApi) {
+            return this.csrfTokenFromApi;
+        }
         const name = this.CSRF_TOKEN_COOKIE + '=';
         const decodedCookie = decodeURIComponent(document.cookie);
         const cookieArray = decodedCookie.split(';');
-        
         for (let cookie of cookieArray) {
             cookie = cookie.trim();
             if (cookie.indexOf(name) === 0) {

@@ -21,7 +21,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.validation.annotation.Validated;
+
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -42,6 +45,7 @@ public class AuthController {
     private final OAuth2Service oauth2Service;
     private final UserRepository userRepository;
     private final AuthorizationService authorizationService;
+    private final CsrfTokenRepository csrfTokenRepository;
 
     public AuthController(
             UserRegistrationService userRegistrationService,
@@ -50,7 +54,8 @@ public class AuthController {
             PasswordResetService passwordResetService,
             OAuth2Service oauth2Service,
             UserRepository userRepository,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            CsrfTokenRepository csrfTokenRepository) {
         this.userRegistrationService = userRegistrationService;
         this.authenticationService = authenticationService;
         this.refreshTokenService = refreshTokenService;
@@ -58,6 +63,7 @@ public class AuthController {
         this.oauth2Service = oauth2Service;
         this.userRepository = userRepository;
         this.authorizationService = authorizationService;
+        this.csrfTokenRepository = csrfTokenRepository;
     }
 
     @PostMapping("/register")
@@ -310,23 +316,26 @@ public class AuthController {
     }
 
     @GetMapping("/csrf")
-    public ResponseEntity<Map<String, String>> getCsrfToken(CsrfToken csrfToken, HttpServletResponse response) {
-        if (csrfToken != null) {
-            Cookie cookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
-            cookie.setPath("/");
-            cookie.setHttpOnly(false);
-            cookie.setSecure(false);
-            cookie.setMaxAge(3600);
-            response.addCookie(cookie);
-            
-            Map<String, String> tokenResponse = new HashMap<>();
-            tokenResponse.put("token", csrfToken.getToken());
-            tokenResponse.put("headerName", csrfToken.getHeaderName());
-            tokenResponse.put("parameterName", csrfToken.getParameterName());
-            
-            return ResponseEntity.ok(tokenResponse);
+    public ResponseEntity<Map<String, String>> getCsrfToken(
+            CsrfToken csrfToken,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        if (csrfToken == null) {
+            csrfToken = csrfTokenRepository.generateToken(request);
+            csrfTokenRepository.saveToken(csrfToken, request, response);
         }
-        
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        Cookie cookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
+        cookie.setPath("/");
+        cookie.setHttpOnly(false);
+        cookie.setSecure(false);
+        cookie.setMaxAge(3600);
+        response.addCookie(cookie);
+
+        Map<String, String> tokenResponse = new HashMap<>();
+        tokenResponse.put("token", csrfToken.getToken());
+        tokenResponse.put("headerName", csrfToken.getHeaderName());
+        tokenResponse.put("parameterName", csrfToken.getParameterName());
+
+        return ResponseEntity.ok(tokenResponse);
     }
 }

@@ -23,6 +23,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -58,11 +59,15 @@ public class SecurityConfig {
         }
 
         @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-                CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-                csrfTokenRepository.setCookieName("XSRF-TOKEN");
-                csrfTokenRepository.setHeaderName("X-CSRF-TOKEN");
+        public CookieCsrfTokenRepository csrfTokenRepository() {
+                CookieCsrfTokenRepository repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+                repo.setCookieName("XSRF-TOKEN");
+                repo.setHeaderName("X-CSRF-TOKEN");
+                return repo;
+        }
 
+        @Bean
+        public SecurityFilterChain securityFilterChain(HttpSecurity http, CookieCsrfTokenRepository csrfTokenRepository) throws Exception {
                 CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
                 requestHandler.setCsrfRequestAttributeName("_csrf");
 
@@ -71,20 +76,19 @@ public class SecurityConfig {
                                                 .csrfTokenRepository(csrfTokenRepository)
                                                 .csrfTokenRequestHandler(requestHandler)
                                                 .ignoringRequestMatchers(
-                                                                "/api/auth/login",
-                                                                "/api/auth/register",
-                                                                "/api/auth/refresh",
-                                                                "/api/auth/logout",
-                                                                "/api/auth/csrf",
-                                                                "/api/auth/me",
-                                                                "/api/auth/mfa/**",
-                                                                "/api/auth/password-reset/**",
-                                                                "/api/auth/oauth2/**",
-                                                                "/api/runs/**",
-                                                                "/api/a2a/**",
-                                                                "/api/webhooks/**",
-                                                                "/actuator/**",
-                                                                "/ws/**"))
+                                                                new AntPathRequestMatcher("/api/auth/login"),
+                                                                new AntPathRequestMatcher("/api/auth/register"),
+                                                                new AntPathRequestMatcher("/api/auth/refresh"),
+                                                                new AntPathRequestMatcher("/api/auth/logout"),
+                                                                new AntPathRequestMatcher("/api/auth/csrf"),
+                                                                new AntPathRequestMatcher("/api/auth/me"),
+                                                                new AntPathRequestMatcher("/api/auth/mfa/**"),
+                                                                new AntPathRequestMatcher("/api/auth/password-reset/**"),
+                                                                new AntPathRequestMatcher("/api/auth/oauth2/**"),
+                                                                new AntPathRequestMatcher("/api/a2a/**"),
+                                                                new AntPathRequestMatcher("/api/webhooks/**"),
+                                                                new AntPathRequestMatcher("/actuator/**"),
+                                                                new AntPathRequestMatcher("/ws/**")))
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -113,7 +117,7 @@ public class SecurityConfig {
                                                 .requestMatchers("/actuator/health").permitAll()
                                                 .requestMatchers("/actuator/prometheus").permitAll()
                                                 .requestMatchers("/actuator/metrics/**").permitAll()
-                                                .requestMatchers("/ws/**").permitAll()
+                                                .requestMatchers("/ws/**").authenticated()
                                                 .requestMatchers("/api/a2a/**").permitAll()
                                                 .requestMatchers("/api/webhooks/**").permitAll()
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

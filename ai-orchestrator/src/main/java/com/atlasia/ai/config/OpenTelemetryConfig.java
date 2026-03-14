@@ -37,6 +37,16 @@ public class OpenTelemetryConfig {
 
     @Bean
     public OpenTelemetry openTelemetry() {
+        if (otlpEndpoint == null || otlpEndpoint.isBlank()) {
+            log.info("OTEL_EXPORTER_OTLP_ENDPOINT not set — tracing disabled (no-op)");
+            try {
+                GlobalOpenTelemetry.set(OpenTelemetry.noop());
+            } catch (IllegalStateException e) {
+                log.debug("GlobalOpenTelemetry already set, skipping registration");
+            }
+            return OpenTelemetry.noop();
+        }
+
         Resource resource = Resource.getDefault()
                 .merge(Resource.create(Attributes.builder()
                         .put(AttributeKey.stringKey("service.name"), serviceName)

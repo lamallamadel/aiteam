@@ -1164,10 +1164,23 @@ export class ChatInterfaceComponent implements OnChanges, AfterViewChecked, OnIn
   private handleError(err: any) {
     this.isTyping = false;
     this.typingPersonas.clear();
-    if (err.status === 401) {
+    if (err?.status === 401) {
       this.errorMessage = 'Session expired. Please log in again.';
     } else {
-      this.errorMessage = 'Communication failed with Atlasia Neural Link.';
+      const status = err?.status;
+      const detail =
+        err?.error?.message ??
+        err?.error?.detail ??
+        (typeof err?.error === 'string' ? err.error : null) ??
+        err?.message;
+      if (status === 0 || status == null) {
+        this.errorMessage =
+          'Cannot reach the server. Check that the backend is running and the proxy (e.g. ng serve proxy) is correct.';
+      } else if (detail) {
+        this.errorMessage = `Neural Link error (${status}): ${detail}`;
+      } else {
+        this.errorMessage = `Communication failed with Atlasia Neural Link (${status ?? 'network'}).`;
+      }
     }
     this.cdr.detectChanges();
   }

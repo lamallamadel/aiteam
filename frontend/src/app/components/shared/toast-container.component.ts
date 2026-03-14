@@ -9,7 +9,7 @@ import { ToastService } from '../../services/toast.service';
   template: `
     <div class="toast-container">
       @for (toast of toastService.toasts(); track toast.id) {
-        <div class="toast toast-{{ toast.type }}" [@slideIn]>
+        <div class="toast toast-{{ toast.type }}">
           <div class="toast-content">
             <span class="toast-icon">{{ getIcon(toast.type) }}</span>
             <span class="toast-message">{{ toast.message }}</span>
