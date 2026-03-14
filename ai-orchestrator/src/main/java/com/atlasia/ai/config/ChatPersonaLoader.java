@@ -12,11 +12,13 @@ import java.io.InputStream;
 import java.util.*;
 
 /**
- * Loads rich Chat Mode persona definitions from classpath:ai/agents/chat-personas/*.yaml.
+ * Loads persona definitions from classpath:ai/agents/personas/*.yaml — the single source of truth.
  *
- * These are distinct from the flat Review personas (ai/agents/personas/) used in Code Mode.
- * The rich schema supports: identity, communication_style, skills, domain_knowledge,
- * constraints, anti_patterns, output_defaults, clarification, few_shot_examples, handoff.
+ * Handles both schemas:
+ * - Chat Mode personas: use the {@code identity} field as the LLM identity brief.
+ * - Code Mode review personas: use the {@code persona} field as fallback when {@code identity} is absent.
+ *
+ * Personas without an {@code id} field use their filename (minus .yaml) as the key.
  *
  * System prompts are assembled by injecting each section in a fixed order so the LLM
  * receives a coherent, structured identity brief before any user message.
@@ -25,7 +27,7 @@ import java.util.*;
 public class ChatPersonaLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ChatPersonaLoader.class);
-    private static final String CHAT_PERSONAS_PATH = "classpath:ai/agents/chat-personas/*.yaml";
+    private static final String PERSONAS_PATH = "classpath:ai/agents/personas/*.yaml";
 
     /** Raw parsed YAML maps, keyed by persona id */
     private final Map<String, Map<String, Object>> personas = new HashMap<>();
@@ -35,25 +37,30 @@ public class ChatPersonaLoader {
         Yaml yaml = new Yaml();
         var resolver = new PathMatchingResourcePatternResolver();
         try {
-            Resource[] resources = resolver.getResources(CHAT_PERSONAS_PATH);
+            Resource[] resources = resolver.getResources(PERSONAS_PATH);
             for (Resource resource : resources) {
                 try (InputStream is = resource.getInputStream()) {
                     Map<String, Object> data = yaml.load(is);
+                    // id field preferred; fall back to filename without extension
                     String id = (String) data.get("id");
+                    if (id == null || id.isBlank()) {
+                        String filename = resource.getFilename();
+                        id = filename != null ? filename.replace(".yaml", "") : null;
+                    }
                     if (id != null) {
                         personas.put(id, data);
-                        log.info("Loaded chat persona: {} ({})", data.get("name"), resource.getFilename());
+                        log.info("Loaded persona: {} ({})", data.get("name"), resource.getFilename());
                     } else {
-                        log.warn("Chat persona file {} is missing the 'id' field — skipped", resource.getFilename());
+                        log.warn("Persona file {} has no id and no filename — skipped", resource.getFilename());
                     }
                 } catch (Exception e) {
-                    log.error("Failed to load chat persona from {}: {}", resource.getFilename(), e.getMessage());
+                    log.error("Failed to load persona from {}: {}", resource.getFilename(), e.getMessage());
                 }
             }
         } catch (Exception e) {
-            log.warn("No chat personas found at {}: {}", CHAT_PERSONAS_PATH, e.getMessage());
+            log.warn("No personas found at {}: {}", PERSONAS_PATH, e.getMessage());
         }
-        log.info("Loaded {} chat persona(s)", personas.size());
+        log.info("Loaded {} persona(s)", personas.size());
     }
 
     // -------------------------------------------------------------------------
@@ -85,7 +92,10 @@ public class ChatPersonaLoader {
         var p = getPersona(personaId);
         var sb = new StringBuilder();
 
-        append(sb, "# Identity\n", getString(p, "identity"));
+        // Chat Mode personas use `identity`; Code Mode review personas use `persona` as fallback
+        String identity = getString(p, "identity");
+        if (identity.isBlank()) identity = getString(p, "persona");
+        append(sb, "# Identity\n", identity);
         appendCommunicationStyle(sb, p);
         appendSkills(sb, p);
         append(sb, "\n# Domain knowledge\n", getString(p, "domain_knowledge"));

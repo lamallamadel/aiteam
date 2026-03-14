@@ -290,6 +290,18 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>${project.basedir}/../ai/agents/personas</directory>
+        <targetPath>ai/agents/personas</targetPath>
+        <includes>
+          <include>*.yaml</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

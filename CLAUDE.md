@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two modes:
 - **Code Mode**: Triggered by the `ai:run` GitHub label. Runs a fully autonomous pipeline: Issue → PM → Qualifier → Architect → Developer → Review → Tester → Writer → PR
-- **Chat Mode**: Interactive dialogue with specialized AI personas (Security Engineer, Code Quality Engineer, SRE Engineer, Frontend UX Engineer)
+- **Chat Mode**: Interactive dialogue with 8 AI personas (Architect, Backend Developer, QA Engineer, Frontend Designer, Security Engineer, Code Quality Engineer, SRE Engineer, Frontend UX Engineer)
 
 ## Commands
 
@@ -74,7 +74,7 @@ ai-orchestrator/     Spring Boot backend
 frontend/            Angular dashboard
 ai/
   agents/            Agent YAML contracts (orchestrator, pm, qualifier, architect, developer, review, tester, writer, judge)
-  agents/personas/   Review role definitions (security-engineer, code-quality-engineer, sre-engineer, frontend-ux-engineer)
+  agents/personas/   **Single source of truth for all 8 personas** (4 Code Mode review + 4 Chat Mode). Merged schema: Code Mode fields (persona, review_checklist, severity_levels…) + Chat Mode fields (id, identity, communication_style, skills, constraints, handoff…). Maven copies this directory to classpath:ai/agents/personas/ at build time.
   schemas/           JSON schema validation for agent artifacts
   orchestration/     9 hybrid orchestration patterns (blackboard, critic_loop, task_ledger, guardrails, gates, etc.)
   playbooks/         Operational playbooks (branching, CI fix loops, issue intake, E2E policy)
