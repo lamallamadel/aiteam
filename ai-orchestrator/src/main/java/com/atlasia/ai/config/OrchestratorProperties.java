@@ -9,7 +9,8 @@ public record OrchestratorProperties(
                 String workflowProtectPrefix,
                 GitHub github,
                 Llm llm,
-                Canvas canvas) {
+                Canvas canvas,
+                Chat chat) {
         public record GitHub(
                         String appId,
                         String privateKeyPath,
@@ -31,5 +32,8 @@ public record OrchestratorProperties(
                         int sseTimeoutMinutes,
                         String defaultMode,
                         java.util.List<String> enabledAgents) {
+        }
+
+        public record Chat(int memoryWindowSize) {
         }
 }
