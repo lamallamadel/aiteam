@@ -1,5 +1,6 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.config.ChatPersonaLoader;
 import com.atlasia.ai.config.PersonaConfig;
 import com.atlasia.ai.config.PersonaConfigLoader;
 import org.slf4j.Logger;
@@ -12,51 +13,71 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private final LlmService llmService;
+    private final ChatPersonaLoader chatPersonaLoader;
     private final PersonaConfigLoader personaConfigLoader;
     private final ConversationMemoryService memoryService;
 
     public ChatService(
             LlmService llmService,
+            ChatPersonaLoader chatPersonaLoader,
             PersonaConfigLoader personaConfigLoader,
             ConversationMemoryService memoryService) {
         this.llmService = llmService;
+        this.chatPersonaLoader = chatPersonaLoader;
         this.personaConfigLoader = personaConfigLoader;
         this.memoryService = memoryService;
     }
 
     public String chat(String userId, String personaName, String message) {
-        PersonaConfig persona = personaConfigLoader.getPersonaByName(personaName);
-        if (persona == null) {
-            throw new IllegalArgumentException("Persona not found: " + personaName);
-        }
+        String systemPrompt = resolveSystemPrompt(personaName);
 
         var history = memoryService.getContextWindow(userId, personaName);
         String historyBlock = memoryService.formatContextForPrompt(history);
 
-        String systemPrompt = buildSystemPrompt(persona, historyBlock);
+        String fullPrompt = injectHistory(systemPrompt, historyBlock);
 
         log.debug("Chat: user={} persona={} historyTurns={}", userId, personaName, history.size());
 
-        String reply = llmService.generateCompletion(systemPrompt, message);
+        String reply = llmService.generateCompletion(fullPrompt, message);
 
         memoryService.saveTurns(userId, personaName, message, reply);
 
         return reply;
     }
 
-    private String buildSystemPrompt(PersonaConfig persona, String historyBlock) {
+    /**
+     * Resolves the system prompt for a persona.
+     * Tries the rich Chat Mode loader first (architect, backend-developer, etc.).
+     * Falls back to the flat Review persona loader (security-engineer, sre-engineer, etc.)
+     * for backward compatibility with Code Mode personas used in chat.
+     */
+    private String resolveSystemPrompt(String personaName) {
+        if (chatPersonaLoader.hasPersona(personaName)) {
+            return chatPersonaLoader.getSystemPrompt(personaName);
+        }
+
+        PersonaConfig persona = personaConfigLoader.getPersonaByName(personaName);
+        if (persona != null) {
+            return buildFlatSystemPrompt(persona);
+        }
+
+        throw new IllegalArgumentException("Persona not found: " + personaName);
+    }
+
+    private String buildFlatSystemPrompt(PersonaConfig persona) {
         var sb = new StringBuilder();
         sb.append("You are ").append(persona.name()).append(", a ").append(persona.role()).append(".\n");
         sb.append("Mission: ").append(persona.mission()).append("\n");
         sb.append("Focus Areas: ").append(String.join(", ", persona.focusAreas())).append("\n");
         sb.append("You are in a direct chat mode with the user. Be helpful, concise, and stick to your unique persona and expertise.");
-
-        if (!historyBlock.isBlank()) {
-            sb.append("\n\n").append(historyBlock)
-              .append("\nUse the conversation history above to maintain context. ")
-              .append("Refer to prior decisions naturally without repeating them unnecessarily.");
-        }
-
         return sb.toString();
+    }
+
+    private String injectHistory(String systemPrompt, String historyBlock) {
+        if (historyBlock.isBlank()) return systemPrompt;
+        return systemPrompt
+            + "\n\n" + historyBlock
+            + "\nUse the conversation history above to maintain context. "
+            + "Refer to prior decisions naturally without repeating them unnecessarily.";
     }
 }
