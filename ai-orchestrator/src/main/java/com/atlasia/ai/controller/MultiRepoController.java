@@ -1,6 +1,6 @@
 package com.atlasia.ai.controller;
 
-import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.RepositoryGraphEntity;
 import com.atlasia.ai.service.*;
@@ -23,18 +23,15 @@ public class MultiRepoController {
 
     private final MultiRepoOrchestrationService orchestrationService;
     private final MultiRepoScheduler scheduler;
-    private final OrchestratorProperties props;
-    private final GitHubApiClient gitHubApiClient;
+    private final ApiAuthService apiAuthService;
 
     public MultiRepoController(
             MultiRepoOrchestrationService orchestrationService,
             MultiRepoScheduler scheduler,
-            OrchestratorProperties props,
-            GitHubApiClient gitHubApiClient) {
+            ApiAuthService apiAuthService) {
         this.orchestrationService = orchestrationService;
         this.scheduler = scheduler;
-        this.props = props;
-        this.gitHubApiClient = gitHubApiClient;
+        this.apiAuthService = apiAuthService;
     }
 
     @PostMapping("/repositories/register")
@@ -43,7 +40,7 @@ public class MultiRepoController {
     public ResponseEntity<RegistrationResponse> registerRepository(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody RepositoryRegistrationRequest request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -62,7 +59,7 @@ public class MultiRepoController {
     public ResponseEntity<WorkspaceDetectionResponse> detectWorkspaces(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody WorkspaceDetectionRequest request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -93,7 +90,7 @@ public class MultiRepoController {
     @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<RepositoryInfo>> listRepositories(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -116,7 +113,7 @@ public class MultiRepoController {
     public ResponseEntity<MultiRepoWorkflowResponse> executeWorkflow(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody MultiRepoWorkflowRequestDto request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -161,7 +158,7 @@ public class MultiRepoController {
     public ResponseEntity<CoordinatedPRResponse> createCoordinatedPRs(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody CoordinatedPRRequest request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -200,7 +197,7 @@ public class MultiRepoController {
     public ResponseEntity<CoordinatedMergeResponse> mergeCoordinatedPRs(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody CoordinatedMergeRequest request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -229,7 +226,7 @@ public class MultiRepoController {
     public ResponseEntity<List<String>> getDownstreamRepositories(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("repoUrl") String repoUrl) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -246,7 +243,7 @@ public class MultiRepoController {
     public ResponseEntity<ExecutionPlanResponse> computeExecutionPlan(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody ExecutionPlanRequest request) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -270,27 +267,6 @@ public class MultiRepoController {
                     .body(new ExecutionPlanResponse(false, Collections.emptyList(),
                             Collections.emptyMap(), e.getMessage()));
         }
-    }
-
-    private String getValidatedToken(String authorization) {
-        if (!StringUtils.hasText(authorization))
-            return null;
-
-        String prefix = "Bearer ";
-        if (!authorization.startsWith(prefix))
-            return null;
-
-        String token = authorization.substring(prefix.length()).trim();
-
-        if (StringUtils.hasText(props.token()) && props.token().equals(token)) {
-            return token;
-        }
-
-        if (gitHubApiClient.isValidToken(token)) {
-            return token;
-        }
-
-        return null;
     }
 
     public record RepositoryRegistrationRequest(

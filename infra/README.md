@@ -59,6 +59,7 @@ export DEPLOY_USER="ubuntu"
 export DEPLOY_DIR="/opt/aiteam"
 export DB_PASSWORD="$(openssl rand -base64 32)"
 export ORCHESTRATOR_TOKEN="$(openssl rand -base64 32)"
+export JWT_SECRET_KEY="$(openssl rand -base64 48)"   # Auth JWT (ou via Vault)
 export LLM_API_KEY="sk-..."
 export GITHUB_REPO="myorg/aiteam"
 export DOMAIN="api.example.com"
@@ -260,7 +261,7 @@ grep "DB_" infra/deployments/dev/.env.dev
 
 - Root `.gitlab-ci.yml` - Imports `infra/ci-cd/gitlab-ci.yml`
 - `.github/workflows/` - GitHub Actions (unchanged)
-- Root `docker-compose.yml` - Legacy (use `infra/deployments/` instead)
+- Root `docker-compose.yml` - Supprimé ; utiliser `infra/deployments/dev/` ou `infra/deployments/prod/`
 - Root `scripts/deploy.sh` - Legacy (use `infra/ci-cd/scripts/` instead)
 
 ## ✅ Migration Path

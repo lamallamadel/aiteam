@@ -34,7 +34,15 @@ public class ColumnEncryptionService {
         }
 
         try {
-            byte[] keyBytes = Base64.getDecoder().decode(encryptionKeyBase64);
+            // Support both standard and URL-safe base64
+            String cleanKey = encryptionKeyBase64.trim();
+            byte[] keyBytes;
+            if (cleanKey.contains("-") || cleanKey.contains("_")) {
+                keyBytes = Base64.getUrlDecoder().decode(cleanKey);
+            } else {
+                keyBytes = Base64.getDecoder().decode(cleanKey);
+            }
+            
             if (keyBytes.length != AES_KEY_SIZE / 8) {
                 throw new IllegalArgumentException("Encryption key must be 256 bits (32 bytes) when base64 decoded");
             }

@@ -116,7 +116,7 @@ public class WebSocketCollaborationE2ETest extends AbstractE2ETest {
         );
         testRun = runRepository.save(testRun);
 
-        wsUrl = "ws://localhost:" + port + "/ws";
+        wsUrl = "http://localhost:" + port + "/ws/runs/" + testRun.getId() + "/collaboration";
     }
 
     @Test

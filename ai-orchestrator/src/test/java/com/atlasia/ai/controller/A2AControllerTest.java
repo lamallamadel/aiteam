@@ -1,7 +1,6 @@
 package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.RunRequest;
-import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
@@ -10,7 +9,7 @@ import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
 import com.atlasia.ai.service.A2ADiscoveryService.AgentConstraints;
 import com.atlasia.ai.service.AgentBindingService;
 import com.atlasia.ai.service.AgentBindingService.AgentBinding;
-import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.WorkflowEngine;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,9 +53,7 @@ class A2AControllerTest {
         @Mock
         private WorkflowEngine workflowEngine;
         @Mock
-        private OrchestratorProperties props;
-        @Mock
-        private GitHubApiClient gitHubApiClient;
+        private ApiAuthService apiAuthService;
 
         private MockMvc mockMvc;
         private final ObjectMapper objectMapper = new ObjectMapper();
@@ -65,15 +62,22 @@ class A2AControllerTest {
         void setUp() {
                 A2AController controller = new A2AController(
                                 a2aDiscoveryService, agentBindingService, runRepository,
-                                workflowEngine, props, gitHubApiClient);
+                                workflowEngine, apiAuthService);
                 mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
 
-                // Admin token recognised, GitHub token NOT recognised as admin
-                lenient().when(props.token()).thenReturn(ADMIN_TOKEN);
-                // GitHub token is valid, admin token is NOT a GitHub token
-                lenient().when(gitHubApiClient.isValidToken(GITHUB_TOKEN)).thenReturn(true);
-                lenient().when(gitHubApiClient.isValidToken(ADMIN_TOKEN)).thenReturn(false);
-                lenient().when(gitHubApiClient.isValidToken(INVALID_TOKEN)).thenReturn(false);
+                // isAuthorized: admin and GitHub tokens authorized, invalid and null not (specific stubs last)
+                lenient().when(apiAuthService.isAuthorized(null)).thenReturn(false);
+                lenient().when(apiAuthService.isAuthorized(eq("Bearer " + INVALID_TOKEN))).thenReturn(false);
+                lenient().when(apiAuthService.isAuthorized(eq("Bearer " + ADMIN_TOKEN))).thenReturn(true);
+                lenient().when(apiAuthService.isAuthorized(eq("Bearer " + GITHUB_TOKEN))).thenReturn(true);
+                // isAdminToken: only admin token (specific stub last so it wins)
+                lenient().when(apiAuthService.isAdminToken(any())).thenReturn(false);
+                lenient().when(apiAuthService.isAdminToken(eq("Bearer " + ADMIN_TOKEN))).thenReturn(true);
+                // getApiTokenForWorkflow: admin and GitHub return token, others empty
+                lenient().when(apiAuthService.getApiTokenForWorkflow(eq("Bearer " + ADMIN_TOKEN))).thenReturn(Optional.of(ADMIN_TOKEN));
+                lenient().when(apiAuthService.getApiTokenForWorkflow(eq("Bearer " + GITHUB_TOKEN))).thenReturn(Optional.of(GITHUB_TOKEN));
+                lenient().when(apiAuthService.getApiTokenForWorkflow(eq("Bearer " + INVALID_TOKEN))).thenReturn(Optional.empty());
+                lenient().when(apiAuthService.getApiTokenForWorkflow(null)).thenReturn(Optional.empty());
         }
 
         // -------------------------------------------------------------------------
@@ -291,18 +295,20 @@ class A2AControllerTest {
         }
 
         @Test
-        void submitTask_withAdminTokenOnly_returnsUnauthorized() throws Exception {
-                // Admin token is not a GitHub token → task submission should reject it
+        void submitTask_withAdminToken_returnsAccepted() throws Exception {
+                // Admin token is accepted for workflow (getApiTokenForWorkflow returns admin or GitHub)
                 RunRequest request = new RunRequest("owner/repo", 42, "code", null);
+                when(runRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
                 mockMvc.perform(post("/api/a2a/tasks")
                                 .header("Authorization", "Bearer " + ADMIN_TOKEN)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(request)))
-                                .andExpect(status().isUnauthorized());
+                                .andExpect(status().isAccepted())
+                                .andExpect(jsonPath("$.status").value("submitted"));
 
-                verify(runRepository, never()).save(any());
-                verify(workflowEngine, never()).executeWorkflowAsync(any(), any());
+                verify(runRepository).save(any(RunEntity.class));
+                verify(workflowEngine).executeWorkflowAsync(any(UUID.class), eq(ADMIN_TOKEN));
         }
 
         @Test

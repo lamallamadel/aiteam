@@ -37,8 +37,10 @@ public abstract class AbstractE2ETest {
     }
 
     @AfterEach
-    void afterEach(TestInfo testInfo) {
-        testReporter.recordTestResult(testInfo);
+    void tearDown(TestInfo testInfo) {
+        String testName = testInfo.getDisplayName();
+        String className = testInfo.getTestClass().map(Class::getSimpleName).orElse("Unknown");
+        testReporter.recordTestResult(testName, className);
     }
 
     @DynamicPropertySource

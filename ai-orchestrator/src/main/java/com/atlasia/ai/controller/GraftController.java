@@ -2,18 +2,16 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.CircuitBreakerStatusDto;
 import com.atlasia.ai.api.dto.GraftExecutionDto;
-import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.GraftExecutionEntity;
 import com.atlasia.ai.persistence.GraftExecutionRepository;
 import com.atlasia.ai.service.A2ADiscoveryService;
-import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.GraftExecutionService;
 import com.atlasia.ai.service.RoleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,20 +29,17 @@ public class GraftController {
     private final GraftExecutionRepository graftExecutionRepository;
     private final GraftExecutionService graftExecutionService;
     private final A2ADiscoveryService a2aDiscoveryService;
-    private final OrchestratorProperties props;
-    private final GitHubApiClient gitHubApiClient;
+    private final ApiAuthService apiAuthService;
 
     public GraftController(
             GraftExecutionRepository graftExecutionRepository,
             GraftExecutionService graftExecutionService,
             A2ADiscoveryService a2aDiscoveryService,
-            OrchestratorProperties props,
-            GitHubApiClient gitHubApiClient) {
+            ApiAuthService apiAuthService) {
         this.graftExecutionRepository = graftExecutionRepository;
         this.graftExecutionService = graftExecutionService;
         this.a2aDiscoveryService = a2aDiscoveryService;
-        this.props = props;
-        this.gitHubApiClient = gitHubApiClient;
+        this.apiAuthService = apiAuthService;
     }
 
     @GetMapping("/executions")
@@ -55,7 +50,7 @@ public class GraftController {
             @RequestParam(value = "runId", required = false) UUID runId,
             @RequestParam(value = "agentName", required = false) String agentName,
             @RequestParam(value = "limit", defaultValue = "100") int limit) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -82,7 +77,7 @@ public class GraftController {
     public ResponseEntity<GraftExecutionDto> getExecution(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -98,7 +93,7 @@ public class GraftController {
     public ResponseEntity<List<CircuitBreakerStatusDto>> getCircuitBreakerStatus(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "agentName", required = false) String agentName) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -124,7 +119,7 @@ public class GraftController {
     public ResponseEntity<Void> resetCircuitBreaker(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("agentName") String agentName) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -137,7 +132,7 @@ public class GraftController {
     @RequiresPermission(resource = RoleService.RESOURCE_GRAFT, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<String>> getAvailableAgents(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -204,24 +199,4 @@ public class GraftController {
         );
     }
 
-    private String getValidatedToken(String authorization) {
-        if (!StringUtils.hasText(authorization))
-            return null;
-
-        String prefix = "Bearer ";
-        if (!authorization.startsWith(prefix))
-            return null;
-
-        String token = authorization.substring(prefix.length()).trim();
-
-        if (StringUtils.hasText(props.token()) && props.token().equals(token)) {
-            return null;
-        }
-
-        if (gitHubApiClient.isValidToken(token)) {
-            return token;
-        }
-
-        return null;
-    }
 }

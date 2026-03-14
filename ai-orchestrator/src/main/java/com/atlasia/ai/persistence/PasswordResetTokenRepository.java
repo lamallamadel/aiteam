@@ -4,6 +4,7 @@ import com.atlasia.ai.model.PasswordResetTokenEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -17,9 +18,9 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     
     @Modifying
     @Query("DELETE FROM PasswordResetTokenEntity prt WHERE prt.expiresAt < :now")
-    int deleteExpiredTokens(Instant now);
+    int deleteExpiredTokens(@Param("now") Instant now);
     
     @Modifying
     @Query("UPDATE PasswordResetTokenEntity prt SET prt.used = true WHERE prt.userId = :userId AND prt.used = false")
-    int invalidateAllUserTokens(UUID userId);
+    int invalidateAllUserTokens(@Param("userId") UUID userId);
 }

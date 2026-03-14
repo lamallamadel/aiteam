@@ -78,6 +78,8 @@ public class SecurityConfig {
                                                                 "/api/auth/csrf",
                                                                 "/api/auth/me",
                                                                 "/api/auth/mfa/**",
+                                                                "/api/auth/password-reset/**",
+                                                                "/api/auth/oauth2/**",
                                                                 "/api/runs/**",
                                                                 "/api/a2a/**",
                                                                 "/api/webhooks/**",

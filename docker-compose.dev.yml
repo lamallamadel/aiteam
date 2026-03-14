@@ -1,9 +1,0 @@
-# This file is DEPRECATED and has been moved to infra/deployments/dev/docker-compose.yml
-# Please use that location instead.
-#
-# To use the new location:
-#   docker-compose -f infra/deployments/dev/docker-compose.yml --profile full up -d
-#
-# This file will be deleted in a future release. Do not add new changes here.
-
-warning: "This file is deprecated. Use infra/deployments/dev/docker-compose.yml instead."

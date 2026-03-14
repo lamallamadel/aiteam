@@ -53,7 +53,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 456, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,
@@ -85,7 +85,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 789, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,
@@ -108,7 +108,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 999, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,
@@ -134,7 +134,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 111, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,
@@ -158,7 +158,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 222, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,
@@ -181,7 +181,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
 
         RunRequest request = new RunRequest("test-owner/test-repo", 333, "code", null);
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth("test-github-token");
+        headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
         ResponseEntity<String> response = restTemplate.exchange("/api/a2a/tasks", HttpMethod.POST, entity,

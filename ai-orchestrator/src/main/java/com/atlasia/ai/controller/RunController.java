@@ -4,13 +4,12 @@ import com.atlasia.ai.api.ArtifactResponse;
 import com.atlasia.ai.api.EscalationDecisionRequest;
 import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.api.RunResponse;
-import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
-import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.RoleService;
 import com.atlasia.ai.service.WorkflowEngine;
 import com.atlasia.ai.service.event.WorkflowEventBus;
@@ -22,7 +21,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -38,21 +36,20 @@ import java.util.stream.Collectors;
 public class RunController {
 
     private final RunRepository runRepository;
-    private final OrchestratorProperties props;
     private final WorkflowEngine workflowEngine;
-    private final GitHubApiClient gitHubApiClient;
     private final WorkflowEventBus eventBus;
     private final CollaborationService collaborationService;
+    private final ApiAuthService apiAuthService;
 
-    public RunController(RunRepository runRepository, OrchestratorProperties props,
-            WorkflowEngine workflowEngine, GitHubApiClient gitHubApiClient,
-            WorkflowEventBus eventBus, CollaborationService collaborationService) {
+    public RunController(RunRepository runRepository,
+            WorkflowEngine workflowEngine,
+            WorkflowEventBus eventBus, CollaborationService collaborationService,
+            ApiAuthService apiAuthService) {
         this.runRepository = runRepository;
-        this.props = props;
         this.workflowEngine = workflowEngine;
-        this.gitHubApiClient = gitHubApiClient;
         this.eventBus = eventBus;
         this.collaborationService = collaborationService;
+        this.apiAuthService = apiAuthService;
     }
 
     @GetMapping
@@ -60,7 +57,7 @@ public class RunController {
     @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_VIEW)
     public ResponseEntity<List<RunResponse>> listRuns(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         List<RunResponse> runs = runRepository.findAll().stream()
@@ -76,10 +73,10 @@ public class RunController {
     public ResponseEntity<RunResponse> createRun(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody RunRequest request) {
-        String token = getValidatedToken(authorization);
-        if (token == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
 
         UUID id = UUID.randomUUID();
         RunEntity entity = new RunEntity(
@@ -106,7 +103,7 @@ public class RunController {
     public ResponseEntity<RunResponse> get(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -121,7 +118,7 @@ public class RunController {
     public ResponseEntity<List<ArtifactResponse>> getArtifacts(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
@@ -145,7 +142,7 @@ public class RunController {
             @PathVariable("id") UUID id) {
         String effectiveAuth = authorization != null ? authorization :
                 (queryToken != null ? "Bearer " + queryToken : null);
-        if (getValidatedToken(effectiveAuth) == null) {
+        if (!apiAuthService.isAuthorized(effectiveAuth)) {
             SseEmitter emitter = new SseEmitter(0L);
             emitter.completeWithError(new SecurityException("Unauthorized"));
             return emitter;
@@ -165,7 +162,7 @@ public class RunController {
     public ResponseEntity<String> getEnvironment(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -189,10 +186,10 @@ public class RunController {
     public ResponseEntity<RunResponse> resume(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        String token = getValidatedToken(authorization);
-        if (token == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
         return runRepository.findById(id)
                 .map(run -> {
                     run.setStatus(RunStatus.RECEIVED);
@@ -209,10 +206,10 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @Valid @RequestBody EscalationDecisionRequest request) {
-        String token = getValidatedToken(authorization);
-        if (token == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
 
         return runRepository.findById(id)
                 .map(run -> {
@@ -250,7 +247,7 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @RequestBody java.util.Map<String, String> body) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -280,7 +277,7 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @RequestBody java.util.Map<String, String> body) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -303,7 +300,7 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @RequestBody java.util.Map<String, String> body) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(id)
@@ -335,7 +332,7 @@ public class RunController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id,
             @RequestParam(value = "limit", defaultValue = "50") int limit) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         List<CollaborationEventEntity> events = collaborationService.getRecentEvents(id, limit);
@@ -358,7 +355,7 @@ public class RunController {
     public ResponseEntity<java.util.Set<String>> getActiveUsers(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID id) {
-        if (getValidatedToken(authorization) == null) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         java.util.Set<String> users = collaborationService.getActiveUsers(id);
@@ -387,26 +384,4 @@ public class RunController {
                 artifactSummaries);
     }
 
-    private String getValidatedToken(String authorization) {
-        if (!StringUtils.hasText(authorization))
-            return null;
-
-        String prefix = "Bearer ";
-        if (!authorization.startsWith(prefix))
-            return null;
-
-        String token = authorization.substring(prefix.length()).trim();
-
-        // 1. Check if it's the admin token
-        if (StringUtils.hasText(props.token()) && props.token().equals(token)) {
-            return "ADMIN_TOKEN"; // Return non-null placeholder
-        }
-
-        // 2. Check if it's a valid GitHub token
-        if (gitHubApiClient.isValidToken(token)) {
-            return token;
-        }
-
-        return null;
-    }
 }

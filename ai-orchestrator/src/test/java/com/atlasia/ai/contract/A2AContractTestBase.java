@@ -1,6 +1,5 @@
 package com.atlasia.ai.contract;
 
-import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.controller.A2AController;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
@@ -10,7 +9,7 @@ import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
 import com.atlasia.ai.service.A2ADiscoveryService.AgentConstraints;
 import com.atlasia.ai.service.AgentBindingService;
 import com.atlasia.ai.service.AgentBindingService.AgentBinding;
-import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.WorkflowEngine;
 import io.restassured.module.mockmvc.RestAssuredMockMvc;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,10 +37,7 @@ public abstract class A2AContractTestBase {
     protected WorkflowEngine workflowEngine;
     
     @Mock
-    protected OrchestratorProperties props;
-    
-    @Mock
-    protected GitHubApiClient gitHubApiClient;
+    protected ApiAuthService apiAuthService;
 
     @BeforeEach
     public void setup() {
@@ -52,8 +48,7 @@ public abstract class A2AContractTestBase {
             agentBindingService,
             runRepository,
             workflowEngine,
-            props,
-            gitHubApiClient
+            apiAuthService
         );
         
         RestAssuredMockMvc.standaloneSetup(controller);
@@ -62,9 +57,14 @@ public abstract class A2AContractTestBase {
     }
 
     protected void setupMocks() {
-        when(props.token()).thenReturn("test-token");
-        when(gitHubApiClient.isValidToken("github-token")).thenReturn(true);
-        when(gitHubApiClient.isValidToken("test-token")).thenReturn(false);
+        when(apiAuthService.isAuthorized(anyString())).thenReturn(false);
+        when(apiAuthService.isAuthorized(eq("Bearer test-token"))).thenReturn(true);
+        when(apiAuthService.isAuthorized(eq("Bearer github-token"))).thenReturn(true);
+        when(apiAuthService.isAdminToken(any())).thenReturn(false);
+        when(apiAuthService.isAdminToken(eq("Bearer test-token"))).thenReturn(true);
+        when(apiAuthService.getApiTokenForWorkflow(any())).thenReturn(Optional.empty());
+        when(apiAuthService.getApiTokenForWorkflow(eq("Bearer test-token"))).thenReturn(Optional.of("test-token"));
+        when(apiAuthService.getApiTokenForWorkflow(eq("Bearer github-token"))).thenReturn(Optional.of("github-token"));
         
         when(a2aDiscoveryService.getOrchestratorCard()).thenReturn(createOrchestratorCard());
         

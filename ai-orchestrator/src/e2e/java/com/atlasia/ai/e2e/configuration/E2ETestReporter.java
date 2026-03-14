@@ -36,10 +36,7 @@ public class E2ETestReporter {
         ensureDirectoriesExist();
     }
 
-    public void recordTestResult(TestInfo testInfo) {
-        String testName = testInfo.getDisplayName();
-        String className = testInfo.getTestClass().map(Class::getSimpleName).orElse("Unknown");
-        
+    public void recordTestResult(String testName, String className) {
         TestResult result = new TestResult();
         result.testName = testName;
         result.className = className;
@@ -49,9 +46,7 @@ public class E2ETestReporter {
         testResults.put(className + "." + testName, result);
     }
 
-    public void recordFailure(TestInfo testInfo, Throwable throwable, byte[] screenshot) {
-        String testName = testInfo.getDisplayName();
-        String className = testInfo.getTestClass().map(Class::getSimpleName).orElse("Unknown");
+    public void recordFailure(String testName, String className, Throwable throwable, byte[] screenshot) {
         String key = className + "." + testName;
         
         TestResult result = testResults.getOrDefault(key, new TestResult());

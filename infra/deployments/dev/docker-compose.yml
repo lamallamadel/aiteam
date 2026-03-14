@@ -54,6 +54,8 @@ services:
       DB_USER: ${DB_USER:-ai_dev}
       DB_PASSWORD: ${DB_PASSWORD:-dev_password_change_me_12345}
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:-dev-token-change-me}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-min-256-bits-for-local-docker-only}
+      AUTH_MODE: ${AUTH_MODE:-local}
       LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key-change-me}
       REPO_ALLOWLIST: ${REPO_ALLOWLIST:-backend/,frontend/,docs/,infra/,ai/}
       WORKFLOW_PROTECT: ${WORKFLOW_PROTECT:-.github/workflows/}

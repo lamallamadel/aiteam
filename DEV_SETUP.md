@@ -10,36 +10,37 @@ cp .env.example .env
 
 ### 2. Start full dev stack (database, backend, frontend)
 ```bash
-docker compose -f docker-compose.dev.yml up
+# From repo root; use .env.dev in infra/deployments/dev/ if needed
+docker compose -f infra/deployments/dev/docker-compose.yml --profile full up
 # Or detached mode:
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f infra/deployments/dev/docker-compose.yml --profile full up -d
 ```
 
 ### 3. Start only specific services
 ```bash
 # Backend + database only
-docker compose -f docker-compose.dev.yml --profile backend up -d
+docker compose -f infra/deployments/dev/docker-compose.yml --profile backend up -d
 
 # Frontend only (if backend already running)
-docker compose -f docker-compose.dev.yml --profile frontend up
+docker compose -f infra/deployments/dev/docker-compose.yml --profile frontend up
 ```
 
 ### 4. View logs
 ```bash
 # All services
-docker compose -f docker-compose.dev.yml logs -f
+docker compose -f infra/deployments/dev/docker-compose.yml logs -f
 
 # Specific service
-docker compose -f docker-compose.dev.yml logs -f ai-orchestrator
-docker compose -f docker-compose.dev.yml logs -f ai-dashboard-dev
+docker compose -f infra/deployments/dev/docker-compose.yml logs -f ai-orchestrator
+docker compose -f infra/deployments/dev/docker-compose.yml logs -f ai-dashboard
 ```
 
 ### 5. Stop all services
 ```bash
-docker compose -f docker-compose.dev.yml down
+docker compose -f infra/deployments/dev/docker-compose.yml down
 
 # Also remove volumes (reset database)
-docker compose -f docker-compose.dev.yml down -v
+docker compose -f infra/deployments/dev/docker-compose.yml down -v
 ```
 
 ---
@@ -54,7 +55,7 @@ docker compose -f docker-compose.dev.yml down -v
 - Services wait for dependencies (database ready before app starts)
 - `ai-db` checks PostgreSQL is accepting connections
 - `ai-orchestrator` checks Spring Boot health endpoint
-- `ai-dashboard-dev` checks dev server is responding
+- `ai-dashboard` checks dev server is responding
 
 ### ✓ Volume Mounts (Frontend)
 - `./frontend/src` → `/app/src` — code changes instant
@@ -77,19 +78,19 @@ docker compose -f docker-compose.dev.yml down -v
 ## Common Tasks
 
 ### Debug Java Backend
-1. Uncomment `JAVA_TOOL_OPTIONS` in `docker-compose.dev.yml` (already enabled)
+1. Ajuster `JAVA_TOOL_OPTIONS` dans `infra/deployments/dev/docker-compose.yml` si besoin (déjà activé par défaut)
 2. In your IDE (IntelliJ/VS Code), connect remote debugger to `localhost:5005`
 3. Set breakpoints and step through code
 
 ### Reset Database
 ```bash
-docker compose -f docker-compose.dev.yml down -v
-docker compose -f docker-compose.dev.yml up -d ai-db
+docker compose -f infra/deployments/dev/docker-compose.yml down -v
+docker compose -f infra/deployments/dev/docker-compose.yml up -d ai-db
 ```
 
 ### Rebuild Without Cache
 ```bash
-docker compose -f docker-compose.dev.yml build --no-cache
+docker compose -f infra/deployments/dev/docker-compose.yml build --no-cache
 ```
 
 ### Access Database from Host
@@ -112,26 +113,26 @@ docker builder prune
 # Find what's using the port
 lsof -i :4200  # Mac/Linux
 netstat -ano | findstr :4200  # Windows
-# Change port in docker-compose.dev.yml
+# Change port in infra/deployments/dev/docker-compose.yml
 ```
 
 **Services stuck in restart loop:**
 ```bash
-docker compose -f docker-compose.dev.yml logs -f ai-orchestrator
+docker compose -f infra/deployments/dev/docker-compose.yml logs -f ai-orchestrator
 # Check for startup errors
 ```
 
 **File changes not syncing:**
 - Ensure you're editing files in `./frontend/src` (mounted as volume)
 - Angular rebuild should trigger automatically (check logs)
-- If stuck, restart service: `docker compose -f docker-compose.dev.yml restart ai-dashboard-dev`
+- If stuck, restart service: `docker compose -f infra/deployments/dev/docker-compose.yml restart ai-dashboard`
 
 **npm install failures:**
 ```bash
 # Rebuild from scratch
-docker compose -f docker-compose.dev.yml down -v
-docker compose -f docker-compose.dev.yml build --no-cache
-docker compose -f docker-compose.dev.yml up
+docker compose -f infra/deployments/dev/docker-compose.yml down -v
+docker compose -f infra/deployments/dev/docker-compose.yml build --no-cache
+docker compose -f infra/deployments/dev/docker-compose.yml up
 ```
 
 ---

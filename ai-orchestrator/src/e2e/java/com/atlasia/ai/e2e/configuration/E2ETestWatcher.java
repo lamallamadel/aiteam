@@ -25,15 +25,19 @@ public class E2ETestWatcher implements TestWatcher {
 
     @Override
     public void testSuccessful(ExtensionContext context) {
-        logger.info("Test passed: {}", context.getDisplayName());
+        String testName = context.getDisplayName();
+        String className = context.getTestClass().map(Class::getSimpleName).orElse("Unknown");
+        logger.info("Test passed: {} in class {}", testName, className);
+        testReporter.recordTestResult(testName, className);
     }
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
-        logger.error("Test failed: {} - {}", context.getDisplayName(), cause.getMessage());
+        String testName = context.getDisplayName();
+        String className = context.getTestClass().map(Class::getSimpleName).orElse("Unknown");
+        logger.error("Test failed: {} - {}", testName, cause.getMessage());
         
         try {
-            String className = context.getTestClass().map(Class::getSimpleName).orElse("Unknown");
             String methodName = context.getTestMethod().map(m -> m.getName()).orElse("unknown");
             
             String htmlContent = captureCurrentPageState();
@@ -42,7 +46,7 @@ public class E2ETestWatcher implements TestWatcher {
                 testReporter.captureScreenshotOnFailure(className, methodName, htmlContent);
             }
             
-            testReporter.recordFailure(context, cause, null);
+            testReporter.recordFailure(testName, className, cause, null);
         } catch (Exception e) {
             logger.error("Failed to capture failure information: {}", e.getMessage(), e);
         }

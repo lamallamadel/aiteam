@@ -23,6 +23,8 @@ server:
     enabled: false
 
 atlasia:
+  auth:
+    e2e-test-token-enabled: true
   jwt:
     secret-key: 4aX9mK2pL8vN3qR7sT1uW6yZ0bC5dF8gH4jM2nP
     access-token-expiration-minutes: 60

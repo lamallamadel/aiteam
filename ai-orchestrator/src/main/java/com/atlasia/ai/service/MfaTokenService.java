@@ -48,9 +48,9 @@ public class MfaTokenService {
                 .issuer(jwtProperties.getIssuer())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
-                .signWith(secretKey, Jwts.SIG.HS512)
+                .signWith(secretKey, Jwts.SIG.HS256)
                 .compact();
-    }
+                }
 
     public boolean validateMfaToken(String token) {
         try {

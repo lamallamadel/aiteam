@@ -7,6 +7,9 @@ services:
       DB_USER: ai
       DB_PASSWORD: ai
       ORCHESTRATOR_TOKEN: "${ORCHESTRATOR_TOKEN}"
+      # Auth (JWT local) — requis pour login et accès /api/runs depuis le dashboard
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-dev-jwt-secret-min-256-bits-for-local-docker-only}"
+      AUTH_MODE: "${AUTH_MODE:-local}"
       REPO_ALLOWLIST: "backend/,frontend/,docs/,infra/,ai/"
       WORKFLOW_PROTECT: ".github/workflows/"
       VAULT_ADDR: "${VAULT_ADDR:-http://vault:8200}"

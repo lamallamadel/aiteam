@@ -75,27 +75,27 @@ public class JwtService {
                 .issuer(jwtProperties.getIssuer())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiration))
-                .signWith(secretKey, Jwts.SIG.HS512)
+                .signWith(secretKey, Jwts.SIG.HS256)
                 .compact();
-    }
+                }
 
-    public String generateRefreshToken(UserEntity user) {
-        Instant now = Instant.now();
-        Instant expiration = now.plus(jwtProperties.getRefreshTokenExpirationDays(), ChronoUnit.DAYS);
+                public String generateRefreshToken(UserEntity user) {
+                Instant now = Instant.now();
+                Instant expiration = now.plus(jwtProperties.getRefreshTokenExpirationDays(), ChronoUnit.DAYS);
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", user.getId().toString());
-        claims.put("type", "refresh");
+                Map<String, Object> claims = new HashMap<>();
+                claims.put("userId", user.getId().toString());
+                claims.put("type", "refresh");
 
-        try {
-            String token = Jwts.builder()
+                try {
+                String token = Jwts.builder()
                     .claims(claims)
                     .subject(user.getUsername())
                     .issuer(jwtProperties.getIssuer())
                     .issuedAt(Date.from(now))
                     .expiration(Date.from(expiration))
                     .id(UUID.randomUUID().toString())
-                    .signWith(secretKey, Jwts.SIG.HS512)
+                    .signWith(secretKey, Jwts.SIG.HS256)
                     .compact();
             metrics.recordJwtTokenRefresh();
             return token;

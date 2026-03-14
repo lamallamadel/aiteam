@@ -10,7 +10,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.commons.codec.digest.DigestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
@@ -44,7 +46,7 @@ public class RefreshTokenService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
         
         String refreshToken = jwtService.generateRefreshToken(user);
-        String tokenHash = passwordEncoder.encode(refreshToken);
+        String tokenHash = DigestUtils.sha256Hex(refreshToken);
         
         Instant expiresAt = jwtService.getTokenExpiration(refreshToken);
         
@@ -71,9 +73,10 @@ public class RefreshTokenService {
         }
         
         UUID userId = jwtService.extractUserId(tokenString);
+        String tokenHash = DigestUtils.sha256Hex(tokenString);
         
         RefreshTokenEntity oldToken = refreshTokenRepository.findByUserId(userId).stream()
-                .filter(token -> passwordEncoder.matches(tokenString, token.getTokenHash()))
+                .filter(token -> tokenHash.equals(token.getTokenHash()))
                 .filter(RefreshTokenEntity::isValid)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token not found or invalid"));
@@ -95,7 +98,7 @@ public class RefreshTokenService {
         String newAccessToken = jwtService.generateAccessToken(user);
         String newRefreshToken = jwtService.generateRefreshToken(user);
         
-        String newTokenHash = passwordEncoder.encode(newRefreshToken);
+        String newTokenHash = DigestUtils.sha256Hex(newRefreshToken);
         Instant newExpiresAt = jwtService.getTokenExpiration(newRefreshToken);
         
         RefreshTokenEntity newTokenEntity = new RefreshTokenEntity(
@@ -128,9 +131,10 @@ public class RefreshTokenService {
         }
         
         UUID userId = jwtService.extractUserId(tokenString);
+        String tokenHash = DigestUtils.sha256Hex(tokenString);
         
         RefreshTokenEntity token = refreshTokenRepository.findByUserId(userId).stream()
-                .filter(t -> passwordEncoder.matches(tokenString, t.getTokenHash()))
+                .filter(t -> tokenHash.equals(t.getTokenHash()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
         

@@ -2,7 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, BehaviorSubject, throwError, of } from 'rxjs';
-import { tap, catchError, switchMap } from 'rxjs/operators';
+import { tap, catchError, switchMap, map } from 'rxjs/operators';
 
 export interface LoginRequest {
     username: string;
@@ -76,7 +76,11 @@ export class AuthService {
                     return of(response);
                 }
                 return this.loadUserProfile().pipe(
-                    switchMap(() => of(response))
+                    switchMap(() => of(response)),
+                    catchError(() => {
+                        // Even if profile load fails, we have tokens
+                        return of(response);
+                    })
                 );
             }),
             catchError(this.handleError)
@@ -96,6 +100,7 @@ export class AuthService {
             }),
             catchError(error => {
                 this.clearTokens();
+                this.currentUser.set(null);
                 this.router.navigate(['/auth/login']);
                 return throwError(() => error);
             })
@@ -113,9 +118,10 @@ export class AuthService {
             tap(response => {
                 this.storeTokens(response.accessToken, response.refreshToken);
             }),
-            switchMap(response => [response.accessToken]),
+            map(response => response.accessToken),
             catchError(error => {
                 this.clearTokens();
+                this.currentUser.set(null);
                 this.router.navigate(['/auth/login']);
                 return throwError(() => error);
             })
@@ -123,7 +129,10 @@ export class AuthService {
     }
 
     logout(): Observable<void> {
-        return this.http.post<void>('/api/auth/logout', {}).pipe(
+        const refreshToken = this.getRefreshToken();
+        const request: RefreshRequest = { refreshToken: refreshToken || '' };
+        
+        return this.http.post<void>('/api/auth/logout', request).pipe(
             tap(() => {
                 this.clearTokens();
                 this.currentUser.set(null);
@@ -133,7 +142,7 @@ export class AuthService {
                 this.clearTokens();
                 this.currentUser.set(null);
                 this.router.navigate(['/auth/login']);
-                return throwError(() => error);
+                return of(undefined);
             })
         );
     }

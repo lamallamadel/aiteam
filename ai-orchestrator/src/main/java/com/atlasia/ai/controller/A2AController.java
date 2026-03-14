@@ -1,7 +1,6 @@
 package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.RunRequest;
-import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.config.RequiresPermission;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
@@ -10,14 +9,13 @@ import com.atlasia.ai.service.A2ADiscoveryService;
 import com.atlasia.ai.service.A2ADiscoveryService.AgentCard;
 import com.atlasia.ai.service.AgentBindingService;
 import com.atlasia.ai.service.AgentBindingService.AgentBinding;
-import com.atlasia.ai.service.GitHubApiClient;
+import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.RoleService;
 import com.atlasia.ai.service.WorkflowEngine;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -44,22 +42,19 @@ public class A2AController {
     private final AgentBindingService agentBindingService;
     private final RunRepository runRepository;
     private final WorkflowEngine workflowEngine;
-    private final OrchestratorProperties props;
-    private final GitHubApiClient gitHubApiClient;
+    private final ApiAuthService apiAuthService;
 
     public A2AController(
             A2ADiscoveryService a2aDiscoveryService,
             AgentBindingService agentBindingService,
             RunRepository runRepository,
             WorkflowEngine workflowEngine,
-            OrchestratorProperties props,
-            GitHubApiClient gitHubApiClient) {
+            ApiAuthService apiAuthService) {
         this.a2aDiscoveryService = a2aDiscoveryService;
         this.agentBindingService = agentBindingService;
         this.runRepository = runRepository;
         this.workflowEngine = workflowEngine;
-        this.props = props;
-        this.gitHubApiClient = gitHubApiClient;
+        this.apiAuthService = apiAuthService;
     }
 
     // -------------------------------------------------------------------------
@@ -76,7 +71,7 @@ public class A2AController {
     @GetMapping("/api/a2a/agents")
     public ResponseEntity<Collection<AgentCard>> listAgents(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(a2aDiscoveryService.listAgents());
@@ -87,7 +82,7 @@ public class A2AController {
     public ResponseEntity<AgentCard> getAgent(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("name") String name) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         AgentCard card = a2aDiscoveryService.getAgent(name);
@@ -99,7 +94,7 @@ public class A2AController {
     public ResponseEntity<AgentCard> registerAgent(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody AgentCard card) {
-        if (!isAdminToken(authorization)) {
+        if (!apiAuthService.isAdminToken(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         a2aDiscoveryService.register(card);
@@ -111,7 +106,7 @@ public class A2AController {
     public ResponseEntity<Void> deregisterAgent(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("name") String name) {
-        if (!isAdminToken(authorization)) {
+        if (!apiAuthService.isAdminToken(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         a2aDiscoveryService.deregister(name);
@@ -125,7 +120,7 @@ public class A2AController {
     public ResponseEntity<InstallResponse> installAgent(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestBody AgentCard card) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         
@@ -146,7 +141,7 @@ public class A2AController {
     @GetMapping("/api/a2a/capabilities")
     public ResponseEntity<Collection<String>> listCapabilities(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(a2aDiscoveryService.listAllCapabilities());
@@ -157,7 +152,7 @@ public class A2AController {
     public ResponseEntity<Collection<AgentCard>> getAgentsByCapability(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("capability") String capability) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         var matching = a2aDiscoveryService.discover(java.util.Set.of(capability));
@@ -176,7 +171,10 @@ public class A2AController {
     public ResponseEntity<A2ATaskResponse> submitTask(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody RunRequest request) {
-        String token = getValidatedGitHubToken(authorization);
+        if (!apiAuthService.isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
         if (token == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -201,7 +199,7 @@ public class A2AController {
     public ResponseEntity<A2ATaskResponse> getTaskStatus(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("taskId") UUID taskId) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runRepository.findById(taskId)
@@ -222,7 +220,7 @@ public class A2AController {
     @GetMapping("/api/a2a/bindings")
     public ResponseEntity<Map<UUID, AgentBinding>> listBindings(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(agentBindingService.getActiveBindings());
@@ -233,7 +231,7 @@ public class A2AController {
     public ResponseEntity<BindingVerification> getBinding(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable("id") UUID bindingId) {
-        if (!isAuthorized(authorization)) {
+        if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         Map<UUID, AgentBinding> bindings = agentBindingService.getActiveBindings();
@@ -243,33 +241,6 @@ public class A2AController {
         }
         boolean valid = agentBindingService.verifyBinding(binding);
         return ResponseEntity.ok(new BindingVerification(binding, valid));
-    }
-
-    // -------------------------------------------------------------------------
-    // Auth helpers
-    // -------------------------------------------------------------------------
-
-    private boolean isAuthorized(String authorization) {
-        if (!StringUtils.hasText(authorization)) return false;
-        if (!authorization.startsWith("Bearer ")) return false;
-        String token = authorization.substring(7).trim();
-        return (StringUtils.hasText(props.token()) && props.token().equals(token))
-                || gitHubApiClient.isValidToken(token);
-    }
-
-    private boolean isAdminToken(String authorization) {
-        if (!StringUtils.hasText(authorization)) return false;
-        if (!authorization.startsWith("Bearer ")) return false;
-        String token = authorization.substring(7).trim();
-        return StringUtils.hasText(props.token()) && props.token().equals(token);
-    }
-
-    private String getValidatedGitHubToken(String authorization) {
-        if (!StringUtils.hasText(authorization)) return null;
-        if (!authorization.startsWith("Bearer ")) return null;
-        String token = authorization.substring(7).trim();
-        if (gitHubApiClient.isValidToken(token)) return token;
-        return null;
     }
 
     // -------------------------------------------------------------------------

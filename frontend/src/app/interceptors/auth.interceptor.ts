@@ -31,10 +31,10 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
 
     return next(clonedReq).pipe(
         catchError((error: HttpErrorResponse) => {
-            const isPublicPage = router.url.includes('/auth/login') || router.url.includes('/auth/register');
+            const isAuthRequest = req.url.includes('/api/auth/login') || req.url.includes('/api/auth/refresh');
             const hasRefreshToken = !!authService.getRefreshToken();
 
-            if (error.status === 401 && !req.url.includes('/api/auth/login') && !req.url.includes('/api/auth/refresh') && !isPublicPage && hasRefreshToken) {
+            if (error.status === 401 && !isAuthRequest && hasRefreshToken) {
                 return handle401Error(clonedReq, next, authService, router);
             }
             return throwError(() => error);

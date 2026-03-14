@@ -211,7 +211,7 @@ public class HappyPathCodeGenerationE2ETest extends AbstractE2ETest {
 
                 RunRequest request = new RunRequest("test-owner/test-repo", 123, "code", null);
                 HttpHeaders headers = new HttpHeaders();
-                headers.setBearerAuth("test-github-token");
+                headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
                 HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
 
                 // Submit the task via REST
