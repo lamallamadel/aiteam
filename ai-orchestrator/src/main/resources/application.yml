@@ -9,10 +9,18 @@ server:
     ciphers: TLS_AES_256_GCM_SHA384,TLS_AES_128_GCM_SHA256
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/ai?ssl=true&sslmode=require}
     username: ${DB_USER:ai}
     password: ${vault.secret.data.atlasia.db-password:${DB_PASSWORD:ai}}
+    hikari:
+      maximum-pool-size: ${HIKARI_MAX_POOL:30}
+      minimum-idle: ${HIKARI_MIN_IDLE:5}
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT:30000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT:600000}
   jpa:
     hibernate:
       ddl-auto: none
@@ -20,6 +28,8 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        connection:
+          handling_mode: DELAYED_ACQUISITION_AND_RELEASE
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -178,6 +188,11 @@ atlasia:
       fallback-api-key: ${vault.secret.data.atlasia.llm-fallback-api-key:${LLM_FALLBACK_API_KEY:}}
     chat:
       memory-window-size: ${CHAT_MEMORY_WINDOW_SIZE:10}
+      ai-call-concurrency: ${AI_CALL_CONCURRENCY:20}
+      persona-call-timeout-seconds: ${PERSONA_CALL_TIMEOUT:60}
+      parallel-fan-out-timeout-seconds: ${PERSONA_FANOUT_TIMEOUT:90}
+    debug:
+      detect-pinning: ${DETECT_VT_PINNING:false}
     canvas:
       max-concurrent-bolts: ${MAX_CONCURRENT_BOLTS:5}
       sse-timeout-minutes: ${SSE_TIMEOUT_MINUTES:30}
