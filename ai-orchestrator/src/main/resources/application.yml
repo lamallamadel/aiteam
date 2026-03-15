@@ -29,7 +29,7 @@ spring:
         jdbc:
           time_zone: UTC
         connection:
-          handling_mode: DELAYED_ACQUISITION_AND_RELEASE
+          handling_mode: DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION
   flyway:
     enabled: true
     baseline-on-migrate: true
