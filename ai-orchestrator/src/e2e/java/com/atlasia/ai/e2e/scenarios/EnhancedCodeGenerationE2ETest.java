@@ -242,7 +242,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                         .withHeader("Content-Type", "application/json")
                         .withBody("{\"object\": {\"sha\": \"main-sha-123\"}}")));
 
-        stubFor(get(urlPathMatching("/repos/test-owner/test-repo/git/ref/heads.*ai.*"))
+        stubFor(get(urlPathMatching("/repos/test-owner/test-repo/git/ref/heads.*ai.*issue.*"))
                 .inScenario("Branch Creation")
                 .whenScenarioStateIs("Started")
                 .willReturn(aResponse().withStatus(404)));
@@ -255,7 +255,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                         .withHeader("Content-Type", "application/json")
                         .withBody("{\"ref\": \"refs/heads/ai/issue-123\"}")));
 
-        stubFor(get(urlPathMatching("/repos/test-owner/test-repo/git/ref/heads.*ai.*"))
+        stubFor(get(urlPathMatching("/repos/test-owner/test-repo/git/ref/heads.*ai.*issue.*"))
                 .inScenario("Branch Creation")
                 .whenScenarioStateIs("Branch Created")
                 .willReturn(aResponse()
@@ -304,7 +304,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
                         .withBody(
-                                "{\"total_count\": 2, \"check_runs\": [{\"name\": \"backend\", \"status\": \"completed\", \"conclusion\": \"success\"}, {\"name\": \"e2e\", \"status\": \"completed\", \"conclusion\": \"success\"}]}")));
+                                "{\"total_count\": 2, \"check_runs\": [{\"name\": \"backend\", \"status\": \"completed\", \"conclusion\": \"success\", \"id\": 1}, {\"name\": \"e2e\", \"status\": \"completed\", \"conclusion\": \"success\", \"id\": 2}]}")));
     }
 
     private void mockLLMEndpoints() {
@@ -324,7 +324,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                 .withRequestBody(containing("You are a technical qualifier"))
                 .willReturn(aResponse().withHeader("Content-Type", "application/json")
                         .withBody(
-                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"branchName\\\":\\\"ai/issue-123\\\",\\\"tasks\\\":[{\\\"id\\\":\\\"T1\\\",\\\"area\\\":\\\"backend\\\",\\\"description\\\":\\\"Task\\\",\\\"filesLikely\\\":[],\\\"tests\\\":[]}],\\\"commands\\\":{\\\"backendVerify\\\":\\\"mvn\\\",\\\"frontendLint\\\":\\\"npm\\\"},\\\"definitionOfDone\\\":[\\\"Done\\\"]}\"}}]}")));
+                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"branchName\\\":\\\"ai/issue-123\\\",\\\"tasks\\\":[{\\\"id\\\":\\\"T1\\\",\\\"area\\\":\\\"backend\\\",\\\"description\\\":\\\"Task 1\\\",\\\"filesLikely\\\":[],\\\"tests\\\":[]},{\\\"id\\\":\\\"T2\\\",\\\"area\\\":\\\"backend\\\",\\\"description\\\":\\\"Task 2\\\",\\\"filesLikely\\\":[],\\\"tests\\\":[]},{\\\"id\\\":\\\"T3\\\",\\\"area\\\":\\\"backend\\\",\\\"description\\\":\\\"Task 3\\\",\\\"filesLikely\\\":[],\\\"tests\\\":[]}],\\\"commands\\\":{\\\"backendVerify\\\":\\\"mvn\\\",\\\"frontendLint\\\":\\\"npm\\\",\\\"frontendTest\\\":\\\"npm test\\\",\\\"e2e\\\":\\\"npm run e2e\\\"},\\\"definitionOfDone\\\":[\\\"Done\\\"]}\"}}]}")));
 
         stubFor(post(urlPathEqualTo("/chat/completions"))
                 .withRequestBody(containing("You are a software architect"))
@@ -336,7 +336,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                 .withRequestBody(containing("expert software developer implementing code changes"))
                 .willReturn(aResponse().withHeader("Content-Type", "application/json")
                         .withBody(
-                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"summary\\\":\\\"Implementation complete\\\",\\\"files\\\":[{\\\"path\\\":\\\"src/main.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"public class Main {}\\\",\\\"explanation\\\":\\\"Main class\\\"}],\\\"testingNotes\\\":\\\"Tests pass\\\",\\\"implementationNotes\\\":\\\"Complete\\\"}\"}}]}")));
+                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"summary\\\":\\\"Implementation complete\\\",\\\"files\\\":[{\\\"path\\\":\\\"backend/src/main.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"public class Main {}\\\",\\\"explanation\\\":\\\"Main class\\\"}],\\\"testingNotes\\\":\\\"Tests pass\\\",\\\"implementationNotes\\\":\\\"Complete\\\"}\"}}]}")));
 
         stubFor(post(urlPathEqualTo("/chat/completions"))
                 .withRequestBody(containing("# Code Review Request"))
@@ -364,7 +364,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
                 .withRequestBody(containing("expert software developer implementing code changes"))
                 .willReturn(aResponse().withHeader("Content-Type", "application/json")
                         .withBody(
-                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"summary\\\":\\\"Multi-file implementation\\\",\\\"files\\\":[{\\\"path\\\":\\\"src/main.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"class Main {}\\\",\\\"explanation\\\":\\\"Main\\\"},{\\\"path\\\":\\\"src/helper.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"class Helper {}\\\",\\\"explanation\\\":\\\"Helper\\\"}],\\\"testingNotes\\\":\\\"Tests pass\\\",\\\"implementationNotes\\\":\\\"Complete\\\"}\"}}]}")));
+                                "{\"choices\": [{\"message\": {\"content\": \"{\\\"summary\\\":\\\"Multi-file implementation\\\",\\\"files\\\":[{\\\"path\\\":\\\"backend/src/main.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"class Main {}\\\",\\\"explanation\\\":\\\"Main\\\"},{\\\"path\\\":\\\"backend/src/helper.java\\\",\\\"operation\\\":\\\"create\\\",\\\"content\\\":\\\"class Helper {}\\\",\\\"explanation\\\":\\\"Helper\\\"}],\\\"testingNotes\\\":\\\"Tests pass\\\",\\\"implementationNotes\\\":\\\"Complete\\\"}\"}}]}")));
     }
 
     private void mockLLMEndpointsWithReviewerFeedback() {

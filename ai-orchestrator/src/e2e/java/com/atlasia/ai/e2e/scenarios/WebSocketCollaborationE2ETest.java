@@ -353,10 +353,12 @@ public class WebSocketCollaborationE2ETest extends AbstractE2ETest {
                 assertFalse(messages.isEmpty(), "Should have persisted messages");
             });
 
+            HttpHeaders httpHeaders = new HttpHeaders();
+            httpHeaders.setBearerAuth(jwtService.generateAccessToken(testUser1));
             ResponseEntity<String> pollResponse = restTemplate.exchange(
                     "/api/runs/" + testRun.getId() + "/collaboration/poll",
                     HttpMethod.GET,
-                    null,
+                    new HttpEntity<>(httpHeaders),
                     String.class
             );
 
@@ -440,10 +442,12 @@ public class WebSocketCollaborationE2ETest extends AbstractE2ETest {
                 assertFalse(messages.isEmpty());
             });
 
+            HttpHeaders httpHeaders = new HttpHeaders();
+            httpHeaders.setBearerAuth(jwtService.generateAccessToken(testUser1));
             ResponseEntity<String> replayResponse = restTemplate.exchange(
                     "/api/runs/" + testRun.getId() + "/collaboration/replay",
                     HttpMethod.GET,
-                    null,
+                    new HttpEntity<>(httpHeaders),
                     String.class
             );
 

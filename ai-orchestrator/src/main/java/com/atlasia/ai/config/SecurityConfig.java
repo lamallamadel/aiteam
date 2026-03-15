@@ -117,7 +117,9 @@ public class SecurityConfig {
                                                 .requestMatchers("/actuator/health").permitAll()
                                                 .requestMatchers("/actuator/prometheus").permitAll()
                                                 .requestMatchers("/actuator/metrics/**").permitAll()
-                                                .requestMatchers("/ws/**").authenticated()
+                                                .requestMatchers(new AntPathRequestMatcher("/ws/**/info", "GET")).permitAll()    // SockJS info pre-flight (no auth header)
+                                                .requestMatchers(new AntPathRequestMatcher("/ws/**/iframe*", "GET")).permitAll()  // SockJS iframe transport
+                                                .requestMatchers("/ws/**").authenticated()  // WebSocket upgrade requires valid JWT
                                                 .requestMatchers("/api/a2a/**").permitAll()
                                                 .requestMatchers("/api/webhooks/**").permitAll()
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

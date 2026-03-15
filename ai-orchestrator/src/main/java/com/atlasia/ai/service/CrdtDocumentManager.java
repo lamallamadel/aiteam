@@ -75,10 +75,12 @@ public class CrdtDocumentManager {
     
     public byte[] applyFlagMutation(UUID runId, String userId, Map<String, Object> flagData) {
         CrdtDocument doc = getOrCreateDocument(runId);
-        
-        String flagKey = (String) flagData.get("key");
-        Object flagValue = flagData.get("value");
-        
+
+        // Accept "key" or fall back to "nodeId" (used by clients and tests)
+        String flagKey = (String) flagData.getOrDefault("key", flagData.get("nodeId"));
+        if (flagKey == null) flagKey = "unknown";
+        Object flagValue = flagData.getOrDefault("value", flagData.get("flagType"));
+
         CrdtChange change = new CrdtChange(
             flagValue != null ? CrdtChange.ChangeType.FLAG_SET : CrdtChange.ChangeType.FLAG_REMOVE,
             flagKey,

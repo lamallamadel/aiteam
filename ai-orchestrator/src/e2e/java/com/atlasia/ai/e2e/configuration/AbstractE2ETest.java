@@ -20,12 +20,13 @@ import org.springframework.test.context.DynamicPropertySource;
 @ActiveProfiles("e2e")
 public abstract class AbstractE2ETest {
 
-    protected static WireMockServer wireMockServer;
+    protected static final WireMockServer wireMockServer;
     protected static E2ETestReporter testReporter = new E2ETestReporter();
 
-    @BeforeAll
-    static void beforeAll() {
-
+    // Must start before Spring context is created (SpringExtension.beforeAll runs before @BeforeAll).
+    // A static initializer fires at class-load time, guaranteeing WireMock is up when
+    // @DynamicPropertySource resolves the LLM / GitHub API URLs.
+    static {
         wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
         wireMockServer.start();
         WireMock.configureFor("localhost", wireMockServer.port());
@@ -33,9 +34,6 @@ public abstract class AbstractE2ETest {
 
     @AfterAll
     static void afterAll() {
-        if (wireMockServer != null) {
-            wireMockServer.stop();
-        }
         testReporter.generateReport();
     }
 

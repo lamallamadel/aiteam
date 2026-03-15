@@ -377,9 +377,14 @@ public class CollaborationService {
     }
 
     private void applyPruneToRun(UUID runId, CrdtDocumentState state) {
-        runRepository.findById(runId).ifPresent(run -> {
-            String updated = String.join(",", state.getPrunedSteps());
-            run.setPrunedSteps(updated);
+        runRepository.findWithLockById(runId).ifPresent(run -> {
+            // Union-merge: add CRDT prune steps to any already-persisted steps (G-Set semantics).
+            // Prevents lost-update when two concurrent prune mutations race to persist.
+            Set<String> merged = new HashSet<>(state.getPrunedSteps());
+            if (run.getPrunedSteps() != null && !run.getPrunedSteps().isEmpty()) {
+                merged.addAll(Arrays.asList(run.getPrunedSteps().split(",")));
+            }
+            run.setPrunedSteps(String.join(",", merged));
             runRepository.save(run);
         });
     }

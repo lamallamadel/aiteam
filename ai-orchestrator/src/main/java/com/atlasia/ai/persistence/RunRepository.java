@@ -2,13 +2,16 @@ package com.atlasia.ai.persistence;
 
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface RunRepository extends JpaRepository<RunEntity, UUID> {
@@ -286,6 +289,10 @@ public interface RunRepository extends JpaRepository<RunEntity, UUID> {
                      "CAST(COUNT(CASE WHEN r.status = 'FAILED' THEN 1 END) AS double) / COUNT(r) as failureRate " +
                      "FROM RunEntity r GROUP BY r.repo, r.mode")
        List<Map<String, Object>> calculateFailureRateByRepoAndMode();
+
+       @Lock(LockModeType.PESSIMISTIC_WRITE)
+       @Query("SELECT r FROM RunEntity r WHERE r.id = :id")
+       Optional<RunEntity> findWithLockById(@Param("id") UUID id);
 
        @Query("SELECT r FROM RunEntity r WHERE r.status NOT IN ('DONE', 'FAILED', 'ESCALATED')")
        List<RunEntity> findInProgressRuns();

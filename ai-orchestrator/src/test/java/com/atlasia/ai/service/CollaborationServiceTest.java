@@ -122,7 +122,7 @@ class CollaborationServiceTest {
         pruneData.put("isPruned", true);
 
         RunEntity run = new RunEntity(runId, "test/repo", 1, "code", RunStatus.RECEIVED, Instant.now());
-        when(runRepository.findById(runId)).thenReturn(Optional.of(run));
+        when(runRepository.findWithLockById(runId)).thenReturn(Optional.of(run));
 
         collaborationService.handlePruneMutation(runId, userId, pruneData);
 
@@ -181,7 +181,7 @@ class CollaborationServiceTest {
     void testConcurrentPruneMutations() {
         UUID runId = UUID.randomUUID();
         RunEntity run = new RunEntity(runId, "test/repo", 1, "code", RunStatus.RECEIVED, Instant.now());
-        when(runRepository.findById(runId)).thenReturn(Optional.of(run));
+        when(runRepository.findWithLockById(runId)).thenReturn(Optional.of(run));
 
         // User 1 prunes QUALIFIER
         Map<String, Object> prune1 = new HashMap<>();
@@ -190,7 +190,7 @@ class CollaborationServiceTest {
         collaborationService.handlePruneMutation(runId, "user1", prune1);
 
         // User 2 prunes WRITER
-        when(runRepository.findById(runId)).thenReturn(Optional.of(run));
+        when(runRepository.findWithLockById(runId)).thenReturn(Optional.of(run));
         Map<String, Object> prune2 = new HashMap<>();
         prune2.put("stepId", "WRITER");
         prune2.put("isPruned", true);
