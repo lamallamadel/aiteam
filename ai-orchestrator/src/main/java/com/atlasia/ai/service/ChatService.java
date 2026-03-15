@@ -16,16 +16,22 @@ public class ChatService {
     private final ChatPersonaLoader chatPersonaLoader;
     private final PersonaConfigLoader personaConfigLoader;
     private final ConversationMemoryService memoryService;
+    private final HandoffService handoffService;
+    private final HandoffRouter handoffRouter;
 
     public ChatService(
             LlmService llmService,
             ChatPersonaLoader chatPersonaLoader,
             PersonaConfigLoader personaConfigLoader,
-            ConversationMemoryService memoryService) {
+            ConversationMemoryService memoryService,
+            HandoffService handoffService,
+            HandoffRouter handoffRouter) {
         this.llmService = llmService;
         this.chatPersonaLoader = chatPersonaLoader;
         this.personaConfigLoader = personaConfigLoader;
         this.memoryService = memoryService;
+        this.handoffService = handoffService;
+        this.handoffRouter = handoffRouter;
     }
 
     public String chat(String userId, String personaName, String message) {
@@ -42,7 +48,40 @@ public class ChatService {
 
         memoryService.saveTurns(userId, personaName, message, reply);
 
+        detectAndRecordHandoff(userId, personaName, message, reply);
+
         return reply;
+    }
+
+    /**
+     * Checks whether the AI's reply triggers an auto-handoff to another persona.
+     * If the reply contains any of the source persona's {@code auto_trigger_when} phrases,
+     * a PENDING handoff record is created using the persona's {@code default_target}.
+     * The handoff is non-blocking — the current reply is returned to the user regardless.
+     */
+    private void detectAndRecordHandoff(String userId, String fromPersonaId,
+                                         String userMessage, String reply) {
+        try {
+            if (!handoffRouter.isAutoTrigger(fromPersonaId, reply)) return;
+
+            String defaultTarget = handoffRouter.getDefaultTarget(fromPersonaId);
+            if (defaultTarget == null) return;
+
+            var validated = handoffRouter.resolveTarget(fromPersonaId, defaultTarget);
+            if (validated.isEmpty()) return;
+
+            String sessionKey = userId + "::" + fromPersonaId;
+            var signal = new HandoffSignal(
+                    defaultTarget,
+                    "Auto-detected: persona completed its phase",
+                    reply,
+                    "AUTO_DETECTED");
+
+            handoffService.createHandoff(userId, fromPersonaId, sessionKey, signal);
+            log.info("Auto-handoff created: {} → {} userId={}", fromPersonaId, defaultTarget, userId);
+        } catch (Exception e) {
+            log.warn("Handoff detection failed (non-critical): {}", e.getMessage());
+        }
     }
 
     /**

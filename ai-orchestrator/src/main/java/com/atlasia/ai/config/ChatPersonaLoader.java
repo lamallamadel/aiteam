@@ -75,6 +75,38 @@ public class ChatPersonaLoader {
         return new ArrayList<>(personas.keySet());
     }
 
+    /** Returns the list of persona IDs this persona is allowed to hand off to. */
+    @SuppressWarnings("unchecked")
+    public List<String> getAllowedHandoffTargets(String personaId) {
+        var p = personas.get(personaId);
+        if (p == null) return List.of();
+        var handoff = (Map<String, Object>) p.get("handoff");
+        if (handoff == null) return List.of();
+        var targets = (List<String>) handoff.get("can_hand_off_to");
+        return targets != null ? targets : List.of();
+    }
+
+    /** Returns the default handoff target for this persona. */
+    @SuppressWarnings("unchecked")
+    public String getDefaultTarget(String personaId) {
+        var p = personas.get(personaId);
+        if (p == null) return null;
+        var handoff = (Map<String, Object>) p.get("handoff");
+        if (handoff == null) return null;
+        return (String) handoff.get("default_target");
+    }
+
+    /** Returns the auto-trigger phrases for this persona's handoff. */
+    @SuppressWarnings("unchecked")
+    public List<String> getAutoTriggers(String personaId) {
+        var p = personas.get(personaId);
+        if (p == null) return List.of();
+        var handoff = (Map<String, Object>) p.get("handoff");
+        if (handoff == null) return List.of();
+        var triggers = (List<String>) handoff.get("auto_trigger_when");
+        return triggers != null ? triggers : List.of();
+    }
+
     /**
      * Builds the full system prompt for a persona by assembling all YAML sections.
      * Section injection order:
