@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    properties:
+      hibernate:
+        enable_lazy_load_no_trans: true
+  flyway:
+    enabled: true
+  cloud:
+    vault:
+      enabled: false
+
+otel:
+  exporter:
+    otlp:
+      # Dummy endpoint so OTLP beans initialise without errors; nothing is exported in tests.
+      endpoint: http://localhost:4317
+
+atlasia:
+  jwt:
+    secret-key: test-secret-key-for-unit-tests-must-be-at-least-256-bits-long-for-hmac-sha512-algorithm
+  cors:
+    allowed-origins: http://localhost:4200
+  oauth2:
+    github:
+      client-id: test-client-id
+      client-secret: test-client-secret
+    google:
+      client-id: test-client-id
+      client-secret: test-client-secret
+    gitlab:
+      client-id: test-client-id
+      client-secret: test-client-secret

@@ -55,12 +55,12 @@ const GRAFTABLE_AGENTS = [
           <span *ngIf="activeGrafts().length > 0" class="graft-count">
             <span class="graft-icon">🔀</span> {{ activeGrafts().length }} graft(s)
           </span>
-          <div class="presence-indicator" *ngIf="showPresence && activeUsers.length > 0">
+          <div class="presence-indicator" data-testid="presence-indicator" *ngIf="showPresence && activeUsers.length > 0">
             <span class="presence-icon">👥</span>
             <span class="presence-count">{{ activeUsers.length }}</span>
             <div class="presence-tooltip">
               <div *ngFor="let user of activeUsers" class="presence-user">
-                <span class="user-avatar" [style.background]="getUserColor(user)">
+                <span class="user-avatar" data-testid="user-avatar" [style.background]="getUserColor(user)">
                   {{ getUserInitial(user) }}
                 </span>
                 <span class="user-name">{{ user }}</span>

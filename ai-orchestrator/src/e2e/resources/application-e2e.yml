@@ -1,0 +1,91 @@
+spring:
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        hbm2ddl:
+          auto: none
+        validation:
+          mode: none
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:e2edb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password: ''
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+          google:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+          gitlab:
+            client-id: dummy-client-id
+            client-secret: dummy-client-secret
+  cloud:
+    vault:
+      enabled: false
+  # Disable virtual threads in E2E: spring.threads.virtual.enabled=true causes
+  # a 500 on Tomcat's SockJS info endpoint (/ws/**/info) in the embedded test container.
+  threads:
+    virtual:
+      enabled: false
+
+otel:
+  exporter:
+    otlp:
+      # Dummy endpoint so OTLP beans initialise without errors; nothing is exported in E2E.
+      endpoint: http://localhost:4317
+
+atlasia:
+  github:
+    token: mock-github-token
+  jwt:
+    secret-key: default-dev-secret-key-that-is-exactly-64-characters-long-for-hs512
+    access-token-expiration-minutes: 60
+    refresh-token-expiration-days: 30
+    issuer: atlasia-test
+  encryption:
+    key: MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
+  auth:
+    e2e-test-token-enabled: true
+  cors:
+    allowed-origins: http://localhost:4200
+  orchestrator:
+    token: e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM
+  oauth2:
+    github:
+      client-id: test-client-id
+      client-secret: test-client-secret
+    google:
+      client-id: test-client-id
+      client-secret: test-client-secret
+    gitlab:
+      client-id: test-client-id
+      client-secret: test-client-secret
+
+server:
+  error:
+    include-message: always
+    include-exception: true
+    include-stacktrace: always
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.springframework.web.socket: DEBUG
+    org.springframework.messaging: DEBUG
+    com.atlasia.ai: DEBUG
+    com.atlasia.ai.service.WorkflowEngine: DEBUG
+    com.atlasia.ai.service.LlmService: DEBUG
+    com.atlasia.ai.service.trace.TraceEventService: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
