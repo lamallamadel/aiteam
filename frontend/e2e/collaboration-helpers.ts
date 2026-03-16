@@ -1,6 +1,116 @@
 import { Page, BrowserContext } from '@playwright/test';
 
 /**
+ * Shared registry for cross-Playwright-context event bridging.
+ * Partitioned by browser type so chromium/firefox/webkit workers never contaminate each other.
+ * When a page registers, it gets an __e2eBroadcastEvent function that delivers
+ * collaboration events to all other registered pages (same browser) via e2eInjectEvent.
+ */
+const _registryByBrowser = new Map<string, Set<Page>>();
+/** Maps each page to its userId, used to inject USER_LEAVE when the page closes. */
+const _pageUserIds = new Map<Page, string>();
+
+function _getBrowserType(page: Page): string {
+  return page.context().browser()?.browserType().name() ?? 'unknown';
+}
+
+function _getRegistry(page: Page): Set<Page> {
+  const key = _getBrowserType(page);
+  if (!_registryByBrowser.has(key)) {
+    _registryByBrowser.set(key, new Set<Page>());
+  }
+  return _registryByBrowser.get(key)!;
+}
+
+/** Backward-compatible flat view of all registered pages (all browsers). */
+export const e2ePageRegistry = new Set<Page>();
+
+/** Injects an event into a target page and forces Angular CD. */
+async function _injectEvent(target: Page, event: unknown): Promise<void> {
+  await target.evaluate((evt: any) => {
+    const svc = (window as any).collaborationService;
+    if (!svc?.e2eInjectEvent) return;
+    svc.e2eInjectEvent(evt);
+    const notifEl = document.querySelector('app-collaboration-notifications');
+    const ng = (window as any).ng;
+    const comp = ng?.getComponent?.(notifEl);
+    if (comp && ng?.applyChanges) ng.applyChanges(comp);
+  }, event);
+}
+
+export async function registerPageForSync(page: Page): Promise<void> {
+  const registry = _getRegistry(page);
+  if (registry.has(page)) return;
+  registry.add(page);
+  e2ePageRegistry.add(page);
+
+  // Track navigations to ensure the page stabilises before we try to inject events.
+  // This listener is intentionally kept (even without logging) because the mere act of
+  // attaching it prevents a race condition where `_injectEvent` runs before the page
+  // has fully committed to a URL after initial load.
+  page.on('framenavigated', () => {});
+
+  // exposeFunction creates a Node.js-callable function that the Angular mock service invokes.
+  // Deliveries run in PARALLEL so that stale/slow pages (e.g., from tests that skipped without
+  // closing their contexts) never block delivery to the real target page.  Each delivery has a
+  // 2-second timeout; if a page doesn't respond in time we skip it (keeping it in the registry
+  // so the close-handler can remove it cleanly when it eventually closes).
+  await page.exposeFunction('__e2eBroadcastEvent', async (event: unknown) => {
+    // Capture userId from USER_JOIN so we can inject USER_LEAVE when this page closes.
+    if ((event as any)?.eventType === 'USER_JOIN' && (event as any)?.userId) {
+      _pageUserIds.set(page, (event as any).userId);
+    }
+
+    // Only deliver to pages in the SAME browser to prevent cross-worker contamination.
+    // Snapshot the set first so concurrent mutations don't affect this iteration.
+    const targets = [...registry].filter((t) => {
+      if (t === page) return false; // skip self
+      if (t.isClosed()) {
+        registry.delete(t);
+        e2ePageRegistry.delete(t);
+        _pageUserIds.delete(t);
+        return false;
+      }
+      return true;
+    });
+
+    await Promise.all(
+      targets.map((target) =>
+        Promise.race([
+          _injectEvent(target, event),
+          // 2-second per-target guard: stale pages from skipped tests must not
+          // block delivery to the active page.
+          new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+        ]).catch(() => {
+          // Only remove from registry when the page is truly closed.
+          if (target.isClosed()) {
+            registry.delete(target);
+            e2ePageRegistry.delete(target);
+            _pageUserIds.delete(target);
+          }
+        })
+      )
+    );
+  });
+
+  page.on('close', () => {
+    // Inject USER_LEAVE into all peer pages for this browser when this page closes.
+    // We do this from Node.js because the page's JS context may already be destroyed.
+    const userId = _pageUserIds.get(page);
+    if (userId) {
+      const peers = [...registry].filter((t) => t !== page && !t.isClosed());
+      const leaveEvent = { eventType: 'USER_LEAVE', userId, timestamp: Date.now(), data: {} };
+      for (const peer of peers) {
+        _injectEvent(peer, leaveEvent).catch(() => {});
+      }
+    }
+    registry.delete(page);
+    e2ePageRegistry.delete(page);
+    _pageUserIds.delete(page);
+  });
+}
+
+/**
  * Test data generators for collaboration testing
  */
 export const TestData = {
@@ -94,13 +204,15 @@ export const MockWebSocketResponses = {
 export class CollaborationPage {
   constructor(public page: Page) {}
   
-  async setupUser(userId: string): Promise<void> {
+  async setupUser(userId: string, runId?: string): Promise<void> {
+    await registerPageForSync(this.page);
+
     await this.page.addInitScript(() => {
       (window as any).__E2E_MOCK_COLLAB__ = true;
       (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
     });
 
-    await this.page.route('**/api/auth/me', async (route) => {
+    await this.page.route('**/api/auth/me*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -111,6 +223,133 @@ export class CollaborationPage {
           roles: ['USER'],
         }),
       });
+    });
+
+    await this.page.route('**/api/auth/csrf*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({}),
+        headers: { 'set-cookie': 'XSRF-TOKEN=e2e-token; Path=/' },
+      });
+    });
+
+    // Mock token refresh so a transient 401 never triggers a login redirect.
+    await this.page.route('**/api/auth/refresh*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token' }),
+      });
+    });
+
+    if (runId) {
+      await this.page.route(`**/api/runs/${runId}`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: runId,
+            repo: 'owner/repo',
+            issueNumber: 1,
+            status: 'DEVELOPER',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ciFixCount: 0,
+            e2eFixCount: 0,
+          }),
+        });
+      });
+
+      await this.page.route(`**/api/runs/${runId}/artifacts*`, async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await this.page.route(`**/api/runs/${runId}/environment*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/plain',
+          body: JSON.stringify({ lifecycle: 'ACTIVE', capturedAt: new Date().toISOString() }),
+        });
+      });
+
+      await this.page.route(`**/api/runs/${runId}/collaboration/poll*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ events: [], activeUsers: [], cursorPositions: {} }),
+        });
+      });
+
+      await this.page.route(`**/api/runs/${runId}/collaboration/replay*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ events: [] }),
+        });
+      });
+    }
+
+    // Wildcard: any /api/runs/{id}/collaboration/* endpoint (poll, replay, etc.)
+    await this.page.route('**/api/runs/*/collaboration/**', async (route) => {
+      const url = route.request().url();
+      const body = url.includes('/replay')
+        ? JSON.stringify({ events: [] })
+        : JSON.stringify({ events: [], activeUsers: [], cursorPositions: {} });
+      await route.fulfill({ status: 200, contentType: 'application/json', body });
+    });
+
+    // Wildcard: any /api/runs/{id} single-run endpoint (returns a mock run object)
+    await this.page.route('**/api/runs/*', async (route) => {
+      const url = route.request().url();
+      // Extract the run id from the URL
+      const match = url.match(/\/api\/runs\/([^/?]+)/);
+      const id = match ? match[1] : (runId ?? 'mock-run-id');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id,
+          repo: 'owner/repo',
+          issueNumber: 1,
+          status: 'DEVELOPER',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ciFixCount: 0,
+          e2eFixCount: 0,
+        }),
+      });
+    });
+
+    await this.page.route('**/api/runs', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          runId
+            ? [
+                {
+                  id: runId,
+                  repo: 'owner/repo',
+                  issueNumber: 1,
+                  status: 'DEVELOPER',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  ciFixCount: 0,
+                  e2eFixCount: 0,
+                },
+              ]
+            : []
+        ),
+      });
+    });
+
+    await this.page.route('**/api/personas*', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+    });
+
+    await this.page.route('**/api/oversight/interrupts/pending*', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
     });
 
     await this.page.addInitScript((id) => {
@@ -155,15 +394,16 @@ export class CollaborationPage {
   async getCollaborationState() {
     return await this.page.evaluate(() => {
       const store = (window as any).workflowStreamStore;
+      const events = store?.collaborationEvents() || [];
       return {
         isConnected: store?.isCollaborationConnected() || false,
         activeUsers: store?.activeUsers() || [],
-        events: store?.collaborationEvents() || [],
+        events,
         cursorPositions: Array.from(store?.cursorPositions()?.entries() || []),
       };
     });
   }
-  
+
   async sendGraft(after: string, agentName: string): Promise<void> {
     await this.page.evaluate(
       ({ after, agentName }) => {
@@ -289,7 +529,7 @@ export class MultiUserCollaboration {
     const page = await context.newPage();
     const collabPage = new CollaborationPage(page);
     
-    await collabPage.setupUser(userId);
+    await collabPage.setupUser(userId, runId);
     await collabPage.navigateToRun(runId);
     await collabPage.waitForConnection();
     

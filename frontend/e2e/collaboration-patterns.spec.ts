@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { CollaborationPage, MultiUserCollaboration, TestData } from './collaboration-helpers';
 
+// Serial mode: shared e2ePageRegistry in collaboration-helpers must not be contaminated
+// by concurrent parallel test invocations.
+test.describe.configure({ mode: 'serial' });
+
 /**
  * This file demonstrates common testing patterns for collaboration features.
  * Use these patterns as a reference when writing new tests.

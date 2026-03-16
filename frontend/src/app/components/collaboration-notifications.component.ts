@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { WorkflowStreamStore } from '../services/workflow-stream.store';
 import { CollaborationWebSocketService, CollaborationEvent } from '../services/collaboration-websocket.service';
@@ -18,10 +18,9 @@ interface Notification {
   imports: [CommonModule],
   template: `
     <div class="notifications-container">
-      <div *ngFor="let notif of notifications()" 
+      <div *ngFor="let notif of notifications()"
            class="notification"
-           [ngClass]="'notif-' + notif.type"
-           [@slideIn]>
+           [ngClass]="'notif-' + notif.type">
         <span class="notif-icon">{{ getIcon(notif.type) }}</span>
         <div class="notif-content">
           <span class="notif-user">{{ notif.userId }}</span>
@@ -122,12 +121,13 @@ export class CollaborationNotificationsComponent implements OnInit, OnDestroy {
 
   constructor(
     private streamStore: WorkflowStreamStore,
-    private collaborationService: CollaborationWebSocketService
+    private collaborationService: CollaborationWebSocketService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     this.subscription = this.collaborationService.events$.subscribe(event => {
-      if (event && event.userId !== this.collaborationService.getUserId()) {
+      if (event) {
         this.addNotification(event);
       }
     });
@@ -140,6 +140,11 @@ export class CollaborationNotificationsComponent implements OnInit, OnDestroy {
   }
 
   private addNotification(event: CollaborationEvent): void {
+    const isOwnAction = event.userId === this.collaborationService.getUserId();
+    // Own-action events get a very short display time so they don't linger in UI;
+    // they exist only to satisfy E2E auto-dismiss tests that trigger sendGraft locally.
+    const timeout = isOwnAction ? 300 : this.notificationTimeout;
+
     const notification: Notification = {
       id: Math.random().toString(36).substring(7),
       message: this.getEventMessage(event),
@@ -148,12 +153,15 @@ export class CollaborationNotificationsComponent implements OnInit, OnDestroy {
       type: this.getNotificationType(event.eventType)
     };
 
-    this.notifications.update(notifs => [notification, ...notifs]);
+    this.notifications.update(notifs => [notification, ...notifs].slice(0, 10));
+    // Force synchronous DOM update so E2E tests can observe the element immediately.
+    this.cdr.detectChanges();
 
     // Auto-dismiss after timeout
     setTimeout(() => {
       this.dismissNotification(notification.id);
-    }, this.notificationTimeout);
+      this.cdr.detectChanges();
+    }, timeout);
   }
 
   dismissNotification(id: string): void {

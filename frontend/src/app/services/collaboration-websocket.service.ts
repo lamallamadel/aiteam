@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, NgZone } from '@angular/core';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { BehaviorSubject, Observable, interval, Subscription } from 'rxjs';
@@ -64,13 +64,14 @@ export class CollaborationWebSocketService implements OnDestroy {
   private useFallbackPolling = false;
   private pollingSubscription: Subscription | null = null;
   private latencyCheckSubscription: Subscription | null = null;
+  private mockBroadcastChannel: BroadcastChannel | null = null;
   private lastReceivedSequence: number | null = null;
   private messagesSent = 0;
   private messagesFailed = 0;
   private lastPingSent = 0;
   private latencyMeasurements: number[] = [];
 
-  constructor(private http: HttpClient) {
+  constructor(private http: HttpClient, private ngZone: NgZone) {
     this.userId = this.generateUserId();
   }
 
@@ -93,6 +94,23 @@ export class CollaborationWebSocketService implements OnDestroy {
     this.useFallbackPolling = false;
 
     if (this.isE2EMock()) {
+      // Pick up the test-injected userId if available
+      const storedId = typeof localStorage !== 'undefined' ? localStorage.getItem('atlasia_user_id') : null;
+      if (storedId) {
+        this.userId = storedId;
+      }
+
+      // Cross-page sync via BroadcastChannel
+      if (typeof BroadcastChannel !== 'undefined') {
+        if (this.mockBroadcastChannel) {
+          this.mockBroadcastChannel.close();
+        }
+        this.mockBroadcastChannel = new BroadcastChannel('e2e-collab-' + runId);
+        this.mockBroadcastChannel.onmessage = (evt) => {
+          this.handleIncomingEvent(evt.data as CollaborationEvent);
+        };
+      }
+
       this.connectedSubject.next(true);
       this.presenceSubject.next({ activeUsers: [this.userId], cursors: new Map() });
       this.healthSubject.next({
@@ -103,12 +121,24 @@ export class CollaborationWebSocketService implements OnDestroy {
         qualityScore: 100,
         healthStatus: 'HEALTHY'
       });
-      this.eventsSubject.next({
+      const joinEvent: CollaborationEvent = {
         eventType: 'USER_JOIN',
         userId: this.userId,
         timestamp: Date.now(),
-        data: { activeUsers: [this.userId] }
-      });
+        data: {}
+      };
+      this.eventsSubject.next(joinEvent);
+      if (this.mockBroadcastChannel) {
+        this.mockBroadcastChannel.postMessage(joinEvent);
+      }
+      // Bridge to other Playwright contexts (synchronous Node.js call via exposeFunction)
+      this.e2eBroadcast(joinEvent);
+      // Provide a mock STOMP client so tests that call client methods still work.
+      this.client = {
+        deactivate: () => this.disconnect(),
+        forceDisconnect: () => {},  // no-op: mock stays connected
+        connected: true,
+      } as any;
       return;
     }
 
@@ -261,6 +291,21 @@ export class CollaborationWebSocketService implements OnDestroy {
 
   disconnect(): void {
     if (this.isE2EMock()) {
+      if (!this.connectedSubject.value) return; // already disconnected — avoid duplicate USER_LEAVE
+      const leaveEvent: CollaborationEvent = {
+        eventType: 'USER_LEAVE',
+        userId: this.userId,
+        timestamp: Date.now(),
+        data: {} // no activeUsers → receivers will remove this.userId from their list
+      };
+      if (this.mockBroadcastChannel) {
+        this.mockBroadcastChannel.postMessage(leaveEvent);
+        this.mockBroadcastChannel.close();
+        this.mockBroadcastChannel = null;
+      }
+      // Bridge to other Playwright contexts (synchronous Node.js call via exposeFunction)
+      this.e2eBroadcast(leaveEvent);
+      this.eventsSubject.next(leaveEvent);
       this.currentRunId = null;
       this.connectedSubject.next(false);
       this.presenceSubject.next({ activeUsers: [], cursors: new Map() });
@@ -315,6 +360,24 @@ export class CollaborationWebSocketService implements OnDestroy {
 
   private sendMessage(destination: string, body: any): void {
     if (this.isE2EMock()) {
+      const eventType: CollaborationEvent['eventType'] = destination.includes('/graft') ? 'GRAFT'
+        : destination.includes('/prune') ? 'PRUNE'
+        : destination.includes('/flag') ? 'FLAG'
+        : destination.includes('/cursor') ? 'CURSOR_MOVE'
+        : 'GRAFT';
+      const event: CollaborationEvent = {
+        eventType,
+        userId: this.userId,
+        timestamp: Date.now(),
+        data: typeof body === 'string' ? JSON.parse(body) : body
+      };
+      // Bridge to other Playwright contexts (synchronous Node.js call via exposeFunction)
+      this.e2eBroadcast(event);
+      // Also broadcast via BroadcastChannel (same-origin same-partition contexts)
+      if (this.mockBroadcastChannel) {
+        this.mockBroadcastChannel.postMessage(event);
+      }
+      this.ngZone.run(() => this.handleIncomingEvent(event));
       return;
     }
 
@@ -390,6 +453,25 @@ export class CollaborationWebSocketService implements OnDestroy {
     });
   }
 
+  /** E2E-only: call the Playwright exposeFunction bridge to deliver to peer contexts. */
+  private e2eBroadcast(event: CollaborationEvent): void {
+    if (!this.isE2EMock()) return;
+    const bridge = (window as any).__e2eBroadcastEvent;
+    if (typeof bridge === 'function') {
+      // exposeFunction calls are synchronous from the browser's perspective — the browser
+      // awaits the Node.js response before the call returns, ensuring delivery completes
+      // before the calling evaluate() resolves (critical for disconnect + context.close()).
+      bridge(event).catch?.(() => {});
+    }
+  }
+
+  /** E2E-only: inject an event as if received from the server (mock mode only). */
+  e2eInjectEvent(event: CollaborationEvent): void {
+    if (this.isE2EMock()) {
+      this.ngZone.run(() => this.handleIncomingEvent(event));
+    }
+  }
+
   private handleIncomingEvent(event: CollaborationEvent): void {
     if (event.eventType === 'PONG') {
       this.recordPongReceived();
@@ -402,14 +484,22 @@ export class CollaborationWebSocketService implements OnDestroy {
 
     switch (event.eventType) {
       case 'USER_JOIN':
-        if (event.data.activeUsers) {
+        if (event.data?.activeUsers?.length > 0) {
+          // Real backend sends the full list
           currentPresence.activeUsers = event.data.activeUsers;
+        } else if (!currentPresence.activeUsers.includes(event.userId)) {
+          // Mock/single-user event — add to existing list
+          currentPresence.activeUsers = [...currentPresence.activeUsers, event.userId];
         }
         break;
 
       case 'USER_LEAVE':
-        if (event.data.activeUsers) {
+        if (event.data?.activeUsers?.length > 0) {
+          // Real backend sends the full list
           currentPresence.activeUsers = event.data.activeUsers;
+        } else {
+          // Mock/single-user event — remove from existing list
+          currentPresence.activeUsers = currentPresence.activeUsers.filter(u => u !== event.userId);
         }
         currentPresence.cursors.delete(event.userId);
         break;

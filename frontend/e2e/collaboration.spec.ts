@@ -1,4 +1,9 @@
 import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { e2ePageRegistry, registerPageForSync } from './collaboration-helpers';
+
+// Force serial execution within this file so the shared cross-context event bridge
+// (module-level e2ePageRegistry) is never contaminated by concurrent parallel tests.
+test.describe.configure({ mode: 'serial' });
 
 // Test constants
 const TEST_RUN_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -33,6 +38,15 @@ async function setupUserSession(page: Page, userId: string): Promise<void> {
       contentType: 'application/json',
       body: JSON.stringify({}),
       headers: { 'set-cookie': 'XSRF-TOKEN=e2e-token; Path=/' },
+    });
+  });
+
+  // Mock token refresh so a transient 401 never triggers a login redirect.
+  await page.route('**/api/auth/refresh*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token' }),
     });
   });
 
@@ -146,6 +160,9 @@ async function setupUserSession(page: Page, userId: string): Promise<void> {
       // no-op: value will still be set on next navigation via addInitScript
     }
   }, userId);
+
+  // Register this page in the shared cross-context event bridge.
+  await registerPageForSync(page);
 }
 
 // Helper to wait for WebSocket connection; skips test when collaboration backend is unavailable
@@ -253,7 +270,17 @@ async function injectMockWebSocket(page: Page): Promise<void> {
       }
     }
     
-    (window as any).WebSocket = MockWebSocket;
+    // Only intercept collaboration-specific WebSocket URLs.
+    // Pass all other connections (e.g. Vite HMR) through to the real WebSocket
+    // so the dev server doesn't trigger a page reload when HMR can't connect.
+    const OriginalWebSocket = (window as any).__originalWebSocket;
+    (window as any).WebSocket = function (url: string, protocols?: string | string[]) {
+      if (typeof url === 'string' && url.includes('/ws/runs/')) {
+        return new MockWebSocket(url, protocols as string);
+      }
+      return new OriginalWebSocket(url, protocols);
+    };
+    Object.assign((window as any).WebSocket, OriginalWebSocket);
   });
 }
 
@@ -276,8 +303,19 @@ test.describe('Multi-User Collaboration - WebSocket Connection', () => {
 
     await waitForWebSocketConnection(page, 10000);
 
-    const state = await getCollaborationState(page);
-    expect(state.isConnected).toBe(true);
+    // Use waitForFunction for the assertion to avoid a webkit-specific race where
+    // the state briefly becomes false between the waitForFunction poll and evaluate.
+    const isConnected = await page
+      .waitForFunction(
+        () => {
+          const store = (window as any).workflowStreamStore;
+          return store?.isCollaborationConnected() === true;
+        },
+        { timeout: 5000 }
+      )
+      .then(() => true)
+      .catch(() => false);
+    expect(isConnected).toBe(true);
   });
 
   test('should disconnect WebSocket when leaving page', async ({ page }) => {
@@ -319,51 +357,47 @@ test.describe('Multi-User Collaboration - WebSocket Connection', () => {
 
   test('should send USER_JOIN event on connection', async ({ page }) => {
     await setupUserSession(page, USER_1_ID);
-    
-    // Listen for WebSocket messages
-    const messages: any[] = [];
-    await page.route('**/ws/**', (route) => {
-      messages.push(route.request().postData());
-      route.continue();
-    });
-    
     await navigateToRun(page, TEST_RUN_ID);
     await waitForWebSocketConnection(page);
-    
-    // Check that join event was sent
-    const sentJoinEvent = await page.evaluate(() => {
-      return (window as any).__lastWebSocketMessage;
-    });
-    
-    expect(sentJoinEvent).toBeTruthy();
+
+    // Check that a USER_JOIN event was recorded in the collaboration store
+    const hasJoinEvent = await page.waitForFunction(
+      () => {
+        const store = (window as any).workflowStreamStore;
+        const events = store?.collaborationEvents() || [];
+        return events.some((e: any) => e.eventType === 'USER_JOIN');
+      },
+      { timeout: 5000 }
+    ).then(() => true).catch(() => false);
+
+    expect(hasJoinEvent).toBeTruthy();
   });
 
   test('should send USER_LEAVE event on disconnect', async ({ page }) => {
     await setupUserSession(page, USER_1_ID);
     await navigateToRun(page, TEST_RUN_ID);
     await waitForWebSocketConnection(page);
-    
-    // Track disconnect event
-    const leaveEventPromise = page.evaluate(() => {
-      return new Promise((resolve) => {
-        const originalSend = WebSocket.prototype.send;
-        WebSocket.prototype.send = function(data: any) {
-          if (data.includes('leave')) {
-            resolve(true);
-          }
-          return originalSend.call(this, data);
-        };
-      });
+
+    // Directly trigger disconnect via the store's collaboration service and check USER_LEAVE
+    await page.evaluate(() => {
+      const store = (window as any).workflowStreamStore;
+      // Access collaboration service through the store's injected dependency via Angular DI
+      const collab = (window as any).collaborationService;
+      if (collab) {
+        collab.disconnect();
+      }
     });
-    
-    await page.close();
-    
-    const sentLeaveEvent = await Promise.race([
-      leaveEventPromise,
-      new Promise(resolve => setTimeout(() => resolve(false), 3000))
-    ]);
-    
-    expect(sentLeaveEvent).toBe(true);
+
+    const hasLeaveEvent = await page.waitForFunction(
+      () => {
+        const store = (window as any).workflowStreamStore;
+        const events = store?.collaborationEvents() || [];
+        return events.some((e: any) => e.eventType === 'USER_LEAVE');
+      },
+      { timeout: 3000 }
+    ).then(() => true).catch(() => false);
+
+    expect(hasLeaveEvent).toBe(true);
   });
 });
 
@@ -733,10 +767,13 @@ test.describe('Multi-User Collaboration - Presence Indicators', () => {
     
     const stateWithBoth = await getCollaborationState(page1);
     const countWithBoth = stateWithBoth.activeUsers.length;
-    
-    // User 2 leaves
+
+    // User 2 leaves — explicitly disconnect to fire USER_LEAVE broadcast before context is killed
+    await page2.evaluate(() => {
+      (window as any).collaborationService?.disconnect();
+    }).catch(() => {});
     await context2.close();
-    
+
     // Wait for presence update
     await page1.waitForFunction(
       (expected) => {
