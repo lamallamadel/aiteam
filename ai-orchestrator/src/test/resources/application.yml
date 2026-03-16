@@ -13,6 +13,30 @@ spring:
   cloud:
     vault:
       enabled: false
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: test-github-id
+            client-secret: test-github-secret
+            scope: user:email,read:user
+          google:
+            client-id: test-google-id
+            client-secret: test-google-secret
+            scope: email,profile
+          gitlab:
+            client-id: test-gitlab-id
+            client-secret: test-gitlab-secret
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope: read_user,email
+        provider:
+          gitlab:
+            authorization-uri: https://gitlab.com/oauth/authorize
+            token-uri: https://gitlab.com/oauth/token
+            user-info-uri: https://gitlab.com/api/v4/user
+            user-name-attribute: id
 
 otel:
   exporter:
@@ -35,3 +59,26 @@ atlasia:
     gitlab:
       client-id: test-client-id
       client-secret: test-client-secret
+  orchestrator:
+    token: test-token
+    repo-allowlist: backend/,frontend/,docs/
+    workflow-protect-prefix: .github/workflows/
+    github:
+      app-id: ""
+      private-key-path: ""
+      installation-id: ""
+    llm:
+      endpoint: http://localhost:11434/v1
+      model: test-model
+      api-key: test-key
+      proxy-host: ""
+      proxy-port: 0
+      fallback-endpoint: ""
+      fallback-api-key: ""
+    chat:
+      memory-window-size: 5
+    canvas:
+      max-concurrent-bolts: 2
+      sse-timeout-minutes: 5
+      default-mode: EXECUTION
+      enabled-agents: PM,QUALIFIER,ARCHITECT,DEVELOPER,REVIEW,TESTER,WRITER

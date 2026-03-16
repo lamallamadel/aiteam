@@ -26,7 +26,9 @@ public class GitHubAppService {
             @org.springframework.beans.factory.annotation.Value("${atlasia.github.api-url:https://api.github.com}") String githubApiUrl) {
         this.properties = properties;
         this.webClient = webClientBuilder.baseUrl(githubApiUrl).build();
-        this.privateKey = loadPrivateKeySafely(properties.github().privateKeyPath());
+        this.privateKey = properties.github() != null
+                ? loadPrivateKeySafely(properties.github().privateKeyPath())
+                : null;
     }
 
     private PrivateKey loadPrivateKeySafely(String path) {
