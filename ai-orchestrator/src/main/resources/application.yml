@@ -113,8 +113,8 @@ otel:
     name: ${OTEL_SERVICE_NAME:ai-orchestrator}
   exporter:
     otlp:
-      # Empty = no export (no Jaeger spam when not in Docker). Set OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317 when Jaeger is available.
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:}
+      # Default localhost for OTLP (Jaeger). Override with OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317 in Docker.
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
   traces:
     exporter: otlp
   metrics:
