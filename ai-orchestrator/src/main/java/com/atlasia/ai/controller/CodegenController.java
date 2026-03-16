@@ -2,11 +2,14 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.CodegenRequest;
 import com.atlasia.ai.api.dto.CodegenResponse;
+import com.atlasia.ai.domain.CodeGenerationResult;
+import com.atlasia.ai.domain.CodeGenerationResult.*;
 import com.atlasia.ai.service.ChatCodegenService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * POST /api/codegen      — generate code files with a Chat Mode persona
@@ -23,7 +26,7 @@ public class CodegenController {
     }
 
     @PostMapping
-    public ResponseEntity<CodegenResponse> generate(@RequestBody CodegenRequest request) {
+    public ResponseEntity<?> generate(@RequestBody CodegenRequest request) {
         if (request.userId() == null || request.userId().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
@@ -33,7 +36,28 @@ public class CodegenController {
         if (request.message() == null || request.message().isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        return ResponseEntity.ok(codegenService.generate(request));
+
+        return switch (codegenService.generate(request)) {
+
+            case Generated g ->
+                    ResponseEntity.ok(g.toCodegenResponse());
+
+            case Explanatory e ->
+                    ResponseEntity.ok(Map.of(
+                            "personaId",          e.personaId(),
+                            "response",           e.response(),
+                            "followUpQuestions",  e.followUpQuestions() != null
+                                                  ? e.followUpQuestions() : List.of()
+                    ));
+
+            case GenerationFailed f ->
+                    ResponseEntity.status(f.httpStatus())
+                            .body(Map.of(
+                                    "error",   f.reason(),
+                                    "kind",    f.kind().name(),
+                                    "retryable", f.isRetryable()
+                            ));
+        };
     }
 
     @GetMapping("/artifacts")

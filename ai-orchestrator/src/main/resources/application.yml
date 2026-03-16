@@ -236,3 +236,34 @@ crdt:
   mesh:
     peers: ${CRDT_MESH_PEERS:}
   region: ${REGION:us-east-1}
+
+# ── Chat Mode multi-provider AI routing ───────────────────────────────────────
+# AiProviderRouter routes personaId → provider via persona-provider-map or default-provider.
+# LlmService (pipeline / Code Mode) is NOT affected by this config.
+persona:
+  ai:
+    default-provider: openai
+    max-concurrent-calls: ${AI_CALL_CONCURRENCY:20}
+    # Optional: override provider per persona (uncomment and adjust as needed)
+    # persona-provider-map:
+    #   architect: anthropic
+    #   security-engineer: anthropic
+    providers:
+      openai:
+        base-url: ${LLM_ENDPOINT:https://api.openai.com/v1}
+        api-key: ${vault.secret.data.atlasia.llm-api-key:${LLM_API_KEY:}}
+        model: ${LLM_MODEL:gpt-4o-mini}
+        type: OPENAI
+        connect-timeout: PT5S
+        read-timeout: PT60S
+        max-tokens: 4096
+        temperature: 0.7
+      anthropic:
+        base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
+        api-key: ${vault.secret.data.atlasia.anthropic-api-key:${ANTHROPIC_API_KEY:}}
+        model: ${ANTHROPIC_MODEL:claude-sonnet-4-6}
+        type: ANTHROPIC
+        connect-timeout: PT5S
+        read-timeout: PT90S
+        max-tokens: 8192
+        temperature: 0.7

@@ -3,6 +3,7 @@ package com.atlasia.ai.service;
 import com.atlasia.ai.api.dto.CodegenRequest;
 import com.atlasia.ai.api.dto.CodegenResponse;
 import com.atlasia.ai.config.ChatPersonaLoader;
+import com.atlasia.ai.domain.CodeGenerationResult;
 import com.atlasia.ai.model.ChatArtifactEntity;
 import com.atlasia.ai.model.ChatGenerationRunEntity;
 import com.atlasia.ai.persistence.ChatArtifactRepository;
@@ -81,7 +82,7 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
 
     @Override
     @Transactional
-    public CodegenResponse generate(CodegenRequest request) {
+    public CodeGenerationResult generate(CodegenRequest request) {
         String sessionKey = request.userId() + "::" + request.personaId();
 
         String systemPrompt = buildCodegenSystemPrompt(request.personaId(), sessionKey);
@@ -145,7 +146,7 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
     }
 
     @SuppressWarnings("unchecked")
-    private CodegenResponse parseAndPersist(CodegenRequest request, String sessionKey, String rawReply) {
+    private CodeGenerationResult parseAndPersist(CodegenRequest request, String sessionKey, String rawReply) {
         Map<String, Object> parsed;
         try {
             // Strip markdown code fences if the LLM wrapped the JSON
@@ -159,17 +160,29 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
         } catch (Exception e) {
             log.warn("Codegen: LLM reply was not valid JSON for persona={} — storing as PARTIAL run",
                     request.personaId());
-            var run = runRepo.save(new ChatGenerationRunEntity(
+            runRepo.save(new ChatGenerationRunEntity(
                     sessionKey, request.userId(), request.personaId(),
                     request.message(), "FAILED", 0));
-            return new CodegenResponse(run.getId(), false, rawReply, List.of(), List.of(),
-                    "LLM did not return valid JSON: " + e.getMessage());
+            return CodeGenerationResult.failed(
+                    request.personaId(), request.userId(),
+                    "LLM did not return valid JSON: " + e.getMessage(),
+                    CodeGenerationResult.FailureKind.PARSE_ERROR, e);
         }
 
         String summary = (String) parsed.getOrDefault("summary", "");
         List<String> nextSteps = (List<String>) parsed.getOrDefault("next_steps", List.of());
         List<Map<String, Object>> files =
                 (List<Map<String, Object>>) parsed.getOrDefault("files", List.of());
+
+        // Explanatory response — LLM answered in prose, no files produced
+        if (files.isEmpty() && !summary.isBlank()) {
+            runRepo.save(new ChatGenerationRunEntity(
+                    sessionKey, request.userId(), request.personaId(),
+                    request.message(), "EXPLANATORY", 0));
+            log.info("Codegen explanatory: persona={} userId={}", request.personaId(), request.userId());
+            return CodeGenerationResult.explanatory(
+                    request.personaId(), request.userId(), null, summary, nextSteps);
+        }
 
         var run = runRepo.save(new ChatGenerationRunEntity(
                 sessionKey, request.userId(), request.personaId(),
@@ -181,7 +194,9 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
 
         log.info("Codegen complete: persona={} userId={} files={}", request.personaId(),
                 request.userId(), dtos.size());
-        return new CodegenResponse(run.getId(), true, summary, dtos, nextSteps, null);
+        return CodeGenerationResult.generated(
+                request.personaId(), request.userId(), run.getId(),
+                summary, dtos, nextSteps, 0L);
     }
 
     private CodegenResponse.ArtifactDto persistArtifact(
