@@ -89,6 +89,24 @@ monitoring/          Prometheus + Grafana dashboards
 .github/             GitHub Actions (ai-run.yml), issue/PR templates
 ```
 
+### Standalone Demo Projects (`aipersona-*`)
+
+Eight self-contained Spring Boot projects in the repo root (package `com.yourproject.orchestrator`) demonstrating Java 21 features applied to the persona domain. They are independent of `ai-orchestrator` and are not part of its build.
+
+| Directory | Java 21 Feature Demonstrated |
+|---|---|
+| `aipersona-restclient/` | Multi-provider `RestClient` (OpenAI, Anthropic, Ollama) with `@ConfigurationProperties` |
+| `aipersona-sealed/` | Sealed types for domain results (`CodeGenerationResult`, `HandoffResult`) |
+| `aipersona-pattern-matching/` | Pattern matching (`switch` expressions) for routing persona requests |
+| `aipersona-structured-concurrency/` | `StructuredTaskScope` for parallel persona calls |
+| `aipersona-vthreads/` | Virtual threads for async persona orchestration |
+| `aipersona-memory/` | Conversation session persistence (JPA `ConversationSession`/`ConversationTurn`) |
+| `aipersona-codegen/` | Structured code generation with JPA artifact storage |
+| `aipersona-handoff/` | Agent-to-agent handoff with `PersonaHandoff` persistence |
+| `aipersona-personas/` | Core persona YAML loader (reference implementation) |
+
+Each demo has its own `pom.xml`, HTTP scratch file (e.g. `codegen.http`, `persona-chat.http`), and test class. Run them independently with `mvn spring-boot:run` from their directory.
+
 ### Key Technologies
 
 | Layer | Tech |
@@ -106,7 +124,7 @@ monitoring/          Prometheus + Grafana dashboards
 
 ### Backend Package Structure
 
-`com.atlasia.ai.{controller,model,persistence,api,config}`
+`com.atlasia.ai.{controller,model,persistence,api,config,service,domain}`
 
 ### Key API Endpoints
 
