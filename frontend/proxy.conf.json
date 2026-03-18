@@ -22,5 +22,11 @@
     "secure": false,
     "changeOrigin": true,
     "logLevel": "warn"
+  },
+  "/.well-known": {
+    "target": "http://ai-orchestrator:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "warn"
   }
 }

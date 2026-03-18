@@ -121,6 +121,7 @@ public class SecurityConfig {
                                                 .requestMatchers(new AntPathRequestMatcher("/ws/**/iframe*", "GET")).permitAll()  // SockJS iframe transport
                                                 .requestMatchers("/ws/**").authenticated()  // WebSocket upgrade requires valid JWT
                                                 .requestMatchers("/api/a2a/**").permitAll()
+                                                .requestMatchers("/.well-known/**").permitAll()
                                                 .requestMatchers("/api/webhooks/**").permitAll()
                                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                                                 .requestMatchers("/api/**").authenticated()
