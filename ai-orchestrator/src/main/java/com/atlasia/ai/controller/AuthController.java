@@ -2,6 +2,7 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.dto.*;
 import com.atlasia.ai.model.UserEntity;
+import com.atlasia.ai.persistence.OAuth2AccountRepository;
 import com.atlasia.ai.persistence.UserRepository;
 import com.atlasia.ai.service.AuthenticationService;
 import com.atlasia.ai.service.AuthorizationService;
@@ -9,7 +10,6 @@ import com.atlasia.ai.service.OAuth2Service;
 import com.atlasia.ai.service.PasswordResetService;
 import com.atlasia.ai.service.RefreshTokenService;
 import com.atlasia.ai.service.UserRegistrationService;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -28,6 +28,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,6 +45,7 @@ public class AuthController {
     private final PasswordResetService passwordResetService;
     private final OAuth2Service oauth2Service;
     private final UserRepository userRepository;
+    private final OAuth2AccountRepository oauth2AccountRepository;
     private final AuthorizationService authorizationService;
     private final CsrfTokenRepository csrfTokenRepository;
 
@@ -54,6 +56,7 @@ public class AuthController {
             PasswordResetService passwordResetService,
             OAuth2Service oauth2Service,
             UserRepository userRepository,
+            OAuth2AccountRepository oauth2AccountRepository,
             AuthorizationService authorizationService,
             CsrfTokenRepository csrfTokenRepository) {
         this.userRegistrationService = userRegistrationService;
@@ -62,6 +65,7 @@ public class AuthController {
         this.passwordResetService = passwordResetService;
         this.oauth2Service = oauth2Service;
         this.userRepository = userRepository;
+        this.oauth2AccountRepository = oauth2AccountRepository;
         this.authorizationService = authorizationService;
         this.csrfTokenRepository = csrfTokenRepository;
     }
@@ -297,6 +301,11 @@ public class AuthController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
             }
 
+            List<String> linkedProviders = oauth2AccountRepository.findByUserId(userId)
+                .stream()
+                .map(a -> a.getProvider())
+                .collect(java.util.stream.Collectors.toList());
+
             CurrentUserDto dto = new CurrentUserDto(
                 user.getId(),
                 user.getUsername(),
@@ -305,7 +314,8 @@ public class AuthController {
                 authorizationService.getUserPermissions(userId),
                 user.isEnabled(),
                 user.isLocked(),
-                user.isMfaEnabled()
+                user.isMfaEnabled(),
+                linkedProviders
             );
 
             return ResponseEntity.ok(dto);
@@ -322,14 +332,8 @@ public class AuthController {
             HttpServletResponse response) {
         if (csrfToken == null) {
             csrfToken = csrfTokenRepository.generateToken(request);
-            csrfTokenRepository.saveToken(csrfToken, request, response);
         }
-        Cookie cookie = new Cookie("XSRF-TOKEN", csrfToken.getToken());
-        cookie.setPath("/");
-        cookie.setHttpOnly(false);
-        cookie.setSecure(false);
-        cookie.setMaxAge(3600);
-        response.addCookie(cookie);
+        csrfTokenRepository.saveToken(csrfToken, request, response);
 
         Map<String, String> tokenResponse = new HashMap<>();
         tokenResponse.put("token", csrfToken.getToken());

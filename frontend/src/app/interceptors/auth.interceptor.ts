@@ -20,14 +20,23 @@ export const authInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, ne
     if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
         const csrfToken = authService.getCsrfToken();
         if (csrfToken) {
+            // Même comportement que les GET : le jar doit contenir XSRF-TOKEN pour l’en-tête Cookie.
+            authService.ensureXsrfCookieInBrowser(csrfToken);
             headers['X-CSRF-TOKEN'] = csrfToken;
         }
     }
 
-    let clonedReq = req;
-    if (Object.keys(headers).length > 0) {
-        clonedReq = req.clone({ setHeaders: headers });
-    }
+    const shouldSendCredentials =
+        req.url.startsWith('/api') ||
+        req.url.startsWith('/actuator') ||
+        req.url.startsWith('/v3/api-docs') ||
+        req.url.startsWith('/swagger-ui') ||
+        req.url.startsWith('/.well-known');
+
+    const clonedReq = req.clone({
+        withCredentials: shouldSendCredentials ? true : req.withCredentials,
+        setHeaders: headers
+    });
 
     return next(clonedReq).pipe(
         catchError((error: HttpErrorResponse) => {

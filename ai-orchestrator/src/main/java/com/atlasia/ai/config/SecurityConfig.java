@@ -76,17 +76,8 @@ public class SecurityConfig {
                                                 .csrfTokenRepository(csrfTokenRepository)
                                                 .csrfTokenRequestHandler(requestHandler)
                                                 .ignoringRequestMatchers(
-                                                                new AntPathRequestMatcher("/api/auth/login"),
-                                                                new AntPathRequestMatcher("/api/auth/register"),
-                                                                new AntPathRequestMatcher("/api/auth/refresh"),
-                                                                new AntPathRequestMatcher("/api/auth/logout"),
-                                                                new AntPathRequestMatcher("/api/auth/csrf"),
-                                                                new AntPathRequestMatcher("/api/auth/me"),
-                                                                new AntPathRequestMatcher("/api/auth/mfa/**"),
-                                                                new AntPathRequestMatcher("/api/auth/password-reset/**"),
-                                                                new AntPathRequestMatcher("/api/auth/oauth2/**"),
-                                                                new AntPathRequestMatcher("/api/a2a/**"),
-                                                                new AntPathRequestMatcher("/api/webhooks/**"),
+                                                                // API JWT Bearer : pas de session cookie d’auth — le filtre CSRF ne doit pas toucher /api/** (évite réécritures XSRF-TOKEN).
+                                                                new AntPathRequestMatcher("/api/**"),
                                                                 new AntPathRequestMatcher("/actuator/**"),
                                                                 new AntPathRequestMatcher("/ws/**")))
                                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

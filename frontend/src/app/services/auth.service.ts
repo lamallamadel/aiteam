@@ -188,13 +188,28 @@ export class AuthService {
         this.csrfTokenFromApi = null;
     }
 
+    /**
+     * Réécrit le cookie XSRF-TOKEN sur l’origine du front pour que le navigateur envoie
+     * `Cookie: XSRF-TOKEN=…` sur les requêtes mutantes (en plus de l’en-tête X-CSRF-TOKEN).
+     * Sans cela, certaines réponses API peuvent faire disparaître le cookie côté jar avant un POST.
+     */
+    ensureXsrfCookieInBrowser(token: string): void {
+        if (!token || /[;\s]/.test(token)) {
+            return;
+        }
+        const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `${this.CSRF_TOKEN_COOKIE}=${token}; Path=/; Max-Age=3600; SameSite=Lax${secure}`;
+    }
+
     fetchCsrfToken(): Observable<void> {
+        //this.clearConflictingCookies();
         return this.http.get<{ token: string }>('/api/auth/csrf', {
             withCredentials: true
         }).pipe(
             tap((res) => {
                 if (res?.token) {
                     this.csrfTokenFromApi = res.token;
+                    this.ensureXsrfCookieInBrowser(res.token);
                 }
             }),
             map(() => void 0),
@@ -204,17 +219,42 @@ export class AuthService {
         );
     }
 
+    private clearConflictingCookies(): void {
+        // Clear common CSRF cookie names that might conflict (especially from Postman Agent or stale sessions)
+        const conflictingNames = ['XSRF-TOKEN', 'X-CSRF-TOKEN', 'CSRF-TOKEN', 'csrf-token', '_csrf'];
+        const domain = window.location.hostname;
+        const path = '/';
+
+        conflictingNames.forEach(name => {
+            // Try clearing without domain/path first
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}`;
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}; domain=${domain}`;
+            
+            // Log for debugging if we're in a dev environment
+            if (document.cookie.includes(name)) {
+                console.warn(`Attempted to clear ${name} but it still exists in document.cookie`);
+            }
+        });
+    }
+
     getCsrfToken(): string | null {
+        // Priority 1: Token from API response (most reliable for proxy scenarios)
         if (this.csrfTokenFromApi) {
             return this.csrfTokenFromApi;
         }
+
+        // Priority 2: XSRF-TOKEN cookie
         const name = this.CSRF_TOKEN_COOKIE + '=';
         const decodedCookie = decodeURIComponent(document.cookie);
         const cookieArray = decodedCookie.split(';');
+        
+        // Search specifically for XSRF-TOKEN
         for (let cookie of cookieArray) {
             cookie = cookie.trim();
             if (cookie.indexOf(name) === 0) {
-                return cookie.substring(name.length);
+                const tokenValue = cookie.substring(name.length);
+                // Basic validation: ensure it's not the generic 'CSRF-TOKEN' cookie value if they differ
+                return tokenValue;
             }
         }
         return null;
