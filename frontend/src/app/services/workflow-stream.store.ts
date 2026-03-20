@@ -8,6 +8,10 @@ import { CollaborationWebSocketService, CollaborationEvent } from './collaborati
 export class WorkflowStreamStore {
   private subscription: Subscription | null = null;
   private collaborationSubscription: Subscription | null = null;
+  private presenceSubscription: Subscription | null = null;
+  private connectedSubscription: Subscription | null = null;
+  private healthSubscription: Subscription | null = null;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAYS = [2000, 4000, 8000];
@@ -39,7 +43,8 @@ export class WorkflowStreamStore {
   // Computed signals
   readonly stepTimeline = computed(() =>
     this.events().filter(e =>
-      e.eventType === 'STEP_START' || e.eventType === 'STEP_COMPLETE'
+      e.eventType === 'STEP_START' || e.eventType === 'STEP_COMPLETE' ||
+      e.eventType === 'GRAFT_START' || e.eventType === 'GRAFT_COMPLETE' || e.eventType === 'GRAFT_FAILED'
     )
   );
 
@@ -75,6 +80,9 @@ export class WorkflowStreamStore {
     private sseService: SseService,
     private collaborationService: CollaborationWebSocketService
   ) {
+    // Expose singleton on window for E2E tests — done once, never removed
+    (window as any).workflowStreamStore = this;
+
     // Subscribe to collaboration events
     this.collaborationSubscription = this.collaborationService.events$.subscribe(event => {
       if (event) {
@@ -84,23 +92,23 @@ export class WorkflowStreamStore {
     });
 
     // Subscribe to presence updates
-    this.collaborationService.presence$.subscribe(presence => {
+    this.presenceSubscription = this.collaborationService.presence$.subscribe(presence => {
       this.activeUsers.set(presence.activeUsers);
       this.cursorPositions.set(presence.cursors);
     });
 
     // Subscribe to connection status
-    this.collaborationService.connected$.subscribe(connected => {
+    this.connectedSubscription = this.collaborationService.connected$.subscribe(connected => {
       this.isCollaborationConnected.set(connected);
     });
 
     // Subscribe to health metrics
-    this.collaborationService.health$.subscribe(health => {
+    this.healthSubscription = this.collaborationService.health$.subscribe(health => {
       this.connectionHealth.set(health);
     });
 
     // Poll queue and fallback status
-    setInterval(() => {
+    this.pollInterval = setInterval(() => {
       this.queuedMessageCount.set(this.collaborationService.getQueuedMessageCount());
       this.usingFallback.set(this.collaborationService.isUsingFallback());
     }, 1000);
@@ -166,6 +174,22 @@ export class WorkflowStreamStore {
     this.isStreaming.set(false);
   }
 
+  destroy(): void {
+    this.disconnect();
+    if (this.pollInterval !== null) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+    this.collaborationSubscription?.unsubscribe();
+    this.collaborationSubscription = null;
+    this.presenceSubscription?.unsubscribe();
+    this.presenceSubscription = null;
+    this.connectedSubscription?.unsubscribe();
+    this.connectedSubscription = null;
+    this.healthSubscription?.unsubscribe();
+    this.healthSubscription = null;
+  }
+
   reset(): void {
     this.events.set([]);
     this.currentAgent.set(null);
@@ -189,6 +213,15 @@ export class WorkflowStreamStore {
         break;
       case 'ESCALATION_RAISED':
         this.lastError.set(`Escalation: ${event.reason || 'Unknown reason'}`);
+        break;
+      case 'GRAFT_START':
+        this.currentAgent.set(event.agentName || null);
+        break;
+      case 'GRAFT_COMPLETE':
+        // no state update needed beyond adding to events array
+        break;
+      case 'GRAFT_FAILED':
+        this.lastError.set(event.message || 'Graft failed');
         break;
     }
   }

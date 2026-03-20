@@ -561,17 +561,12 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   );
 
   ngOnInit() {
-    (window as any).workflowStreamStore = this.streamStore;
-    (window as any).collaborationService = (this.streamStore as any).collaborationService;
-
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) { this.error.set('No run ID provided'); return; }
     this.loadRun(id);
   }
 
   ngOnDestroy() {
-    delete (window as any).workflowStreamStore;
-    delete (window as any).collaborationService;
     this.streamStore.disconnect();
   }
 

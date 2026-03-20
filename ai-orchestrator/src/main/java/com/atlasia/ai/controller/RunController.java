@@ -15,6 +15,7 @@ import com.atlasia.ai.service.WorkflowEngine;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.CollaborationService;
 import com.atlasia.ai.model.CollaborationEventEntity;
+import com.atlasia.ai.model.CollaborationEventType;
 import com.atlasia.ai.api.dto.CollaborationEventDto;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -341,7 +342,7 @@ public class RunController {
                         e.getId(),
                         e.getRunId(),
                         e.getUserId(),
-                        e.getEventType(),
+                        CollaborationEventType.valueOf(e.getEventType()),
                         e.getEventData(),
                         e.getTimestamp()))
                 .collect(Collectors.toList());
@@ -375,12 +376,17 @@ public class RunController {
                 entity.getId(),
                 entity.getRepo(),
                 entity.getIssueNumber(),
+                entity.getMode(),
                 entity.getStatus().name(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt(),
                 entity.getCurrentAgent(),
                 entity.getCiFixCount(),
                 entity.getE2eFixCount(),
+                entity.getEnvironmentLifecycle() != null ? entity.getEnvironmentLifecycle().name() : null,
+                entity.getEnvironmentCheckpoint(),
+                entity.getPrunedSteps(),
+                entity.getPendingGrafts(),
                 artifactSummaries);
     }
 

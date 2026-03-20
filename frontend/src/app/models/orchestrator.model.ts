@@ -9,12 +9,17 @@ export interface RunResponse {
     id: string;
     repo: string;
     issueNumber: number;
+    mode: string;
     status: string;
     createdAt: string;
     updatedAt: string;
     currentAgent?: string;
     ciFixCount: number;
     e2eFixCount: number;
+    environmentLifecycle?: string;
+    environmentCheckpoint?: string;
+    prunedSteps?: string;
+    pendingGrafts?: string;
     artifacts?: ArtifactSummary[];
 }
 

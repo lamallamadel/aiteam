@@ -209,7 +209,6 @@ export class CollaborationPage {
 
     await this.page.addInitScript(() => {
       (window as any).__E2E_MOCK_COLLAB__ = true;
-      (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
     });
 
     await this.page.route('**/api/auth/me*', async (route) => {
@@ -290,35 +289,47 @@ export class CollaborationPage {
       });
     }
 
-    // Wildcard: any /api/runs/{id}/collaboration/* endpoint (poll, replay, etc.)
-    await this.page.route('**/api/runs/*/collaboration/**', async (route) => {
+    // Wildcard: any /api/runs/{id}/** — handles all run sub-resources.
+    // Uses ** (not *) so it crosses slash boundaries, catching artifacts, environment, stream, etc.
+    await this.page.route('**/api/runs/**', async (route) => {
       const url = route.request().url();
-      const body = url.includes('/replay')
-        ? JSON.stringify({ events: [] })
-        : JSON.stringify({ events: [], activeUsers: [], cursorPositions: {} });
-      await route.fulfill({ status: 200, contentType: 'application/json', body });
-    });
-
-    // Wildcard: any /api/runs/{id} single-run endpoint (returns a mock run object)
-    await this.page.route('**/api/runs/*', async (route) => {
-      const url = route.request().url();
-      // Extract the run id from the URL
       const match = url.match(/\/api\/runs\/([^/?]+)/);
       const id = match ? match[1] : (runId ?? 'mock-run-id');
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id,
-          repo: 'owner/repo',
-          issueNumber: 1,
-          status: 'DEVELOPER',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          ciFixCount: 0,
-          e2eFixCount: 0,
-        }),
-      });
+
+      if (url.includes('/artifacts')) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      } else if (url.includes('/environment')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ lifecycle: 'ACTIVE', capturedAt: new Date().toISOString() }),
+        });
+      } else if (url.includes('/stream')) {
+        // Return an empty SSE stream so EventSource closes cleanly without retrying.
+        await route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' });
+      } else if (url.includes('/collaboration')) {
+        const body = url.includes('/replay')
+          ? JSON.stringify({ events: [] })
+          : url.includes('/users')
+          ? JSON.stringify([])
+          : JSON.stringify({ events: [], activeUsers: [], cursorPositions: {} });
+        await route.fulfill({ status: 200, contentType: 'application/json', body });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id,
+            repo: 'owner/repo',
+            issueNumber: 1,
+            status: 'DEVELOPER',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ciFixCount: 0,
+            e2eFixCount: 0,
+          }),
+        });
+      }
     });
 
     await this.page.route('**/api/runs', async (route) => {
@@ -358,7 +369,6 @@ export class CollaborationPage {
         localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
         localStorage.setItem('atlasia_user_id', id);
         (window as any).__E2E_MOCK_COLLAB__ = true;
-        (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
       } catch {
         // no-op: localStorage can be unavailable on about:blank
       }
@@ -370,7 +380,6 @@ export class CollaborationPage {
         localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
         localStorage.setItem('atlasia_user_id', id);
         (window as any).__E2E_MOCK_COLLAB__ = true;
-        (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
       } catch {
         // no-op: value will still be set on next navigation via addInitScript
       }

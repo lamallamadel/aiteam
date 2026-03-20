@@ -16,7 +16,6 @@ const USER_3_ID = 'user_test_003';
 async function setupUserSession(page: Page, userId: string): Promise<void> {
   await page.addInitScript(() => {
     (window as any).__E2E_MOCK_COLLAB__ = true;
-    (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
   });
 
   await page.route('**/api/auth/me*', async (route) => {
@@ -134,17 +133,12 @@ async function setupUserSession(page: Page, userId: string): Promise<void> {
     });
   });
 
-  await page.addInitScript(() => {
-    (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
-  });
-
   await page.addInitScript((id) => {
     try {
       localStorage.setItem('atlasia_access_token', 'e2e-access-token');
       localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
       localStorage.setItem('atlasia_user_id', id);
       (window as any).__E2E_MOCK_COLLAB__ = true;
-      (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
     } catch {
       // no-op: localStorage can be unavailable on about:blank
     }
@@ -155,7 +149,6 @@ async function setupUserSession(page: Page, userId: string): Promise<void> {
       localStorage.setItem('atlasia_access_token', 'e2e-access-token');
       localStorage.setItem('atlasia_refresh_token', 'e2e-refresh-token');
       localStorage.setItem('atlasia_user_id', id);
-      (window as any).__E2E_FORCE_COLLAB_POLLING__ = true;
     } catch {
       // no-op: value will still be set on next navigation via addInitScript
     }

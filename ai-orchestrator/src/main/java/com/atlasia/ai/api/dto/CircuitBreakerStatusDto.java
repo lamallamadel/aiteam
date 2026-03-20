@@ -1,11 +1,13 @@
 package com.atlasia.ai.api.dto;
 
+import com.atlasia.ai.model.CircuitBreakerState;
+
 import java.time.Instant;
 import java.util.List;
 
 public record CircuitBreakerStatusDto(
         String agentName,
-        String state,
+        CircuitBreakerState state,
         int failureCount,
         Instant lastFailureTime,
         long successfulExecutions,

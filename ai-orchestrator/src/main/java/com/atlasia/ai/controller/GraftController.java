@@ -3,6 +3,7 @@ package com.atlasia.ai.controller;
 import com.atlasia.ai.api.dto.CircuitBreakerStatusDto;
 import com.atlasia.ai.api.dto.GraftExecutionDto;
 import com.atlasia.ai.config.RequiresPermission;
+import com.atlasia.ai.model.CircuitBreakerState;
 import com.atlasia.ai.model.GraftExecutionEntity;
 import com.atlasia.ai.persistence.GraftExecutionRepository;
 import com.atlasia.ai.service.A2ADiscoveryService;
@@ -153,7 +154,7 @@ public class GraftController {
                 entity.getCheckpointAfter(),
                 entity.getStartedAt(),
                 entity.getCompletedAt(),
-                entity.getStatus().name(),
+                entity.getStatus(),
                 entity.getOutputArtifactId(),
                 entity.getErrorMessage(),
                 entity.getRetryCount(),
@@ -171,7 +172,7 @@ public class GraftController {
         long successCount = graftExecutionRepository.countSuccessfulExecutionsByAgent(agentName);
         long failureCount = graftExecutionRepository.countFailedExecutionsByAgent(agentName);
         
-        String state = graftExecutionService.getCircuitBreakerState(agentName);
+        CircuitBreakerState state = CircuitBreakerState.valueOf(graftExecutionService.getCircuitBreakerState(agentName));
         int currentFailureCount = graftExecutionService.getCircuitBreakerFailureCount(agentName);
         Instant lastFailureTime = graftExecutionService.getCircuitBreakerLastFailureTime(agentName);
         

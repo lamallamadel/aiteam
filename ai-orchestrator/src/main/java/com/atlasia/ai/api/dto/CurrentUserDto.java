@@ -1,5 +1,6 @@
 package com.atlasia.ai.api.dto;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -11,5 +12,6 @@ public record CurrentUserDto(
     Set<String> permissions,
     boolean enabled,
     boolean locked,
-    boolean mfaEnabled
+    boolean mfaEnabled,
+    List<String> oauth2LinkedAccounts
 ) {}

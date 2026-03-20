@@ -122,6 +122,7 @@ services:
       - ../../../frontend/tsconfig.spec.json:/app/tsconfig.spec.json
       - ../../../frontend/nginx.conf:/app/nginx.conf
       - ../../../frontend/proxy.conf.json:/app/proxy.conf.json
+      - ../../../frontend/proxy.conf.js:/app/proxy.conf.js
     depends_on:
       ai-orchestrator:
         condition: service_started

@@ -1,8 +1,9 @@
 import { Injectable, OnDestroy, NgZone } from '@angular/core';
 import { Client, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { BehaviorSubject, Observable, interval, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, interval, Subscription } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
+import { CrdtMessage } from '../models/collaboration.model';
 
 export interface CollaborationEvent {
   eventType: 'GRAFT' | 'PRUNE' | 'FLAG' | 'USER_JOIN' | 'USER_LEAVE' | 'CURSOR_MOVE' | 'PONG';
@@ -41,6 +42,7 @@ export class CollaborationWebSocketService implements OnDestroy {
   private userId: string;
 
   private eventsSubject = new BehaviorSubject<CollaborationEvent | null>(null);
+  private crdtMessagesSubject = new Subject<CrdtMessage>();
   private presenceSubject = new BehaviorSubject<PresenceState>({
     activeUsers: [],
     cursors: new Map()
@@ -57,6 +59,7 @@ export class CollaborationWebSocketService implements OnDestroy {
   readonly presence$: Observable<PresenceState> = this.presenceSubject.asObservable();
   readonly connected$: Observable<boolean> = this.connectedSubject.asObservable();
   readonly health$: Observable<ConnectionHealth> = this.healthSubject.asObservable();
+  readonly crdtMessages$: Observable<CrdtMessage> = this.crdtMessagesSubject.asObservable();
 
   private messageQueue: QueuedMessage[] = [];
   private reconnectionAttempts = 0;
@@ -73,6 +76,8 @@ export class CollaborationWebSocketService implements OnDestroy {
 
   constructor(private http: HttpClient, private ngZone: NgZone) {
     this.userId = this.generateUserId();
+    // Expose singleton on window for E2E tests — done once, never removed
+    (window as any).collaborationService = this;
   }
 
   ngOnDestroy(): void {
@@ -171,9 +176,13 @@ export class CollaborationWebSocketService implements OnDestroy {
         this.subscription = this.client!.subscribe(
           `/topic/runs/${runId}/collaboration`,
           (message: any) => {
-            const event = JSON.parse(message.body) as CollaborationEvent;
+            const parsed = JSON.parse(message.body);
+            if (parsed.type && (parsed.type as string).startsWith('CRDT_')) {
+              this.crdtMessagesSubject.next(parsed as CrdtMessage);
+              return;
+            }
+            const event = parsed as CollaborationEvent;
             this.handleIncomingEvent(event);
-            
             if (event.sequenceNumber) {
               this.lastReceivedSequence = event.sequenceNumber;
             }
@@ -356,6 +365,15 @@ export class CollaborationWebSocketService implements OnDestroy {
 
   sendCursorMove(nodeId: string): void {
     this.sendMessage(`/app/runs/${this.currentRunId}/cursor`, { nodeId });
+  }
+
+  sendCrdtSync(changes: string, lamportTimestamp: number): void {
+    if (!this.currentRunId) return;
+    this.sendMessage(`/app/runs/${this.currentRunId}/crdt-sync`, {
+      changes,
+      sourceRegion: 'browser',
+      lamportTimestamp,
+    });
   }
 
   private sendMessage(destination: string, body: any): void {

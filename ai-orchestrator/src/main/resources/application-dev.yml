@@ -14,3 +14,13 @@ spring:
           gitlab:
             client-id: dev-placeholder
             client-secret: dev-placeholder
+
+logging:
+  level:
+    root: INFO
+    com.atlasia.ai: DEBUG
+    org.springframework: DEBUG
+    org.hibernate: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] - %msg%n"
+

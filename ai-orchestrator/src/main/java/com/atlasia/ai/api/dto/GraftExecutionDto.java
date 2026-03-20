@@ -1,5 +1,7 @@
 package com.atlasia.ai.api.dto;
 
+import com.atlasia.ai.model.GraftExecutionEntity.GraftExecutionStatus;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -11,7 +13,7 @@ public record GraftExecutionDto(
         String checkpointAfter,
         Instant startedAt,
         Instant completedAt,
-        String status,
+        GraftExecutionStatus status,
         UUID outputArtifactId,
         String errorMessage,
         int retryCount,

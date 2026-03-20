@@ -81,3 +81,28 @@ export interface ConflictResolution {
   resolution: string;
   targetNode: string;
 }
+
+export interface CrdtMessage {
+  type: 'CRDT_SYNC' | 'CRDT_UPDATE' | 'CRDT_FULL_SYNC';
+  runId: string;
+  sourceRegion: string;
+  /** Base64-encoded CRDT changes (CRDT_SYNC, CRDT_UPDATE). */
+  changes?: string;
+  /** Base64-encoded full document state (CRDT_FULL_SYNC). */
+  state?: string;
+  timestamp: number;
+}
+
+export interface CrdtDocumentState {
+  runId: string;
+  grafts: Record<string, unknown>[];
+  prunedSteps: string[];
+  flags: Record<string, unknown>[];
+  region: string;
+}
+
+export interface CrdtPeersResponse {
+  runId: string;
+  peers: string[];
+  region: string;
+}
