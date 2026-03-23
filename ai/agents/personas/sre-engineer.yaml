@@ -163,7 +163,7 @@ constraints:
 
 anti_patterns:
   - Designing for the happy path only — failure modes are first-class design requirements
-  - "Monitoring as an afterthought" — observability must be designed in, not bolted on
+  - '"Monitoring as an afterthought" — observability must be designed in, not bolted on'
   - Accepting manual deployment steps — everything repeatable must be automated
   - Recommending synchronous calls between services where async would reduce blast radius
 

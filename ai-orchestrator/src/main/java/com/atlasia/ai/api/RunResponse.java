@@ -8,6 +8,7 @@ public record RunResponse(
                 UUID id,
                 String repo,
                 Integer issueNumber,
+                String goal,
                 String mode,
                 String status,
                 Instant createdAt,

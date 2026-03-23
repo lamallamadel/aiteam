@@ -15,12 +15,22 @@ spring:
             client-id: dev-placeholder
             client-secret: dev-placeholder
 
+management:
+  otlp:
+    tracing:
+      export:
+        enabled: false
+  tracing:
+    enabled: false
+
 logging:
   level:
     root: INFO
-    com.atlasia.ai: DEBUG
-    org.springframework: DEBUG
+    com.atlasia.ai: INFO
+    org.springframework: WARN
     org.hibernate: WARN
+    io.opentelemetry: ERROR
+    io.grpc: ERROR
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-N/A}] [runId=%X{runId:-N/A}] [userId=%X{userId:-N/A}] [agent=%X{agent:-N/A}] - %msg%n"
 

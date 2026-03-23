@@ -179,6 +179,7 @@ atlasia:
       app-id: ${GITHUB_APP_ID:}
       private-key-path: ${vault.secret.data.atlasia.github-private-key-path:${GITHUB_PRIVATE_KEY_PATH:}}
       installation-id: ${GITHUB_INSTALLATION_ID:}
+      pat: ${GITHUB_PAT:}
     llm:
       endpoint: ${LLM_ENDPOINT:https://api.openai.com/v1}
       model: ${LLM_MODEL:gpt-4o-mini}
@@ -231,6 +232,99 @@ atlasia:
       enabled: ${PLUGIN_HOT_RELOAD_ENABLED:true}
     health-check:
       interval-seconds: ${PLUGIN_HEALTH_CHECK_INTERVAL:60}
+  # Pipeline LLM tiers: dual legs (primary → secondary), budget soft caps, per-agent complexity
+  model-tiers:
+    budget:
+      max-per-run-usd: ${LLM_BUDGET_MAX_PER_RUN_USD:100}
+      max-daily-usd: ${LLM_BUDGET_MAX_DAILY_USD:500}
+      downgrade-threshold: ${LLM_BUDGET_DOWNGRADE_THRESHOLD:0.80}
+    agent-complexity:
+      architect: very-high
+      developer: high
+      review: medium
+      qualifier: medium-low
+      pm: medium-low
+      tester: low
+      writer: trivial
+    tiers:
+      very-high:
+        dual:
+          primary:
+            provider-id: openai
+            model: gpt-4o
+            cost-per-1k-input: 0.005
+            cost-per-1k-output: 0.015
+          secondary:
+            provider-id: anthropic
+            model: claude-sonnet-4-6
+            cost-per-1k-input: 0.003
+            cost-per-1k-output: 0.015
+        availability: prefer-primary
+      high:
+        dual:
+          primary:
+            provider-id: anthropic
+            model: claude-sonnet-4-6
+            cost-per-1k-input: 0.003
+            cost-per-1k-output: 0.015
+          secondary:
+            provider-id: openai
+            model: gpt-4o
+            cost-per-1k-input: 0.005
+            cost-per-1k-output: 0.015
+        availability: prefer-primary
+      medium:
+        dual:
+          primary:
+            provider-id: openai
+            model: gpt-4o-mini
+            cost-per-1k-input: 0.00015
+            cost-per-1k-output: 0.0006
+          secondary:
+            provider-id: groq
+            model: llama-3.3-70b-versatile
+            cost-per-1k-input: 0.00059
+            cost-per-1k-output: 0.00079
+        availability: prefer-primary
+      medium-low:
+        dual:
+          primary:
+            provider-id: groq
+            model: llama-3.3-70b-versatile
+            cost-per-1k-input: 0.00059
+            cost-per-1k-output: 0.00079
+          secondary:
+            provider-id: openai
+            model: gpt-4o-mini
+            cost-per-1k-input: 0.00015
+            cost-per-1k-output: 0.0006
+        availability: prefer-primary
+      low:
+        dual:
+          primary:
+            provider-id: groq
+            model: llama-3.1-8b-instant
+            cost-per-1k-input: 0.0001
+            cost-per-1k-output: 0.0001
+          secondary:
+            provider-id: openai
+            model: gpt-4o-mini
+            cost-per-1k-input: 0.00015
+            cost-per-1k-output: 0.0006
+        availability: prefer-primary
+      trivial:
+        dual:
+          primary:
+            provider-id: openai
+            model: gpt-4o-mini
+            cost-per-1k-input: 0.00015
+            cost-per-1k-output: 0.0006
+          secondary:
+            provider-id: groq
+            model: llama-3.1-8b-instant
+            cost-per-1k-input: 0.0001
+            cost-per-1k-output: 0.0001
+        availability: prefer-primary
 
 crdt:
   mesh:
@@ -239,7 +333,7 @@ crdt:
 
 # ── Chat Mode multi-provider AI routing ───────────────────────────────────────
 # AiProviderRouter routes personaId → provider via persona-provider-map or default-provider.
-# LlmService (pipeline / Code Mode) is NOT affected by this config.
+# Pipeline Code Mode uses atlasia.model-tiers + these provider ids (dual legs, budget).
 persona:
   ai:
     default-provider: openai
@@ -263,6 +357,15 @@ persona:
         api-key: ${vault.secret.data.atlasia.anthropic-api-key:${ANTHROPIC_API_KEY:}}
         model: ${ANTHROPIC_MODEL:claude-sonnet-4-6}
         type: ANTHROPIC
+        connect-timeout: PT5S
+        read-timeout: PT90S
+        max-tokens: 8192
+        temperature: 0.7
+      groq:
+        base-url: ${GROQ_ENDPOINT:https://api.groq.com/openai/v1}
+        api-key: ${vault.secret.data.atlasia.groq-api-key:${GROQ_API_KEY:}}
+        model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+        type: OPENAI
         connect-timeout: PT5S
         read-timeout: PT90S
         max-tokens: 8192

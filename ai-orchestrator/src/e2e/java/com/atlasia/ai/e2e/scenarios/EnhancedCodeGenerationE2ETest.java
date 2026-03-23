@@ -51,7 +51,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpoints();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 456, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 456, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
@@ -83,7 +83,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpointsWithMultipleFiles();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 789, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 789, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
@@ -107,7 +107,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpointsWithReviewerFeedback();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 999, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 999, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
@@ -134,7 +134,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpoints();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 111, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 111, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
@@ -159,7 +159,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpoints();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 222, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 222, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);
@@ -183,7 +183,7 @@ public class EnhancedCodeGenerationE2ETest extends AbstractE2ETest {
         mockGitHubApiEndpoints();
         mockLLMEndpoints();
 
-        RunRequest request = new RunRequest("test-owner/test-repo", 333, "code", null);
+        RunRequest request = new RunRequest("test-owner/test-repo", 333, null, "code", null, null);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
         HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);

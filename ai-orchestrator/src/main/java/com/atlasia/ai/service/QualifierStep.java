@@ -2,11 +2,14 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.TicketPlan;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -16,17 +19,32 @@ public class QualifierStep implements AgentStep {
 
     private final ObjectMapper objectMapper;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final GitHubApiClient gitHubApiClient;
+    private final AgentContractLoader agentContractLoader;
+    private final JsonSchemaValidator jsonSchemaValidator;
 
-    public QualifierStep(ObjectMapper objectMapper, LlmService llmService, GitHubApiClient gitHubApiClient) {
+    public QualifierStep(
+            ObjectMapper objectMapper,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            GitHubApiClient gitHubApiClient,
+            AgentContractLoader agentContractLoader,
+            JsonSchemaValidator jsonSchemaValidator) {
         this.objectMapper = objectMapper;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.gitHubApiClient = gitHubApiClient;
+        this.agentContractLoader = agentContractLoader;
+        this.jsonSchemaValidator = jsonSchemaValidator;
     }
 
     @Override
     public String execute(RunContext context) throws Exception {
-        String branchName = "ai/issue-" + context.getRunEntity().getIssueNumber();
+        Integer issueNum = context.getRunEntity().getIssueNumber();
+        String branchName = issueNum != null
+                ? "ai/issue-" + issueNum
+                : "ai/goal-" + context.getRunEntity().getId().toString().substring(0, 8);
         context.setBranchName(branchName);
 
         TicketPlan ticketPlan = parseTicketPlan(context.getTicketPlan());
@@ -40,9 +58,9 @@ public class QualifierStep implements AgentStep {
                 repoStructure,
                 agentsMdInfo);
 
-        validateWorkPlan(workPlan);
-
-        return objectMapper.writeValueAsString(workPlan);
+        String workPlanJson = objectMapper.writeValueAsString(workPlan);
+        jsonSchemaValidator.validate(workPlanJson, "work_plan.schema.json");
+        return workPlanJson;
     }
 
     private TicketPlan parseTicketPlan(String ticketPlanJson) throws JsonProcessingException {
@@ -165,13 +183,21 @@ public class QualifierStep implements AgentStep {
         try {
             String systemPrompt = buildSystemPrompt();
             String userPrompt = buildUserPrompt(ticketPlan, repoStructure, agentsMdInfo);
-            Map<String, Object> schema = buildWorkPlanSchema();
+            Map<String, Object> schema = loadWorkPlanSchemaForLlm();
 
             log.info("Sending request to LLM for work plan generation");
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            LlmResult llmResult = llmService.generateStructuredOutput(
+                    systemPrompt, userPrompt, schema, complexityResolver.forAgent("qualifier"));
+            String llmResponse = llmResult.content();
 
-            log.debug("Received LLM response: {}", llmResponse);
+            log.debug("Received LLM response: source={}, preview={}", llmResult.source(), llmResponse.length() > 200 ? llmResponse.substring(0, 200) : llmResponse);
             Map<String, Object> workPlan = parseAndValidateLlmResponse(llmResponse);
+
+            if (llmResult.isMock() || !workPlan.containsKey("tasks")) {
+                log.warn("LLM work plan unusable (source={}, hasTasks={}), using fallback from ticket plan",
+                        llmResult.source(), workPlan.containsKey("tasks"));
+                return generateFallbackWorkPlan(branchName, ticketPlan, repoStructure, agentsMdInfo);
+            }
 
             workPlan.put("branchName", branchName);
 
@@ -187,7 +213,9 @@ public class QualifierStep implements AgentStep {
     }
 
     private String buildSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("qualifier");
+        return yamlPrefix
+                + """
                 You are a technical qualifier analyzing a ticket plan to create a detailed work plan.
                 Your job is to break down the work into concrete, actionable tasks with specific file paths and test requirements.
 
@@ -264,51 +292,13 @@ public class QualifierStep implements AgentStep {
                 .collect(Collectors.joining(", "));
     }
 
-    private Map<String, Object> buildWorkPlanSchema() {
-        Map<String, Object> schema = new HashMap<>();
-        schema.put("type", "object");
-        schema.put("additionalProperties", false);
-
-        Map<String, Object> properties = new HashMap<>();
-
-        properties.put("tasks", Map.of(
-                "type", "array",
-                "description", "List of concrete tasks to complete the ticket. Must have at least 3 tasks.",
-                "minItems", 3,
-                "items", Map.of(
-                        "type", "object",
-                        "required", List.of("id", "area", "description", "filesLikely", "tests"),
-                        "additionalProperties", false,
-                        "properties", Map.of(
-                                "id", Map.of(
-                                        "type", "string",
-                                        "description", "Unique task identifier (e.g., 'task-1', 'task-2')"),
-                                "area", Map.of(
-                                        "type", "string",
-                                        "enum", List.of("backend", "frontend", "infra", "docs"),
-                                        "description", "The area of work this task belongs to"),
-                                "description", Map.of(
-                                        "type", "string",
-                                        "description", "Clear description of what needs to be done in this task"),
-                                "filesLikely", Map.of(
-                                        "type", "array",
-                                        "description",
-                                        "List of specific file paths or directories that will likely be modified or created",
-                                        "items", Map.of("type", "string")),
-                                "tests", Map.of(
-                                        "type", "array",
-                                        "description", "List of test types or specific tests required for this task",
-                                        "items", Map.of("type", "string"))))));
-
-        properties.put("definitionOfDone", Map.of(
-                "type", "array",
-                "description", "List of criteria that define when all work is complete",
-                "items", Map.of("type", "string")));
-
-        schema.put("properties", properties);
-        schema.put("required", List.of("tasks", "definitionOfDone"));
-
-        return schema;
+    private Map<String, Object> loadWorkPlanSchemaForLlm() throws IOException {
+        try (InputStream is = getClass().getResourceAsStream("/ai/schemas/work_plan.schema.json")) {
+            if (is == null) {
+                throw new IOException("Classpath resource not found: /ai/schemas/work_plan.schema.json");
+            }
+            return objectMapper.readValue(is, new TypeReference<>() {});
+        }
     }
 
     private Map<String, Object> parseAndValidateLlmResponse(String llmResponse) throws JsonProcessingException {
@@ -388,114 +378,150 @@ public class QualifierStep implements AgentStep {
             TicketPlan ticketPlan,
             RepoStructure repoStructure,
             AgentsMdInfo agentsMdInfo) {
-        log.info("Generating fallback work plan");
+        log.info("Generating fallback work plan from PM ticket plan: title='{}', criteria={}, risks={}",
+                ticketPlan.getTitle(),
+                ticketPlan.getAcceptanceCriteria() != null ? ticketPlan.getAcceptanceCriteria().size() : 0,
+                ticketPlan.getRisks() != null ? ticketPlan.getRisks().size() : 0);
 
         List<Map<String, Object>> tasks = new ArrayList<>();
         int taskCounter = 1;
 
-        boolean hasBackendWork = ticketPlan.getSummary().toLowerCase().contains("backend") ||
-                ticketPlan.getSummary().toLowerCase().contains("api") ||
-                ticketPlan.getSummary().toLowerCase().contains("service");
-        boolean hasFrontendWork = ticketPlan.getSummary().toLowerCase().contains("frontend") ||
-                ticketPlan.getSummary().toLowerCase().contains("ui") ||
-                ticketPlan.getSummary().toLowerCase().contains("interface");
+        String summary = ticketPlan.getSummary() != null ? ticketPlan.getSummary().toLowerCase() : "";
+        boolean hasBackend = summary.contains("backend") || summary.contains("api") ||
+                summary.contains("service") || summary.contains("endpoint") || summary.contains("controller");
+        boolean hasFrontend = summary.contains("frontend") || summary.contains("ui") ||
+                summary.contains("component") || summary.contains("interface") || summary.contains("angular");
+        boolean hasInfra = summary.contains("docker") || summary.contains("infra") ||
+                summary.contains("deploy") || summary.contains("ci") || summary.contains("pipeline");
 
-        if (hasBackendWork || (!hasBackendWork && !hasFrontendWork)) {
-            tasks.add(Map.of(
+        // Derive implementation tasks from PM's acceptance criteria
+        List<String> criteria = ticketPlan.getAcceptanceCriteria();
+        if (criteria != null && !criteria.isEmpty()) {
+            for (String criterion : criteria) {
+                String area = inferAreaFromText(criterion, hasBackend, hasFrontend, hasInfra);
+                List<String> files = inferFilesForArea(area, repoStructure);
+                tasks.add(new HashMap<>(Map.of(
+                        "id", "task-" + taskCounter++,
+                        "area", area,
+                        "description", criterion,
+                        "filesLikely", files.isEmpty() ? inferDefaultFilesForArea(area) : files,
+                        "tests", inferTestsForArea(area))));
+            }
+        }
+
+        // Ensure at least 3 tasks if criteria didn't provide enough
+        if (!tasks.isEmpty() && tasks.size() < 3) {
+            String area = (hasBackend || (!hasBackend && !hasFrontend)) ? "backend" : "frontend";
+            tasks.add(new HashMap<>(Map.of(
+                    "id", "task-" + taskCounter++,
+                    "area", area,
+                    "description", "Write unit and integration tests for " + ticketPlan.getTitle(),
+                    "filesLikely", inferDefaultFilesForArea(area),
+                    "tests", List.of("Unit tests", "Integration tests"))));
+        }
+
+        // If no criteria at all, generate tasks from title/summary
+        if (tasks.isEmpty()) {
+            if (hasBackend || (!hasBackend && !hasFrontend)) {
+                tasks.add(new HashMap<>(Map.of(
+                        "id", "task-" + taskCounter++,
+                        "area", "backend",
+                        "description", "Implement backend logic for: " + ticketPlan.getTitle(),
+                        "filesLikely", inferFilesForArea("backend", repoStructure).isEmpty()
+                                ? inferDefaultFilesForArea("backend")
+                                : inferFilesForArea("backend", repoStructure),
+                        "tests", List.of("Unit tests", "Integration tests"))));
+            }
+            if (hasFrontend || (!hasBackend && !hasFrontend)) {
+                tasks.add(new HashMap<>(Map.of(
+                        "id", "task-" + taskCounter++,
+                        "area", "frontend",
+                        "description", "Implement UI changes for: " + ticketPlan.getTitle(),
+                        "filesLikely", inferFilesForArea("frontend", repoStructure).isEmpty()
+                                ? inferDefaultFilesForArea("frontend")
+                                : inferFilesForArea("frontend", repoStructure),
+                        "tests", List.of("Component tests", "Unit tests"))));
+            }
+            if (hasInfra) {
+                tasks.add(new HashMap<>(Map.of(
+                        "id", "task-" + taskCounter++,
+                        "area", "infra",
+                        "description", "Update infrastructure configuration for: " + ticketPlan.getTitle(),
+                        "filesLikely", inferDefaultFilesForArea("infra"),
+                        "tests", List.of("Integration tests"))));
+            }
+            tasks.add(new HashMap<>(Map.of(
                     "id", "task-" + taskCounter++,
                     "area", "backend",
-                    "description", "Implement backend changes for " + ticketPlan.getTitle(),
-                    "filesLikely", List.of("ai-orchestrator/src/main/java/"),
-                    "tests", List.of("Unit tests", "Integration tests")));
+                    "description", "Write tests to verify: " + ticketPlan.getTitle(),
+                    "filesLikely", List.of(),
+                    "tests", List.of("Unit tests", "Integration tests"))));
         }
 
-        if (hasFrontendWork || (!hasBackendWork && !hasFrontendWork)) {
-            tasks.add(Map.of(
-                    "id", "task-" + taskCounter++,
-                    "area", "frontend",
-                    "description", "Implement frontend changes for " + ticketPlan.getTitle(),
-                    "filesLikely", List.of("frontend/src/"),
-                    "tests", List.of("Component tests", "Unit tests")));
-        }
-
-        if (hasFrontendWork && !hasBackendWork) {
-            tasks.add(Map.of(
-                    "id", "task-" + taskCounter++,
-                    "area", "frontend",
-                    "description", "Add E2E tests for " + ticketPlan.getTitle(),
-                    "filesLikely", List.of("frontend/e2e/"),
-                    "tests", List.of("E2E tests")));
-        }
-
-        tasks.add(Map.of(
-                "id", "task-" + taskCounter++,
-                "area", "backend",
-                "description", "Verify and test implementation for " + ticketPlan.getTitle(),
-                "filesLikely", List.of(),
-                "tests", List.of("Unit tests", "Integration tests")));
-
-        tasks.add(Map.of(
+        tasks.add(new HashMap<>(Map.of(
                 "id", "task-" + taskCounter,
                 "area", "docs",
-                "description", "Update documentation for " + ticketPlan.getTitle(),
+                "description", "Update documentation for: " + ticketPlan.getTitle(),
                 "filesLikely", List.of("docs/", "README.md"),
-                "tests", List.of()));
+                "tests", List.of())));
 
-        return Map.of(
-                "branchName", branchName,
-                "tasks", tasks,
-                "commands", Map.of(
-                        "backendVerify", agentsMdInfo.getBackendBuildCommand(),
-                        "frontendLint", agentsMdInfo.getFrontendLintCommand(),
-                        "frontendTest", agentsMdInfo.getFrontendTestCommand(),
-                        "e2e", agentsMdInfo.getE2eCommand()),
-                "definitionOfDone", List.of(
-                        "All acceptance criteria met",
-                        "All tests pass",
-                        "Linting clean",
-                        "PR created and reviewed"));
+        List<String> definitionOfDone = new ArrayList<>();
+        if (criteria != null && !criteria.isEmpty()) {
+            definitionOfDone.addAll(criteria);
+        } else {
+            definitionOfDone.add("All acceptance criteria met");
+        }
+        definitionOfDone.add("All tests pass");
+        definitionOfDone.add("Linting clean");
+        definitionOfDone.add("PR created and reviewed");
+
+        Map<String, Object> plan = new HashMap<>();
+        plan.put("branchName", branchName);
+        plan.put("tasks", tasks);
+        plan.put("commands", Map.of(
+                "backendVerify", agentsMdInfo.getBackendBuildCommand(),
+                "frontendLint", agentsMdInfo.getFrontendLintCommand(),
+                "frontendTest", agentsMdInfo.getFrontendTestCommand(),
+                "e2e", agentsMdInfo.getE2eCommand()));
+        plan.put("definitionOfDone", definitionOfDone);
+        return plan;
     }
 
-    private void validateWorkPlan(Map<String, Object> workPlan) {
-        if (!workPlan.containsKey("branchName")) {
-            throw new IllegalArgumentException("Work plan missing required field: branchName");
+    private String inferAreaFromText(String text, boolean defaultBackend, boolean defaultFrontend, boolean defaultInfra) {
+        String lower = text.toLowerCase();
+        if (lower.contains("frontend") || lower.contains("ui") || lower.contains("component") ||
+                lower.contains("angular") || lower.contains("button") || lower.contains("page") ||
+                lower.contains("form") || lower.contains("display") || lower.contains("render")) {
+            return "frontend";
         }
-
-        if (!workPlan.containsKey("tasks")) {
-            throw new IllegalArgumentException("Work plan missing required field: tasks");
+        if (lower.contains("docker") || lower.contains("deploy") || lower.contains("ci") ||
+                lower.contains("pipeline") || lower.contains("infra") || lower.contains("compose")) {
+            return "infra";
         }
-
-        List<Map<String, Object>> tasks = (List<Map<String, Object>>) workPlan.get("tasks");
-        if (tasks.size() < 3) {
-            throw new IllegalArgumentException("Work plan must have at least 3 tasks, found: " + tasks.size());
+        if (lower.contains("doc") || lower.contains("readme") || lower.contains("changelog")) {
+            return "docs";
         }
+        if (defaultFrontend && !defaultBackend) return "frontend";
+        if (defaultInfra && !defaultBackend && !defaultFrontend) return "infra";
+        return "backend";
+    }
 
-        for (Map<String, Object> task : tasks) {
-            if (!task.containsKey("id") || !task.containsKey("area") ||
-                    !task.containsKey("description") || !task.containsKey("filesLikely") ||
-                    !task.containsKey("tests")) {
-                throw new IllegalArgumentException("Task missing required fields: " + task);
-            }
+    private List<String> inferDefaultFilesForArea(String area) {
+        return switch (area) {
+            case "frontend" -> List.of("frontend/src/app/");
+            case "infra" -> List.of("infra/");
+            case "docs" -> List.of("docs/", "README.md");
+            default -> List.of("ai-orchestrator/src/main/java/");
+        };
+    }
 
-            String area = (String) task.get("area");
-            if (!List.of("backend", "frontend", "infra", "docs").contains(area)) {
-                throw new IllegalArgumentException("Invalid task area: " + area);
-            }
-        }
-
-        if (!workPlan.containsKey("commands")) {
-            throw new IllegalArgumentException("Work plan missing required field: commands");
-        }
-
-        Map<String, Object> commands = (Map<String, Object>) workPlan.get("commands");
-        if (!commands.containsKey("backendVerify") || !commands.containsKey("frontendLint") ||
-                !commands.containsKey("frontendTest") || !commands.containsKey("e2e")) {
-            throw new IllegalArgumentException("Commands missing required fields");
-        }
-
-        if (!workPlan.containsKey("definitionOfDone")) {
-            throw new IllegalArgumentException("Work plan missing required field: definitionOfDone");
-        }
+    private List<String> inferTestsForArea(String area) {
+        return switch (area) {
+            case "frontend" -> List.of("Component tests", "Unit tests");
+            case "infra" -> List.of("Integration tests");
+            case "docs" -> List.of();
+            default -> List.of("Unit tests", "Integration tests");
+        };
     }
 
     private static class RepoStructure {

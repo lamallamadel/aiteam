@@ -26,15 +26,25 @@ public class TesterStep implements AgentStep {
     
     private final GitHubApiClient gitHubApiClient;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final ObjectMapper objectMapper;
     private final OrchestratorMetrics metrics;
+    private final AgentContractLoader agentContractLoader;
     private final Random random = new Random();
 
-    public TesterStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper, OrchestratorMetrics metrics) {
+    public TesterStep(
+            GitHubApiClient gitHubApiClient,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            ObjectMapper objectMapper,
+            OrchestratorMetrics metrics,
+            AgentContractLoader agentContractLoader) {
         this.gitHubApiClient = gitHubApiClient;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.agentContractLoader = agentContractLoader;
     }
 
     @Override
@@ -748,7 +758,10 @@ public class TesterStep implements AgentStep {
             Map<String, Object> schema = buildFixPatchSchema();
             
             log.info("Requesting LLM to generate {} fix for issue #{}", testType, context.getRunEntity().getIssueNumber());
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(
+                            systemPrompt, userPrompt, schema, complexityResolver.forAgent("tester"))
+                    .content();
             
             if (llmResponse == null || llmResponse.trim().isEmpty()) {
                 throw new IllegalStateException("LLM returned empty fix response");
@@ -767,7 +780,9 @@ public class TesterStep implements AgentStep {
     }
 
     private String buildFixSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("tester");
+        return yamlPrefix
+                + """
             You are an expert software engineer specializing in debugging and fixing test failures.
             
             Your task is to analyze CI/E2E test failure logs and generate minimal, targeted patches to fix the issues.

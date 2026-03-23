@@ -2,6 +2,7 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.atlasia.ai.model.TicketPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,15 +27,33 @@ class QualifierStepTest {
         @Mock
         private LlmService llmService;
 
+        @Mock
+        private LlmComplexityResolver complexityResolver;
+
+        @Mock
+        private AgentContractLoader agentContractLoader;
+
+        @Mock
+        private JsonSchemaValidator jsonSchemaValidator;
+
         private ObjectMapper objectMapper;
         private QualifierStep qualifierStep;
         private RunContext context;
         private RunEntity runEntity;
 
         @BeforeEach
-        void setUp() {
+        void setUp() throws Exception {
                 objectMapper = new ObjectMapper();
-                qualifierStep = new QualifierStep(objectMapper, llmService, gitHubApiClient);
+                lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+                lenient().doNothing().when(jsonSchemaValidator).validate(anyString(), anyString());
+                lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
+                qualifierStep = new QualifierStep(
+                                objectMapper,
+                                llmService,
+                                complexityResolver,
+                                gitHubApiClient,
+                                agentContractLoader,
+                                jsonSchemaValidator);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
@@ -56,8 +75,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = qualifierStep.execute(context);
 
@@ -73,7 +92,7 @@ class QualifierStepTest {
         void execute_withLlmFailure_usesFallback() throws Exception {
                 context.setTicketPlan(createTicketPlanJson());
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
                 String result = qualifierStep.execute(context);
@@ -92,8 +111,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 qualifierStep.execute(context);
 
@@ -107,8 +126,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 qualifierStep.execute(context);
 
@@ -123,8 +142,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 qualifierStep.execute(context);
 
@@ -138,8 +157,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = qualifierStep.execute(context);
 
@@ -155,6 +174,9 @@ class QualifierStepTest {
 
         @Test
         void execute_requiresAtLeastThreeTasks() throws Exception {
+                doThrow(new IllegalArgumentException("Work plan must have at least 3 tasks"))
+                                .when(jsonSchemaValidator).validate(anyString(), eq("work_plan.schema.json"));
+
                 context.setTicketPlan(createTicketPlanJson());
 
                 Map<String, Object> workPlan = new HashMap<>();
@@ -167,14 +189,17 @@ class QualifierStepTest {
 
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 assertThrows(IllegalArgumentException.class, () -> qualifierStep.execute(context));
         }
 
         @Test
         void execute_validatesTaskArea() throws Exception {
+                doThrow(new IllegalArgumentException("Invalid enum value for area"))
+                                .when(jsonSchemaValidator).validate(anyString(), eq("work_plan.schema.json"));
+
                 context.setTicketPlan(createTicketPlanJson());
 
                 Map<String, Object> workPlan = new HashMap<>();
@@ -191,8 +216,8 @@ class QualifierStepTest {
 
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 assertThrows(IllegalArgumentException.class, () -> qualifierStep.execute(context));
         }
@@ -210,7 +235,7 @@ class QualifierStepTest {
 
                 context.setTicketPlan(objectMapper.writeValueAsString(ticketPlan));
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                                 .thenThrow(new RuntimeException("LLM failed"));
 
                 String result = qualifierStep.execute(context);
@@ -234,7 +259,7 @@ class QualifierStepTest {
 
                 context.setTicketPlan(objectMapper.writeValueAsString(ticketPlan));
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                                 .thenThrow(new RuntimeException("LLM failed"));
 
                 String result = qualifierStep.execute(context);
@@ -260,8 +285,8 @@ class QualifierStepTest {
 
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = qualifierStep.execute(context);
 
@@ -278,15 +303,16 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 qualifierStep.execute(context);
 
                 verify(llmService).generateStructuredOutput(
                                 anyString(),
                                 contains("Backend files"),
-                                anyMap());
+                                anyMap(),
+                                any(TaskComplexity.class));
         }
 
         @Test
@@ -308,8 +334,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = qualifierStep.execute(context);
 
@@ -327,8 +353,8 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = "```json\n" + objectMapper.writeValueAsString(workPlan) + "\n```";
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 assertDoesNotThrow(() -> qualifierStep.execute(context));
         }
@@ -345,8 +371,8 @@ class QualifierStepTest {
 
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = qualifierStep.execute(context);
 
@@ -366,15 +392,16 @@ class QualifierStepTest {
                 Map<String, Object> workPlan = createValidWorkPlan();
                 String llmResponse = objectMapper.writeValueAsString(workPlan);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 qualifierStep.execute(context);
 
                 verify(llmService).generateStructuredOutput(
                                 anyString(),
                                 contains("Repository Structure"),
-                                anyMap());
+                                anyMap(),
+                                any(TaskComplexity.class));
         }
 
         // Helper methods

@@ -12,7 +12,7 @@ Two modes:
 
 ## Commands
 
-### Backend (`ai-orchestrator/` — Spring Boot 3.3, Java 17, Maven)
+### Backend (`ai-orchestrator/` — Spring Boot 3.3, Java 21, Maven)
 
 ```bash
 mvn clean install          # Install dependencies
@@ -60,6 +60,9 @@ infra/vault-init.sh                                    # Initialize HashiCorp Va
 | `LLM_MODEL` | LLM model identifier | `gpt-4o-mini` |
 | `LLM_API_KEY` | LLM API key | — |
 | `LLM_FALLBACK_ENDPOINT` / `LLM_FALLBACK_API_KEY` | Fallback LLM (DeepSeek) | — |
+| `GROQ_API_KEY` / `GROQ_ENDPOINT` / `GROQ_MODEL` | Groq (OpenAI-compatible tier leg) | See `application.yml` |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` | Anthropic (Chat + tier legs) | — |
+| `LLM_BUDGET_MAX_PER_RUN_USD` / `LLM_BUDGET_MAX_DAILY_USD` / `LLM_BUDGET_DOWNGRADE_THRESHOLD` | Pipeline LLM budget soft caps | `100` / `500` / `0.80` |
 | `GITHUB_APP_ID` / `GITHUB_PRIVATE_KEY_PATH` / `GITHUB_INSTALLATION_ID` | GitHub App credentials | — |
 | `GITHUB_WEBHOOK_SECRET` | GitHub webhook HMAC secret | — |
 | `REPO_ALLOWLIST` | Modifiable paths (CSV) | `backend/,frontend/,docs/,infra/,ai/` |
@@ -111,7 +114,7 @@ Each demo has its own `pom.xml`, HTTP scratch file (e.g. `codegen.http`, `person
 
 | Layer | Tech |
 |---|---|
-| Backend | Spring Boot 3.3, Java 17, Maven |
+| Backend | Spring Boot 3.3, Java 21, Maven |
 | Frontend | Angular 21, TypeScript 5.9, Chart.js |
 | Frontend Testing | Vitest 4, Playwright |
 | Database | PostgreSQL 16, Flyway, Hibernate/JPA |
@@ -132,6 +135,7 @@ Each demo has its own `pom.xml`, HTTP scratch file (e.g. `codegen.http`, `person
 - `GET /api/runs` — List all runs
 - `GET /api/personas` — List available AI Review Roles
 - `POST /api/chat/{personaName}` — Chat directly with a persona
+- `GET /api/budget?runId=` — LLM budget snapshot (daily + optional per-run spend)
 - `GET /actuator/health` — Health check
 - `WS /ws/runs/{runId}/collaboration` — Real-time STOMP/SockJS collaboration (CRDT-based)
 - `GET/POST /api/admin/websocket/*` — WebSocket admin monitoring

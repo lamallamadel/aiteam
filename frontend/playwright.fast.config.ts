@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 1 : undefined,
+  // Fewer workers locally avoids V8 OOM ("Fatal process out of memory: Zone") with Angular + Zone.js.
+  workers: isCI ? 1 : 2,
   maxFailures: isCI ? 20 : 5,
   globalTimeout: 30 * 60_000,
 
@@ -42,7 +43,8 @@ export default defineConfig({
       ],
 
   webServer: {
-    command: 'node --max-old-space-size=4096 ./node_modules/@angular/cli/bin/ng serve --host 127.0.0.1 --port 4200 --proxy-config proxy.e2e.conf.json',
+    command:
+      'node --max-old-space-size=8192 ./node_modules/@angular/cli/bin/ng serve --host 127.0.0.1 --port 4200 --proxy-config proxy.e2e.conf.json',
     url: 'http://127.0.0.1:4200',
     reuseExistingServer: true,
     timeout: 240000,

@@ -2,6 +2,7 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,13 @@ class TesterStepTest {
         private LlmService llmService;
 
         @Mock
+        private LlmComplexityResolver complexityResolver;
+
+        @Mock
         private OrchestratorMetrics metrics;
+
+        @Mock
+        private AgentContractLoader agentContractLoader;
 
         private ObjectMapper objectMapper;
         private TesterStep testerStep;
@@ -37,7 +44,10 @@ class TesterStepTest {
         @BeforeEach
         void setUp() {
                 objectMapper = new ObjectMapper();
-                testerStep = new TesterStep(gitHubApiClient, llmService, objectMapper, metrics);
+                lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+                lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
+                testerStep = new TesterStep(
+                        gitHubApiClient, llmService, complexityResolver, objectMapper, metrics, agentContractLoader);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
@@ -78,7 +88,7 @@ class TesterStepTest {
                 assertNotNull(result);
                 assertTrue(runEntity.getCiFixCount() > 0);
                 verify(metrics).recordCiFixAttempt();
-                verify(llmService).generateStructuredOutput(anyString(), contains("CI"), anyMap());
+                verify(llmService).generateStructuredOutput(anyString(), contains("CI"), anyMap(), any(TaskComplexity.class));
                 verify(gitHubApiClient).createBlob(eq("owner"), eq("repo"), anyString(), anyString());
                 verify(gitHubApiClient).createCommit(eq("owner"), eq("repo"), contains("Auto-fix CI"), anyString(),
                                 anyList(), anyMap(), anyMap());
@@ -109,7 +119,7 @@ class TesterStepTest {
                 assertNotNull(result);
                 assertTrue(runEntity.getE2eFixCount() > 0);
                 verify(metrics).recordE2eFixAttempt();
-                verify(llmService).generateStructuredOutput(anyString(), contains("E2E"), anyMap());
+                verify(llmService).generateStructuredOutput(anyString(), contains("E2E"), anyMap(), any(TaskComplexity.class));
         }
 
         @Test
@@ -292,8 +302,8 @@ class TesterStepTest {
                 fixPatch.setFiles(List.of(filePatch));
 
                 String fixJson = objectMapper.writeValueAsString(fixPatch);
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(fixJson);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(fixJson));
 
                 when(gitHubApiClient.createBlob(anyString(), anyString(), anyString(), anyString()))
                                 .thenReturn(Map.of("sha", "blob-sha"));
@@ -426,8 +436,8 @@ class TesterStepTest {
 
                 try {
                         String fixJson = objectMapper.writeValueAsString(fixPatch);
-                        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                        .thenReturn(fixJson);
+                        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                        .thenReturn(LlmResult.primary(fixJson));
                 } catch (Exception e) {
                         throw new RuntimeException(e);
                 }

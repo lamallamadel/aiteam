@@ -127,7 +127,26 @@
     "transitions": {
       "type": "array",
       "items": {
-        "$ref": "state_transition.schema.json"
+        "type": "object",
+        "required": ["from", "to", "type", "reason", "timestamp", "correlationId"],
+        "properties": {
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["forward", "loop_back", "escalation", "gate_pause", "gate_resume", "abort"]
+          },
+          "reason": { "type": "string" },
+          "artifact_id": { "type": "string" },
+          "artifact_type": { "type": "string" },
+          "loop_iteration": { "type": "integer", "minimum": 0 },
+          "gate_name": { "type": "string" },
+          "correlationId": { "type": "string", "format": "uuid" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "duration_since_previous_ms": { "type": "integer" },
+          "context_passed": { "type": "array", "items": { "type": "string" } },
+          "context_stripped": { "type": "array", "items": { "type": "string" } }
+        }
       },
       "description": "Audit log of every state transition in this workflow"
     },
@@ -152,9 +171,7 @@
     },
     "conflict_resolutions": {
       "type": "array",
-      "items": {
-        "$ref": "conflict_resolution.schema.json"
-      },
+      "items": { "type": "object" },
       "description": "Record of reviewer conflicts and how they were resolved"
     }
   }

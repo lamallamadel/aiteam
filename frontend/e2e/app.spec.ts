@@ -7,6 +7,15 @@ async function bootstrapAuthenticatedSession(page: import('@playwright/test').Pa
     localStorage.setItem('atlasia_user_id', 'e2e-user');
   });
 
+  await page.route('**/api/auth/csrf*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({}),
+      headers: { 'set-cookie': 'XSRF-TOKEN=e2e-token; Path=/' },
+    });
+  });
+
   await page.route('**/api/auth/me', async (route) => {
     await route.fulfill({
       status: 200,
@@ -19,6 +28,18 @@ async function bootstrapAuthenticatedSession(page: import('@playwright/test').Pa
       }),
     });
   });
+
+  await page.route('**/api/auth/refresh*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ accessToken: 'e2e-access-token', refreshToken: 'e2e-refresh-token' }),
+    });
+  });
+
+  await page.route('**/api/personas*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+  });
 }
 
 test('has title', async ({ page }) => {
@@ -29,6 +50,7 @@ test('has title', async ({ page }) => {
 });
 
 test('shows main heading', async ({ page }) => {
+  await bootstrapAuthenticatedSession(page);
   await page.goto('/');
 
   // Should have "Activity Log" or other main content depending on initial route

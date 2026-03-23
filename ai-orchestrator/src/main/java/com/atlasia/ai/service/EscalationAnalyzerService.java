@@ -58,7 +58,7 @@ public class EscalationAnalyzerService {
             }
 
             run.getArtifacts().stream()
-                    .filter(a -> "escalation.json".equals(a.getArtifactType()))
+                    .filter(a -> "escalation".equals(a.getArtifactType()) || "escalation.json".equals(a.getArtifactType()))
                     .findFirst()
                     .ifPresent(artifact -> analyzeEscalationArtifact(
                             artifact, errorPatterns, filePathCounts, keywordFrequency));

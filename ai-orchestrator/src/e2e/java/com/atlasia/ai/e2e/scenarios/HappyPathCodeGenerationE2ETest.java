@@ -209,7 +209,7 @@ public class HappyPathCodeGenerationE2ETest extends AbstractE2ETest {
 
                 // --- 3. EXECUTE INTEGRATION ---
 
-                RunRequest request = new RunRequest("test-owner/test-repo", 123, "code", null);
+                RunRequest request = new RunRequest("test-owner/test-repo", 123, null, "code", null, null);
                 HttpHeaders headers = new HttpHeaders();
                 headers.setBearerAuth("e2e-orch-Xk9mL3pN7qR2sT5uW8yZ1bC4dF6gH0jM");
                 HttpEntity<RunRequest> entity = new HttpEntity<>(request, headers);

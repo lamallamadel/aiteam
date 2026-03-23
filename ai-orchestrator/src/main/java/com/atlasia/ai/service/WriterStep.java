@@ -20,12 +20,21 @@ public class WriterStep implements AgentStep {
     
     private final GitHubApiClient gitHubApiClient;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final ObjectMapper objectMapper;
+    private final AgentContractLoader agentContractLoader;
 
-    public WriterStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper) {
+    public WriterStep(
+            GitHubApiClient gitHubApiClient,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            ObjectMapper objectMapper,
+            AgentContractLoader agentContractLoader) {
         this.gitHubApiClient = gitHubApiClient;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.objectMapper = objectMapper;
+        this.agentContractLoader = agentContractLoader;
     }
 
     @Override
@@ -169,7 +178,10 @@ public class WriterStep implements AgentStep {
             String userPrompt = buildChangelogUserPrompt(context, gaps);
             Map<String, Object> schema = buildChangelogSchema();
 
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(
+                            systemPrompt, userPrompt, schema, complexityResolver.forAgent("writer"))
+                    .content();
             
             ChangelogContent changelogContent = objectMapper.readValue(llmResponse, ChangelogContent.class);
             
@@ -181,7 +193,9 @@ public class WriterStep implements AgentStep {
     }
 
     private String buildChangelogSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("writer");
+        return yamlPrefix
+                + """
             You are a technical writer creating comprehensive changelogs for software releases.
             
             Your responsibilities:
@@ -454,7 +468,10 @@ public class WriterStep implements AgentStep {
             String userPrompt = buildReadmeUserPrompt(context, currentReadme, gaps);
             Map<String, Object> schema = buildReadmeUpdateSchema();
 
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(
+                            systemPrompt, userPrompt, schema, complexityResolver.forAgent("writer"))
+                    .content();
             
             ReadmeUpdate update = objectMapper.readValue(llmResponse, ReadmeUpdate.class);
             
@@ -472,7 +489,9 @@ public class WriterStep implements AgentStep {
     }
 
     private String buildReadmeSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("writer");
+        return yamlPrefix
+                + """
             You are a technical writer updating README documentation.
             
             Your responsibilities:
@@ -608,7 +627,8 @@ public class WriterStep implements AgentStep {
             String systemPrompt = buildCodeDocSystemPrompt();
             String userPrompt = buildCodeDocUserPrompt(context, javaFiles);
             
-            String llmResponse = llmService.generateCompletion(systemPrompt, userPrompt);
+            String llmResponse =
+                    llmService.generateCompletion(systemPrompt, userPrompt, complexityResolver.forAgent("writer"));
             
             docs.put("docs/CODE_DOCUMENTATION_GUIDE.md", llmResponse);
             
@@ -620,7 +640,9 @@ public class WriterStep implements AgentStep {
     }
 
     private String buildCodeDocSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("writer");
+        return yamlPrefix
+                + """
             You are a technical writer creating inline code documentation guides.
             
             Provide specific recommendations for:

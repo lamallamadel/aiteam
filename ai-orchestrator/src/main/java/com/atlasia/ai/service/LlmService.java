@@ -1,6 +1,7 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.config.OrchestratorProperties;
+import com.atlasia.ai.model.TaskComplexity;
 import com.atlasia.ai.service.event.WorkflowEvent;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.exception.LlmServiceException;
@@ -23,8 +24,10 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class LlmService {
@@ -35,8 +38,9 @@ public class LlmService {
     private final ObjectMapper objectMapper;
     private final OrchestratorMetrics metrics;
     private final WorkflowEventBus eventBus;
+    private final TieredLlmExecutor tieredLlmExecutor;
 
-    /** Simple pricing map: model name → cost per 1K tokens (USD). */
+    /** Legacy pricing when tier routing is bypassed. */
     private static final Map<String, Double> COST_PER_1K_TOKENS = Map.of(
             "gpt-4o", 0.005,
             "gpt-4o-mini", 0.00015,
@@ -44,23 +48,27 @@ public class LlmService {
             "gpt-4", 0.03,
             "gpt-3.5-turbo", 0.0005,
             "claude-3-5-sonnet-20241022", 0.006,
-            "claude-3-haiku-20240307", 0.00025
-    );
+            "claude-3-haiku-20240307", 0.00025);
 
-    public LlmService(OrchestratorProperties properties, WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper, OrchestratorMetrics metrics, WorkflowEventBus eventBus) {
+    public LlmService(
+            OrchestratorProperties properties,
+            WebClient.Builder webClientBuilder,
+            ObjectMapper objectMapper,
+            OrchestratorMetrics metrics,
+            WorkflowEventBus eventBus,
+            TieredLlmExecutor tieredLlmExecutor) {
         this.llmConfig = properties.llm();
         this.objectMapper = objectMapper;
         this.metrics = metrics;
         this.eventBus = eventBus;
+        this.tieredLlmExecutor = tieredLlmExecutor;
 
         ConnectionProvider provider = ConnectionProvider.builder("llm-pool")
                 .maxIdleTime(Duration.ofSeconds(20))
                 .evictInBackground(Duration.ofSeconds(60))
                 .build();
 
-        HttpClient httpClient = HttpClient.create(provider)
-                .responseTimeout(Duration.ofMinutes(2));
+        HttpClient httpClient = HttpClient.create(provider).responseTimeout(Duration.ofMinutes(2));
 
         if (llmConfig.proxyHost() != null && !llmConfig.proxyHost().isEmpty()) {
             httpClient = httpClient.proxy(proxy -> proxy.type(ProxyProvider.Proxy.HTTP)
@@ -76,13 +84,66 @@ public class LlmService {
     }
 
     public String generateCompletion(String systemPrompt, String userPrompt) {
+        return generateCompletion(systemPrompt, userPrompt, TaskComplexity.MEDIUM);
+    }
+
+    public String generateCompletion(String systemPrompt, String userPrompt, TaskComplexity complexity) {
+        return tieredLlmExecutor.complete(systemPrompt, userPrompt, complexity, () -> generateCompletionLegacy(systemPrompt, userPrompt));
+    }
+
+    public LlmResult generateStructuredOutput(String systemPrompt, String userPrompt, Map<String, Object> jsonSchema) {
+        return generateStructuredOutput(systemPrompt, userPrompt, jsonSchema, TaskComplexity.MEDIUM);
+    }
+
+    public LlmResult generateStructuredOutput(
+            String systemPrompt, String userPrompt, Map<String, Object> jsonSchema, TaskComplexity complexity) {
+        return tieredLlmExecutor.structured(
+                systemPrompt, userPrompt, jsonSchema, complexity, () -> generateStructuredOutputLegacy(systemPrompt, userPrompt, jsonSchema));
+    }
+
+    public LlmResult generateStructuredOutput(String systemPrompt, String userPrompt, String jsonSchemaString) {
+        try {
+            JsonNode schemaNode = objectMapper.readTree(jsonSchemaString);
+            Map<String, Object> jsonSchema = objectMapper.convertValue(
+                    schemaNode, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            return generateStructuredOutput(systemPrompt, userPrompt, jsonSchema);
+        } catch (Exception e) {
+            log.error("Failed to parse JSON schema, correlationId={}", CorrelationIdHolder.getCorrelationId(), e);
+            throw new LlmServiceException(
+                    "Failed to parse JSON schema: " + e.getMessage(),
+                    e,
+                    llmConfig.model(),
+                    LlmServiceException.LlmErrorType.INVALID_RESPONSE);
+        }
+    }
+
+    public LlmResult generateStructuredOutput(
+            String systemPrompt, String userPrompt, String jsonSchemaString, TaskComplexity complexity) {
+        try {
+            JsonNode schemaNode = objectMapper.readTree(jsonSchemaString);
+            Map<String, Object> jsonSchema = objectMapper.convertValue(
+                    schemaNode, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            return generateStructuredOutput(systemPrompt, userPrompt, jsonSchema, complexity);
+        } catch (Exception e) {
+            log.error("Failed to parse JSON schema, correlationId={}", CorrelationIdHolder.getCorrelationId(), e);
+            throw new LlmServiceException(
+                    "Failed to parse JSON schema: " + e.getMessage(),
+                    e,
+                    llmConfig.model(),
+                    LlmServiceException.LlmErrorType.INVALID_RESPONSE);
+        }
+    }
+
+    private String generateCompletionLegacy(String systemPrompt, String userPrompt) {
         Timer.Sample sample = metrics.startLlmTimer();
         long startTime = System.currentTimeMillis();
         emitLlmStart();
 
         try {
-            log.debug("LLM API call: generateCompletion, model={}, correlationId={}",
-                    llmConfig.model(), CorrelationIdHolder.getCorrelationId());
+            log.debug(
+                    "LLM API call (legacy): generateCompletion, model={}, correlationId={}",
+                    llmConfig.model(),
+                    CorrelationIdHolder.getCorrelationId());
 
             List<Map<String, String>> messages = new ArrayList<>();
             if (systemPrompt != null && !systemPrompt.isEmpty()) {
@@ -90,55 +151,54 @@ public class LlmService {
             }
             messages.add(Map.of("role", "user", "content", userPrompt));
 
-            Map<String, Object> requestBody = Map.of(
-                    "model", llmConfig.model(),
-                    "messages", messages);
+            Map<String, Object> requestBody = Map.of("model", llmConfig.model(), "messages", messages);
 
             String correlationId = CorrelationIdHolder.getCorrelationId();
 
             Map<String, Object> response;
             try {
-                response = webClient.post()
+                response = webClient
+                        .post()
                         .uri(llmConfig.endpoint() + "/chat/completions")
                         .header("Authorization", "Bearer " + llmConfig.apiKey())
                         .header("X-Correlation-ID", correlationId != null ? correlationId : "")
                         .bodyValue(requestBody)
                         .retrieve()
-                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
-                        })
+                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                         .timeout(Duration.ofMinutes(5))
                         .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
                                 .filter(this::isTransientError)
                                 .doBeforeRetry(retrySignal -> log.warn(
                                         "Retrying LLM API call due to transient error: {}, attempt={}",
-                                        retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
+                                        retrySignal.failure().getMessage(),
+                                        retrySignal.totalRetries() + 1)))
                         .onErrorResume(e -> {
                             log.warn("Primary LLM failed, attempting fallback. Error: {}", e.getMessage());
                             if (llmConfig.fallbackEndpoint() != null && !llmConfig.fallbackEndpoint().isEmpty()) {
-                                return webClient.post()
+                                return webClient
+                                        .post()
                                         .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
                                         .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
                                         .header("X-Correlation-ID", correlationId != null ? correlationId : "")
                                         .bodyValue(requestBody)
                                         .retrieve()
-                                        .bodyToMono(
-                                                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
-                                                })
+                                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                                         .timeout(Duration.ofMinutes(5));
                             }
                             return Mono.error(e);
                         })
                         .onErrorResume(e -> {
-                            log.error("All LLM endpoints failed. Triggering safe mock response. Error: {}",
+                            log.error(
+                                    "All LLM endpoints failed. Triggering safe mock response. Error: {}",
                                     e.getMessage());
-                            return Mono.just(createMockResponse(
-                                    "I'm sorry, I'm currently having trouble connecting to my neural core. Please check your network connection, or I can operate in basic mode."));
+                            return Mono.just(createMockResponse(buildLlmUnavailableUserMessage()));
                         })
                         .block();
             } catch (Exception e) {
-                log.error("Emergency catch: LLM chain failed to produce a response. Triggering mock. Error: {}",
+                log.error(
+                        "Emergency catch: LLM chain failed to produce a response. Triggering mock. Error: {}",
                         e.getMessage());
-                response = createMockResponse("The neural link is unstable. Operating in offline mode.");
+                response = createMockResponse(buildLlmUnavailableUserMessage());
             }
 
             if (response == null) {
@@ -154,8 +214,11 @@ public class LlmService {
             recordCostMetrics(tokensUsed);
             emitLlmEnd(duration, tokensUsed);
 
-            log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
-                    duration, tokensUsed, CorrelationIdHolder.getCorrelationId());
+            log.debug(
+                    "LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
+                    duration,
+                    tokensUsed,
+                    CorrelationIdHolder.getCorrelationId());
 
             return content;
         } catch (WebClientResponseException e) {
@@ -170,14 +233,16 @@ public class LlmService {
         }
     }
 
-    public String generateStructuredOutput(String systemPrompt, String userPrompt, Map<String, Object> jsonSchema) {
+    private LlmResult generateStructuredOutputLegacy(String systemPrompt, String userPrompt, Map<String, Object> jsonSchema) {
         Timer.Sample sample = metrics.startLlmTimer();
         long startTime = System.currentTimeMillis();
         emitLlmStart();
 
         try {
-            log.debug("LLM API call: generateStructuredOutput, model={}, correlationId={}",
-                    llmConfig.model(), CorrelationIdHolder.getCorrelationId());
+            log.debug(
+                    "LLM API call (legacy): generateStructuredOutput, model={}, correlationId={}",
+                    llmConfig.model(),
+                    CorrelationIdHolder.getCorrelationId());
 
             List<Map<String, String>> messages = new ArrayList<>();
             if (systemPrompt != null && !systemPrompt.isEmpty()) {
@@ -185,65 +250,102 @@ public class LlmService {
             }
             messages.add(Map.of("role", "user", "content", userPrompt));
 
-            Map<String, Object> responseFormat = Map.of(
-                    "type", "json_schema",
-                    "json_schema", Map.of(
-                            "name", "response",
-                            "strict", true,
-                            "schema", jsonSchema));
+            Map<String, Object> responseFormatSchema = Map.of(
+                    "type",
+                    "json_schema",
+                    "json_schema",
+                    Map.of("name", "response", "strict", true, "schema", jsonSchema));
 
-            Map<String, Object> requestBody = Map.of(
-                    "model", llmConfig.model(),
-                    "messages", messages,
-                    "response_format", responseFormat);
+            Map<String, Object> requestBodySchema = new HashMap<>();
+            requestBodySchema.put("model", llmConfig.model());
+            requestBodySchema.put("messages", messages);
+            requestBodySchema.put("response_format", responseFormatSchema);
+
+            String jsonOnlyHint =
+                    "\n\nYou must respond with a single JSON object only (no markdown code fences) matching the expected structure.";
+            List<Map<String, String>> messagesJsonObject = new ArrayList<>();
+            if (systemPrompt != null && !systemPrompt.isEmpty()) {
+                messagesJsonObject.add(Map.of("role", "system", "content", systemPrompt + jsonOnlyHint));
+            } else {
+                messagesJsonObject.add(Map.of(
+                        "role",
+                        "system",
+                        "content",
+                        "You must respond with a single JSON object only (no markdown code fences)."
+                                + jsonOnlyHint));
+            }
+            messagesJsonObject.add(Map.of("role", "user", "content", userPrompt));
+            Map<String, Object> requestBodyJsonObject = new HashMap<>();
+            requestBodyJsonObject.put("model", llmConfig.model());
+            requestBodyJsonObject.put("messages", messagesJsonObject);
+            requestBodyJsonObject.put("response_format", Map.of("type", "json_object"));
 
             String structuredCorrelationId = CorrelationIdHolder.getCorrelationId();
+            AtomicReference<LlmResultSource> sourceRef = new AtomicReference<>(LlmResultSource.PRIMARY);
+
+            org.springframework.core.ParameterizedTypeReference<Map<String, Object>> mapType =
+                    new org.springframework.core.ParameterizedTypeReference<>() {};
+
+            Mono<Map<String, Object>> primaryMono = webClient
+                    .post()
+                    .uri(llmConfig.endpoint() + "/chat/completions")
+                    .header("Authorization", "Bearer " + llmConfig.apiKey())
+                    .header("X-Correlation-ID", structuredCorrelationId != null ? structuredCorrelationId : "")
+                    .bodyValue(requestBodySchema)
+                    .retrieve()
+                    .bodyToMono(mapType)
+                    .timeout(Duration.ofMinutes(5))
+                    .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                            .filter(this::isTransientError)
+                            .doBeforeRetry(retrySignal -> log.warn(
+                                    "Retrying LLM API call due to transient error: {}, attempt={}",
+                                    retrySignal.failure().getMessage(),
+                                    retrySignal.totalRetries() + 1)))
+                    .doOnSuccess(r -> sourceRef.set(LlmResultSource.PRIMARY));
+
+            Mono<Map<String, Object>> chain = primaryMono
+                    .onErrorResume(e -> {
+                        log.warn("Primary LLM (Structured) failed, attempting fallback. Error: {}", e.getMessage());
+                        if (llmConfig.fallbackEndpoint() != null && !llmConfig.fallbackEndpoint().isEmpty()) {
+                            return webClient
+                                    .post()
+                                    .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
+                                    .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
+                                    .header(
+                                            "X-Correlation-ID",
+                                            structuredCorrelationId != null ? structuredCorrelationId : "")
+                                    .bodyValue(requestBodyJsonObject)
+                                    .retrieve()
+                                    .bodyToMono(mapType)
+                                    .timeout(Duration.ofMinutes(5))
+                                    .doOnSuccess(r -> sourceRef.set(LlmResultSource.FALLBACK));
+                        }
+                        return Mono.error(e);
+                    })
+                    .onErrorResume(e -> {
+                        log.error(
+                                "All Structured LLM endpoints failed. Triggering safe mock response. Error: {}",
+                                e.getMessage());
+                        metrics.recordLlmMockResponse();
+                        sourceRef.set(LlmResultSource.MOCK);
+                        return Mono.just(createMockResponse("{\"response\": \"Error: Network connection unavailable.\"}"));
+                    });
 
             Map<String, Object> response;
             try {
-                response = webClient.post()
-                        .uri(llmConfig.endpoint() + "/chat/completions")
-                        .header("Authorization", "Bearer " + llmConfig.apiKey())
-                        .header("X-Correlation-ID", structuredCorrelationId != null ? structuredCorrelationId : "")
-                        .bodyValue(requestBody)
-                        .retrieve()
-                        .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
-                        })
-                        .timeout(Duration.ofMinutes(5))
-                        .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
-                                .filter(this::isTransientError)
-                                .doBeforeRetry(retrySignal -> log.warn(
-                                        "Retrying LLM API call due to transient error: {}, attempt={}",
-                                        retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
-                        .onErrorResume(e -> {
-                            log.warn("Primary LLM (Structured) failed, attempting fallback. Error: {}", e.getMessage());
-                            if (llmConfig.fallbackEndpoint() != null && !llmConfig.fallbackEndpoint().isEmpty()) {
-                                return webClient.post()
-                                        .uri(llmConfig.fallbackEndpoint() + "/chat/completions")
-                                        .header("Authorization", "Bearer " + llmConfig.fallbackApiKey())
-                                        .header("X-Correlation-ID", structuredCorrelationId != null ? structuredCorrelationId : "")
-                                        .bodyValue(requestBody)
-                                        .retrieve()
-                                        .bodyToMono(
-                                                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
-                                                })
-                                        .timeout(Duration.ofMinutes(5));
-                            }
-                            return Mono.error(e);
-                        })
-                        .onErrorResume(e -> {
-                            log.error("All Structured LLM endpoints failed. Triggering safe mock response. Error: {}",
-                                    e.getMessage());
-                            return Mono.just(
-                                    createMockResponse("{\"response\": \"Error: Network connection unavailable.\"}"));
-                        })
-                        .block();
+                response = chain.block();
             } catch (Exception e) {
-                log.error("Emergency catch (Structured): LLM chain failed. Triggering mock. Error: {}", e.getMessage());
+                log.error(
+                        "Emergency catch (Structured): LLM chain failed. Triggering mock. Error: {}",
+                        e.getMessage());
+                metrics.recordLlmMockResponse();
+                sourceRef.set(LlmResultSource.MOCK);
                 response = createMockResponse("{\"response\": \"System recovery active. Neural link restricted.\"}");
             }
 
             if (response == null) {
+                metrics.recordLlmMockResponse();
+                sourceRef.set(LlmResultSource.MOCK);
                 response = createMockResponse("{\"response\": \"Offline\"}");
             }
 
@@ -256,10 +358,14 @@ public class LlmService {
             recordCostMetrics(tokensUsed);
             emitLlmEnd(duration, tokensUsed);
 
-            log.debug("LLM API call succeeded: duration={}ms, tokens={}, correlationId={}",
-                    duration, tokensUsed, CorrelationIdHolder.getCorrelationId());
+            log.debug(
+                    "LLM structured call finished: duration={}ms, tokens={}, source={}, correlationId={}",
+                    duration,
+                    tokensUsed,
+                    sourceRef.get(),
+                    CorrelationIdHolder.getCorrelationId());
 
-            return content;
+            return new LlmResult(content, sourceRef.get());
         } catch (WebClientResponseException e) {
             handleLlmError(e, sample, startTime);
             throw e;
@@ -272,47 +378,37 @@ public class LlmService {
         }
     }
 
-    public String generateStructuredOutput(String systemPrompt, String userPrompt, String jsonSchemaString) {
-        try {
-            JsonNode schemaNode = objectMapper.readTree(jsonSchemaString);
-            Map<String, Object> jsonSchema = objectMapper.convertValue(schemaNode,
-                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
-                    });
-            return generateStructuredOutput(systemPrompt, userPrompt, jsonSchema);
-        } catch (Exception e) {
-            log.error("Failed to parse JSON schema, correlationId={}", CorrelationIdHolder.getCorrelationId(), e);
-            throw new LlmServiceException("Failed to parse JSON schema: " + e.getMessage(), e,
-                    llmConfig.model(), LlmServiceException.LlmErrorType.INVALID_RESPONSE);
-        }
-    }
-
+    @SuppressWarnings("unchecked")
     private String extractMessageContent(Map<String, Object> response) {
         if (response == null) {
-            throw new LlmServiceException("No response from LLM API", llmConfig.model(),
-                    LlmServiceException.LlmErrorType.INVALID_RESPONSE);
+            throw new LlmServiceException(
+                    "No response from LLM API", llmConfig.model(), LlmServiceException.LlmErrorType.INVALID_RESPONSE);
         }
 
         List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
         if (choices == null || choices.isEmpty()) {
-            throw new LlmServiceException("No choices in LLM API response", llmConfig.model(),
-                    LlmServiceException.LlmErrorType.INVALID_RESPONSE);
+            throw new LlmServiceException(
+                    "No choices in LLM API response", llmConfig.model(), LlmServiceException.LlmErrorType.INVALID_RESPONSE);
         }
 
         Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
         if (message == null) {
-            throw new LlmServiceException("No message in LLM API response", llmConfig.model(),
-                    LlmServiceException.LlmErrorType.INVALID_RESPONSE);
+            throw new LlmServiceException(
+                    "No message in LLM API response", llmConfig.model(), LlmServiceException.LlmErrorType.INVALID_RESPONSE);
         }
 
         String content = (String) message.get("content");
         if (content == null) {
-            throw new LlmServiceException("No content in LLM API response message", llmConfig.model(),
+            throw new LlmServiceException(
+                    "No content in LLM API response message",
+                    llmConfig.model(),
                     LlmServiceException.LlmErrorType.INVALID_RESPONSE);
         }
 
         return content;
     }
 
+    @SuppressWarnings("unchecked")
     private int extractTokenUsage(Map<String, Object> response) {
         try {
             if (response != null && response.containsKey("usage")) {
@@ -339,41 +435,50 @@ public class LlmService {
 
         if (statusCode == 429) {
             errorType = LlmServiceException.LlmErrorType.RATE_LIMIT;
-            log.warn("LLM API rate limit hit: statusCode={}, duration={}ms, correlationId={}",
-                    statusCode, duration, CorrelationIdHolder.getCorrelationId());
+            log.warn(
+                    "LLM API rate limit hit: statusCode={}, duration={}ms, correlationId={}",
+                    statusCode,
+                    duration,
+                    CorrelationIdHolder.getCorrelationId());
         } else if (statusCode == 401 || statusCode == 403) {
             errorType = LlmServiceException.LlmErrorType.AUTHENTICATION_ERROR;
-            log.error("LLM API authentication error: statusCode={}, duration={}ms, correlationId={}",
-                    statusCode, duration, CorrelationIdHolder.getCorrelationId());
+            log.error(
+                    "LLM API authentication error: statusCode={}, duration={}ms, correlationId={}",
+                    statusCode,
+                    duration,
+                    CorrelationIdHolder.getCorrelationId());
         } else if (statusCode >= 500) {
             errorType = LlmServiceException.LlmErrorType.NETWORK_ERROR;
-            log.error("LLM API server error: statusCode={}, duration={}ms, correlationId={}",
-                    statusCode, duration, CorrelationIdHolder.getCorrelationId());
+            log.error(
+                    "LLM API server error: statusCode={}, duration={}ms, correlationId={}",
+                    statusCode,
+                    duration,
+                    CorrelationIdHolder.getCorrelationId());
         } else if (statusCode == 400 && e.getResponseBodyAsString().contains("context_length_exceeded")) {
             errorType = LlmServiceException.LlmErrorType.CONTEXT_LENGTH_EXCEEDED;
-            log.error("LLM API context length exceeded: duration={}ms, correlationId={}",
-                    duration, CorrelationIdHolder.getCorrelationId());
+            log.error(
+                    "LLM API context length exceeded: duration={}ms, correlationId={}",
+                    duration,
+                    CorrelationIdHolder.getCorrelationId());
         } else {
             errorType = LlmServiceException.LlmErrorType.INVALID_RESPONSE;
-            log.error("LLM API error: statusCode={}, duration={}ms, correlationId={}",
-                    statusCode, duration, CorrelationIdHolder.getCorrelationId());
+            log.error(
+                    "LLM API error: statusCode={}, duration={}ms, correlationId={}",
+                    statusCode,
+                    duration,
+                    CorrelationIdHolder.getCorrelationId());
         }
 
         metrics.recordLlmError(llmConfig.model(), errorType.name());
 
-        throw new LlmServiceException(
-                "LLM API error: " + e.getMessage(),
-                e,
-                llmConfig.model(),
-                errorType);
+        throw new LlmServiceException("LLM API error: " + e.getMessage(), e, llmConfig.model(), errorType);
     }
 
     private void handleNetworkError(WebClientRequestException e, Timer.Sample sample, long startTime) {
         long duration = System.currentTimeMillis() - startTime;
         sample.stop(metrics.getLlmDuration());
 
-        log.error("LLM API network error: duration={}ms, correlationId={}",
-                duration, CorrelationIdHolder.getCorrelationId(), e);
+        log.error("LLM API network error: duration={}ms, correlationId={}", duration, CorrelationIdHolder.getCorrelationId(), e);
 
         metrics.recordLlmError(llmConfig.model(), "NETWORK_ERROR");
 
@@ -388,8 +493,7 @@ public class LlmService {
         long duration = System.currentTimeMillis() - startTime;
         sample.stop(metrics.getLlmDuration());
 
-        log.error("LLM API unexpected error: duration={}ms, correlationId={}",
-                duration, CorrelationIdHolder.getCorrelationId(), e);
+        log.error("LLM API unexpected error: duration={}ms, correlationId={}", duration, CorrelationIdHolder.getCorrelationId(), e);
 
         metrics.recordLlmError(llmConfig.model(), "UNKNOWN_ERROR");
 
@@ -409,16 +513,33 @@ public class LlmService {
     }
 
     private boolean isTransientError(Throwable throwable) {
-        return throwable instanceof WebClientRequestException ||
-                (throwable instanceof WebClientResponseException &&
-                        ((WebClientResponseException) throwable).getStatusCode().is5xxServerError());
+        return throwable instanceof WebClientRequestException
+                || (throwable instanceof WebClientResponseException wcre
+                        && wcre.getStatusCode().is5xxServerError());
+    }
+
+    private String buildLlmUnavailableUserMessage() {
+        String key = llmConfig.apiKey();
+        if (key == null || key.isBlank()) {
+            return "LLM non configuré : définir LLM_API_KEY (API compatible OpenAI /v1/chat/completions). "
+                    + "Docker dev : infra/deployments/dev/.env.dev puis recréer le conteneur backend.";
+        }
+        String k = key.trim();
+        if ("dev-llm-key-change-me".equalsIgnoreCase(k) || "changeme".equalsIgnoreCase(k)) {
+            return "LLM_API_KEY correspond encore au défaut Docker Compose (placeholder). "
+                    + "Mettre la clé dans .env.dev et retirer toute entrée LLM_API_KEY dans environment: du compose "
+                    + "qui utilise ${LLM_API_KEY:-…} — sinon elle écrase .env.dev. Puis redémarrer le backend.";
+        }
+        return "Connexion au fournisseur LLM impossible (réseau, quota, clé refusée ou panne). "
+                + "Vérifier les logs orchestrateur et LLM_ENDPOINT / facturation côté fournisseur.";
     }
 
     private Map<String, Object> createMockResponse(String content) {
         return Map.of(
-                "choices", List.of(
-                        Map.of("message", Map.of("role", "assistant", "content", content))),
-                "usage", Map.of("total_tokens", 0));
+                "choices",
+                List.of(Map.of("message", Map.of("role", "assistant", "content", content))),
+                "usage",
+                Map.of("total_tokens", 0));
     }
 
     private void recordCostMetrics(int tokensUsed) {

@@ -304,6 +304,13 @@
           <include>*.yaml</include>
         </includes>
       </resource>
+      <resource>
+        <directory>${project.basedir}/../ai/agents</directory>
+        <targetPath>ai/agents</targetPath>
+        <includes>
+          <include>*.yaml</include>
+        </includes>
+      </resource>
     </resources>
     <plugins>
       <plugin>

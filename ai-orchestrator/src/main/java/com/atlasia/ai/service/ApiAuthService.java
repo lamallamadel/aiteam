@@ -32,8 +32,18 @@ public class ApiAuthService {
     /**
      * Returns true if the request is authorized: admin token, valid GitHub token, or
      * JWT-authenticated user (SecurityContext already set by JwtAuthenticationFilter).
+     *
+     * SecurityContext is checked FIRST: if JwtAuthenticationFilter has already validated the JWT,
+     * there is no need to call the GitHub API — doing so would send the JWT to GitHub and get a 401.
      */
     public boolean isAuthorized(String authorizationHeader) {
+        // Fast path: JWT already validated by JwtAuthenticationFilter upstream.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
+            return true;
+        }
+
+        // Slow path: admin token or GitHub personal-access token (used by CI/scripts without a session).
         Optional<String> apiToken = extractApiToken(authorizationHeader);
         if (apiToken.isPresent()) {
             String token = apiToken.get();
@@ -41,10 +51,7 @@ public class ApiAuthService {
             if (gitHubApiClient.isValidToken(token)) return true;
         }
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null
-                && auth.isAuthenticated()
-                && !"anonymousUser".equals(auth.getPrincipal());
+        return false;
     }
 
     /**

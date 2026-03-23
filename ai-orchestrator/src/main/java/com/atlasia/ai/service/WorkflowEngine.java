@@ -2,7 +2,6 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.EnvironmentLifecycle;
 import com.atlasia.ai.model.EnvironmentSnapshot;
-import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
@@ -63,6 +62,8 @@ public class WorkflowEngine {
     private final ObjectMapper objectMapper;
     private final GraftExecutionService graftExecutionService;
     private final Tracer tracer;
+    private final TaskLedgerBuilder taskLedgerBuilder;
+    private final HitlGateService hitlGateService;
 
     @Autowired
     @Lazy
@@ -84,7 +85,9 @@ public class WorkflowEngine {
             InterruptDecisionStore interruptDecisionStore,
             ObjectMapper objectMapper,
             GraftExecutionService graftExecutionService,
-            Tracer tracer) {
+            Tracer tracer,
+            TaskLedgerBuilder taskLedgerBuilder,
+            HitlGateService hitlGateService) {
         this.runRepository = runRepository;
         this.schemaValidator = schemaValidator;
         this.developerStep = developerStep;
@@ -101,6 +104,8 @@ public class WorkflowEngine {
         this.objectMapper = objectMapper;
         this.graftExecutionService = graftExecutionService;
         this.tracer = tracer;
+        this.taskLedgerBuilder = taskLedgerBuilder;
+        this.hitlGateService = hitlGateService;
     }
 
     @Async("workflowExecutor")
@@ -131,7 +136,7 @@ public class WorkflowEngine {
                             OrchestratorException.RecoveryStrategy.FAIL_FAST));
 
             workflowSpan.setAttribute("run.repo", runEntity.getRepo());
-            workflowSpan.setAttribute("run.issue_number", runEntity.getIssueNumber());
+            workflowSpan.setAttribute("run.issue_number", runEntity.getIssueNumber() != null ? runEntity.getIssueNumber() : 0);
             workflowSpan.setAttribute("run.autonomy", runEntity.getAutonomy() != null ? runEntity.getAutonomy() : "auto");
 
             Timer.Sample workflowTimer = metrics.startWorkflowTimer();
@@ -148,32 +153,107 @@ public class WorkflowEngine {
             String owner = repoParts[0];
             String repo = repoParts[1];
 
-            RunContext context = new RunContext(runEntity, owner, repo);
+            boolean resumeAfterArchitectureGate =
+                    HitlGateService.RESUME_AFTER_ARCHITECTURE_GATE.equals(runEntity.getWorkflowResumeFrom());
+            if (resumeAfterArchitectureGate) {
+                runEntity.setWorkflowResumeFrom(null);
+                runRepository.save(runEntity);
+            }
+
+            RunContext context;
+            if (resumeAfterArchitectureGate) {
+                RunContext restored = restoreEnvironment(runId);
+                context = restored != null ? restored : new RunContext(runEntity, owner, repo);
+            } else {
+                context = new RunContext(runEntity, owner, repo);
+            }
+
+            CorrelationIdHolder.setRepository(runEntity.getRepo());
+
+            if (!resumeAfterArchitectureGate) {
+                try {
+                    blackboardService.write(runEntity, "task_ledger", "orchestrator",
+                            taskLedgerBuilder.initialLedger(runEntity));
+                } catch (Exception e) {
+                    log.warn("Initial task ledger could not be written: runId={}, {}", runId, e.getMessage());
+                }
+            }
+
+            boolean pausedForHitl = false;
 
             // --- Sequential Pipeline: PM → Qualifier → Architect → Developer ---
-            if (!runEntity.isStepPruned("PM")) {
-                emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
-                executePmStep(context);
-            } else {
-                log.info("PM step pruned by user: runId={}", runId);
-            }
-            graftExecutionService.executeGraftsAfterCheckpoint(runId, "PM", context, runEntity);
+            if (!resumeAfterArchitectureGate) {
+                if (!runEntity.isStepPruned("PM")) {
+                    emitStatus(runId, "IN_PROGRESS", "PM", progressPercent(0));
+                    executePmStep(context);
+                } else {
+                    log.info("PM step pruned by user: runId={}", runId);
+                }
+                graftExecutionService.executeGraftsAfterCheckpoint(runId, "PM", context, runEntity);
 
-            if (!runEntity.isStepPruned("QUALIFIER")) {
-                emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
-                executeQualifierStep(context);
-            } else {
-                log.info("QUALIFIER step pruned by user: runId={}", runId);
-            }
-            graftExecutionService.executeGraftsAfterCheckpoint(runId, "QUALIFIER", context, runEntity);
+                if (!runEntity.isStepPruned("QUALIFIER")) {
+                    emitStatus(runId, "IN_PROGRESS", "QUALIFIER", progressPercent(1));
+                    executeQualifierStep(context);
+                } else {
+                    log.info("QUALIFIER step pruned by user: runId={}", runId);
+                }
+                graftExecutionService.executeGraftsAfterCheckpoint(runId, "QUALIFIER", context, runEntity);
 
-            if (!runEntity.isStepPruned("ARCHITECT")) {
-                emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
-                executeArchitectStep(context);
-            } else {
-                log.info("ARCHITECT step pruned by user: runId={}", runId);
+                if (!runEntity.isStepPruned("QUALIFIER")) {
+                    if (!runEntity.isStepPruned("ARCHITECT")) {
+                        advanceLedgerForward(runEntity, runId, "QUALIFIER", "ARCHITECT", "architect",
+                                "Work plan ready for architecture");
+                    } else {
+                        advanceLedgerForward(runEntity, runId, "QUALIFIER", "DEVELOPER", "developer",
+                                "ARCHITECT step pruned");
+                    }
+                }
+
+                if (!runEntity.isStepPruned("ARCHITECT")) {
+                    emitStatus(runId, "IN_PROGRESS", "ARCHITECT", progressPercent(2));
+                    executeArchitectStep(context);
+                } else {
+                    log.info("ARCHITECT step pruned by user: runId={}", runId);
+                }
+                graftExecutionService.executeGraftsAfterCheckpoint(runId, "ARCHITECT", context, runEntity);
+
+                if (!runEntity.isStepPruned("ARCHITECT")
+                        && hitlGateService.shouldPauseAfterArchitecture(context, runEntity)) {
+                    try {
+                        String ledger = taskLedgerBuilder.readLatest(runEntity);
+                        if (ledger == null) {
+                            ledger = taskLedgerBuilder.initialLedger(runEntity);
+                        }
+                        ledger = taskLedgerBuilder.withPlannedStep(ledger, "ARCHITECT", "completed", null,
+                                Instant.now().toString());
+                        ledger = taskLedgerBuilder.withStatus(ledger, "waiting_gate", "none");
+                        ledger = taskLedgerBuilder.withTransition(ledger, runId, "ARCHITECT", "GATE",
+                                "gate_pause", "Waiting for architecture_approval",
+                                HitlGateService.GATE_ARCHITECTURE_APPROVAL, -1);
+                        blackboardService.write(runEntity, "task_ledger", "orchestrator", ledger);
+                        hitlGateService.finalizeArchitectureGatePause(runEntity, runId);
+                        pausedForHitl = true;
+                    } catch (Exception e) {
+                        log.error("Failed to enter architecture HITL gate: runId={}", runId, e);
+                        throw e;
+                    }
+                }
+
+                if (!runEntity.isStepPruned("ARCHITECT")
+                        && !hitlGateService.shouldPauseAfterArchitecture(context, runEntity)) {
+                    advanceLedgerForward(runEntity, runId, "ARCHITECT", "DEVELOPER", "developer",
+                            "Architecture complete; proceeding to implementation");
+                }
             }
-            graftExecutionService.executeGraftsAfterCheckpoint(runId, "ARCHITECT", context, runEntity);
+
+            if (pausedForHitl) {
+                long pauseDur = System.currentTimeMillis() - startTime;
+                workflowTimer.stop(metrics.getWorkflowDuration());
+                workflowSpan.setAttribute("workflow.duration_ms", pauseDur);
+                workflowSpan.setAttribute("workflow.status", "WAITING_GATE");
+                workflowSpan.setStatus(StatusCode.OK);
+                return;
+            }
 
             // --- Autonomy Gate: pause before code generation if confirm/observe ---
             if (!runEntity.isAutonomyDevGatePassed() &&
@@ -197,6 +277,17 @@ public class WorkflowEngine {
             executeDeveloperStep(context);
             graftExecutionService.executeGraftsAfterCheckpoint(runId, "DEVELOPER", context, runEntity);
 
+            if (!runEntity.isStepPruned("REVIEW")) {
+                advanceLedgerForward(runEntity, runId, "DEVELOPER", "REVIEW", "review",
+                        "Handoff to persona review");
+            } else if (!runEntity.isStepPruned("TESTER")) {
+                advanceLedgerForward(runEntity, runId, "DEVELOPER", "TESTER", "tester",
+                        "REVIEW pruned — CI validation");
+            } else {
+                advanceLedgerForward(runEntity, runId, "DEVELOPER", "WRITER", "writer",
+                        "REVIEW and TESTER pruned — documentation");
+            }
+
             // Review loop: developer → review → (tester | developer)
             boolean reviewApproved = runEntity.isStepPruned("REVIEW");
             if (reviewApproved) {
@@ -207,6 +298,13 @@ public class WorkflowEngine {
                 String reviewVerdict = executePersonaReviewWithVerdict(context);
 
                 if ("approved".equals(reviewVerdict) || "approved_with_minor_issues".equals(reviewVerdict)) {
+                    if (!runEntity.isStepPruned("TESTER")) {
+                        advanceLedgerForward(runEntity, runId, "REVIEW", "TESTER", "tester",
+                                "Review approved; CI validation");
+                    } else {
+                        advanceLedgerForward(runEntity, runId, "REVIEW", "WRITER", "writer",
+                                "Review approved; TESTER pruned");
+                    }
                     reviewApproved = true;
                     log.info("Review approved (verdict={}): runId={}, correlationId={}",
                             reviewVerdict, runId, CorrelationIdHolder.getCorrelationId());
@@ -233,6 +331,8 @@ public class WorkflowEngine {
                             CorrelationIdHolder.getCorrelationId());
                     emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
                     executeDeveloperStep(context);
+                    advanceLedgerForward(runEntity, runId, "DEVELOPER", "REVIEW", "review",
+                            "Developer iteration after review feedback");
                 }
             }
 
@@ -246,6 +346,8 @@ public class WorkflowEngine {
                 String ciStatus = executeTesterStepWithStatus(context);
 
                 if ("GREEN".equals(ciStatus)) {
+                    advanceLedgerForward(runEntity, runId, "TESTER", "WRITER", "writer",
+                            "CI green; pre-merge judge and documentation");
                     testsGreen = true;
                     log.info("Tests passed (GREEN): runId={}, correlationId={}",
                             runId, CorrelationIdHolder.getCorrelationId());
@@ -271,6 +373,8 @@ public class WorkflowEngine {
                             CorrelationIdHolder.getCorrelationId());
                     emitStatus(runId, "IN_PROGRESS", "DEVELOPER", progressPercent(3));
                     executeDeveloperStep(context);
+                    advanceLedgerForward(runEntity, runId, "DEVELOPER", "REVIEW", "review",
+                            "Developer fix after failed CI");
 
                     // After developer fix, re-enter review loop
                     emitStatus(runId, "IN_PROGRESS", "REVIEW", progressPercent(4));
@@ -293,7 +397,7 @@ public class WorkflowEngine {
             log.info("Pre-merge Judge evaluation (majority voting): runId={}, correlationId={}",
                     runId, CorrelationIdHolder.getCorrelationId());
             JudgeService.JudgeVerdict preMergeVerdict = judgeService.evaluateWithMajorityVoting(
-                    runEntity, "pre_merge", "persona_review_report");
+                    runEntity, "pre_merge", "persona_review");
             metrics.recordJudgeEvaluation(preMergeVerdict.verdict());
             metrics.recordVotingExecution("pre_merge");
 
@@ -325,6 +429,8 @@ public class WorkflowEngine {
                 log.info("WRITER step pruned by user: runId={}", runId);
             }
             graftExecutionService.executeGraftsAfterCheckpoint(runId, "WRITER", context, runEntity);
+
+            finalizeTaskLedgerSuccess(runEntity, runId);
 
             runEntity.setStatus(RunStatus.DONE);
             runEntity.setCurrentAgent(null);
@@ -398,6 +504,60 @@ public class WorkflowEngine {
         }
     }
 
+    private void advanceLedgerForward(RunEntity run, UUID runId, String fromAgent, String toAgent,
+            String currentStepLower, String reason) {
+        try {
+            String ledger = taskLedgerBuilder.readLatest(run);
+            if (ledger == null) {
+                return;
+            }
+            String now = Instant.now().toString();
+            ledger = taskLedgerBuilder.withPlannedStep(ledger, fromAgent, "completed", null, now);
+            ledger = taskLedgerBuilder.withPlannedStep(ledger, toAgent, "in_progress", now, null);
+            ledger = taskLedgerBuilder.withStatus(ledger, "executing", currentStepLower);
+            ledger = taskLedgerBuilder.withTransition(ledger, runId, fromAgent, toAgent, "forward", reason, null, -1);
+            blackboardService.write(run, "task_ledger", "orchestrator", ledger);
+        } catch (Exception e) {
+            log.warn("Task ledger forward update skipped: runId={}, {}", runId, e.getMessage());
+        }
+    }
+
+    private void appendLedgerLoopBack(UUID runId, String from, String to, String reason, String counterKey) {
+        runRepository.findById(runId).ifPresent(run -> {
+            try {
+                String ledger = taskLedgerBuilder.readLatest(run);
+                if (ledger == null) {
+                    return;
+                }
+                int cur = taskLedgerBuilder.getLoopCurrent(ledger, counterKey);
+                int next = cur + 1;
+                ledger = taskLedgerBuilder.incrementLoop(ledger, counterKey, next);
+                String now = Instant.now().toString();
+                ledger = taskLedgerBuilder.withPlannedStep(ledger, "DEVELOPER", "in_progress", now, null);
+                ledger = taskLedgerBuilder.withStatus(ledger, "looping_back", "developer");
+                ledger = taskLedgerBuilder.withTransition(ledger, runId, from, to, "loop_back", reason, null, next);
+                blackboardService.write(run, "task_ledger", "orchestrator", ledger);
+            } catch (Exception e) {
+                log.warn("Task ledger loop_back update skipped: runId={}, {}", runId, e.getMessage());
+            }
+        });
+    }
+
+    private void finalizeTaskLedgerSuccess(RunEntity run, UUID runId) {
+        try {
+            String ledger = taskLedgerBuilder.readLatest(run);
+            if (ledger == null) {
+                return;
+            }
+            ledger = taskLedgerBuilder.withStatus(ledger, "completed", "none");
+            ledger = taskLedgerBuilder.withTransition(ledger, runId, "orchestrator", "DONE", "forward",
+                    "Workflow completed", null, -1);
+            blackboardService.write(run, "task_ledger", "orchestrator", ledger);
+        } catch (Exception e) {
+            log.warn("Final task ledger update skipped: runId={}, {}", runId, e.getMessage());
+        }
+    }
+
     private void executePmStep(RunContext context) throws Exception {
         String role = "PM";
         UUID runId = context.getRunEntity().getId();
@@ -440,7 +600,17 @@ public class WorkflowEngine {
                     runId, Instant.now(), role, "ticket_plan.schema.json", true));
 
             context.setTicketPlan(artifact);
-            persistArtifact(runEntity, role, "ticket_plan.json", artifact);
+            blackboardService.write(runEntity, "ticket_plan", role, artifact);
+            if (!runEntity.isStepPruned("QUALIFIER")) {
+                advanceLedgerForward(runEntity, runId, "PM", "QUALIFIER", "qualifier",
+                        "Ticket plan persisted to blackboard");
+            } else if (!runEntity.isStepPruned("ARCHITECT")) {
+                advanceLedgerForward(runEntity, runId, "PM", "ARCHITECT", "architect",
+                        "QUALIFIER pruned — architecture");
+            } else {
+                advanceLedgerForward(runEntity, runId, "PM", "DEVELOPER", "developer",
+                        "QUALIFIER and ARCHITECT pruned");
+            }
             snapshotEnvironment(context);
 
                 long duration = System.currentTimeMillis() - startTime;
@@ -506,7 +676,7 @@ public class WorkflowEngine {
                     runId, Instant.now(), role, "work_plan.schema.json", true));
 
             context.setWorkPlan(artifact);
-            persistArtifact(runEntity, role, "work_plan.json", artifact);
+            blackboardService.write(runEntity, "work_plan", role, artifact);
             snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -559,7 +729,7 @@ public class WorkflowEngine {
 
             String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
             context.setArchitectureNotes(artifact);
-            persistArtifact(runEntity, role, "architecture_notes.md", artifact);
+            blackboardService.write(runEntity, "architecture_notes", role, artifact);
             snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -665,13 +835,13 @@ public class WorkflowEngine {
             emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
                     runId, Instant.now(), agentName, "persona_review.schema.json", true));
 
-            persistArtifact(runEntity, agentName, "persona_review_report", reportJson);
+            blackboardService.write(runEntity, "persona_review", agentName, reportJson);
 
             // Dynamic interrupt check before commit & PR creation
             checkInterrupt("DEVELOPER", "commitAndCreatePullRequest", runId);
 
             String prUrl = developerStep.commitAndCreatePullRequest(context, codeChanges);
-            persistArtifact(runEntity, "DEVELOPER", "pr_url", prUrl);
+            blackboardService.write(runEntity, "pr_url", "DEVELOPER", prUrl);
 
             long duration = System.currentTimeMillis() - startTime;
             stepTimer.stop(metrics.getAgentStepDuration());
@@ -726,7 +896,7 @@ public class WorkflowEngine {
             emitAndTrace(runId, new WorkflowEvent.SchemaValidation(
                     runId, Instant.now(), role, "test_report.schema.json", true));
 
-            persistArtifact(runEntity, role, "test_report.json", artifact);
+            blackboardService.write(runEntity, "test_report", role, artifact);
             snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -782,7 +952,7 @@ public class WorkflowEngine {
             checkInterrupt(role, "execute", runId);
 
             String artifact = agentStepFactory.resolveForRole(role, caps).execute(context);
-            persistArtifact(runEntity, role, "docs_update", artifact);
+            blackboardService.write(runEntity, "docs_patch", role, artifact);
             snapshotEnvironment(context);
 
             long duration = System.currentTimeMillis() - startTime;
@@ -820,7 +990,7 @@ public class WorkflowEngine {
         try {
             RunEntity runEntity = context.getRunEntity();
             return runEntity.getArtifacts().stream()
-                    .filter(a -> "persona_review_report".equals(a.getArtifactType()))
+                    .filter(a -> "persona_review".equals(a.getArtifactType()))
                     .reduce((first, second) -> second) // last one (most recent)
                     .map(a -> {
                         try {
@@ -850,7 +1020,7 @@ public class WorkflowEngine {
         try {
             RunEntity runEntity = context.getRunEntity();
             return runEntity.getArtifacts().stream()
-                    .filter(a -> "test_report.json".equals(a.getArtifactType()))
+                    .filter(a -> "test_report".equals(a.getArtifactType()))
                     .reduce((first, second) -> second)
                     .map(a -> {
                         try {
@@ -879,6 +1049,14 @@ public class WorkflowEngine {
 
         emitAndTrace(runId, new WorkflowEvent.WorkflowStatusUpdate(
                 runId, Instant.now(), type.toUpperCase() + ": " + from + " → " + to, to, progressPercent(3)));
+
+        if ("loop_back".equals(type)) {
+            if ("REVIEW".equals(from) && "DEVELOPER".equals(to)) {
+                appendLedgerLoopBack(runId, from, to, reason, "review_to_developer");
+            } else if ("TESTER".equals(from) && "DEVELOPER".equals(to)) {
+                appendLedgerLoopBack(runId, from, to, reason, "tester_to_developer");
+            }
+        }
     }
 
     /**
@@ -907,19 +1085,6 @@ public class WorkflowEngine {
                   "decisionNeeded": "Should a human developer fix the remaining issues, or should the current state be accepted?",
                   "evidence": ["Last status: %s", "Loop limit exceeded — autonomous resolution attempts exhausted"]
                 }""", context, blocker, lastStatus);
-    }
-
-    private void persistArtifact(RunEntity runEntity, String agentName, String artifactType, String payload) {
-        RunArtifactEntity artifact = new RunArtifactEntity(
-                agentName,
-                artifactType,
-                payload,
-                Instant.now());
-        runEntity.addArtifact(artifact);
-        runRepository.save(runEntity);
-
-        log.debug("Persisted artifact: runId={}, agentName={}, artifactType={}, correlationId={}",
-                runEntity.getId(), agentName, artifactType, CorrelationIdHolder.getCorrelationId());
     }
 
     private String serializeReviewReport(PersonaReviewService.PersonaReviewReport report) {
@@ -1019,7 +1184,8 @@ public class WorkflowEngine {
 
         try {
             schemaValidator.validate(e.getEscalationJson(), "escalation.schema.json");
-            persistArtifact(runEntity, runEntity.getCurrentAgent(), "escalation.json", e.getEscalationJson());
+            String escAgent = runEntity.getCurrentAgent() != null ? runEntity.getCurrentAgent() : "orchestrator";
+            blackboardService.write(runEntity, "escalation", escAgent, e.getEscalationJson());
         } catch (Exception validationError) {
             log.error("Failed to validate escalation JSON: runId={}, correlationId={}",
                     runEntity.getId(), CorrelationIdHolder.getCorrelationId(), validationError);
@@ -1109,15 +1275,16 @@ public class WorkflowEngine {
 
     private void persistErrorArtifact(RunEntity runEntity, Exception e) {
         try {
-            String errorDetails = String.format(
-                    "Error: %s\nMessage: %s\nAgent: %s\nCorrelationId: %s",
-                    e.getClass().getSimpleName(),
-                    e.getMessage(),
-                    runEntity.getCurrentAgent(),
-                    CorrelationIdHolder.getCorrelationId());
+            // Build a valid JSON object — constructor will auto-wrap if anything is malformed.
+            java.util.Map<String, String> errorMap = new java.util.LinkedHashMap<>();
+            errorMap.put("errorType", e.getClass().getSimpleName());
+            errorMap.put("message", e.getMessage() != null ? e.getMessage() : "unknown");
+            errorMap.put("agent", runEntity.getCurrentAgent() != null ? runEntity.getCurrentAgent() : "UNKNOWN");
+            errorMap.put("correlationId", CorrelationIdHolder.getCorrelationId() != null ? CorrelationIdHolder.getCorrelationId() : "");
+            String errorDetails = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(errorMap);
 
-            persistArtifact(runEntity, runEntity.getCurrentAgent() != null ? runEntity.getCurrentAgent() : "UNKNOWN",
-                    "error_details", errorDetails);
+            String errAgent = runEntity.getCurrentAgent() != null ? runEntity.getCurrentAgent() : "UNKNOWN";
+            blackboardService.write(runEntity, "error_details", errAgent, errorDetails);
         } catch (Exception persistError) {
             log.error("Failed to persist error artifact: runId={}, correlationId={}",
                     runEntity.getId(), CorrelationIdHolder.getCorrelationId(), persistError);

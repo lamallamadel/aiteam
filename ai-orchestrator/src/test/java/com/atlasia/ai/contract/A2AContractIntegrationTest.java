@@ -74,7 +74,7 @@ class A2AContractIntegrationTest extends A2AContractTestBase {
     @Test
     @DisplayName("POST /api/a2a/tasks accepts valid task submission payload")
     void testTaskSubmissionEndpointContract() {
-        RunRequest request = new RunRequest("owner/repository", 42, "code", null);
+        RunRequest request = new RunRequest("owner/repository", 42, null, "code", null, null);
 
         given()
             .header("Authorization", "Bearer github-token")
@@ -127,7 +127,7 @@ class A2AContractIntegrationTest extends A2AContractTestBase {
         invalidPayload.put("issueNumber", "not-a-number");
         invalidPayload.put("mode", "invalid-mode");
 
-        RunRequest validRequest = new RunRequest("owner/repo", 123, "code", null);
+        RunRequest validRequest = new RunRequest("owner/repo", 123, null, "code", null, null);
         
         given()
             .header("Authorization", "Bearer github-token")

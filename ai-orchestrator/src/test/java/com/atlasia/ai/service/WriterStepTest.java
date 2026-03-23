@@ -2,6 +2,7 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,12 @@ class WriterStepTest {
     @Mock
     private LlmService llmService;
 
+    @Mock
+    private LlmComplexityResolver complexityResolver;
+
+    @Mock
+    private AgentContractLoader agentContractLoader;
+
     private ObjectMapper objectMapper;
     private WriterStep writerStep;
     private RunContext context;
@@ -33,7 +40,9 @@ class WriterStepTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        writerStep = new WriterStep(gitHubApiClient, llmService, objectMapper);
+        lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+        lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
+        writerStep = new WriterStep(gitHubApiClient, llmService, complexityResolver, objectMapper, agentContractLoader);
 
         runEntity = new RunEntity(
                 UUID.randomUUID(),
@@ -63,7 +72,8 @@ class WriterStepTest {
 
         assertNotNull(result);
         assertTrue(result.contains("Documentation updated"));
-        verify(llmService, atLeastOnce()).generateStructuredOutput(anyString(), contains("Changelog"), anyMap());
+        verify(llmService, atLeastOnce())
+                .generateStructuredOutput(anyString(), contains("Changelog"), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -98,7 +108,8 @@ class WriterStepTest {
         verify(llmService).generateStructuredOutput(
                 anyString(),
                 contains("breaking"),
-                anyMap());
+                anyMap(),
+                any(TaskComplexity.class));
     }
 
     @Test
@@ -116,14 +127,17 @@ class WriterStepTest {
         readmeUpdate.setSectionsToUpdate(List.of(sectionUpdate));
 
         String readmeJson = objectMapper.writeValueAsString(readmeUpdate);
-        lenient().when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
-                .thenReturn(readmeJson);
+        lenient()
+                .when(llmService.generateStructuredOutput(
+                        anyString(), contains("README"), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(readmeJson));
 
         setupChangelogMock();
 
         writerStep.execute(context);
 
-        verify(llmService, atLeastOnce()).generateStructuredOutput(anyString(), contains("README"), anyMap());
+        verify(llmService, atLeastOnce())
+                .generateStructuredOutput(anyString(), contains("README"), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -141,8 +155,8 @@ class WriterStepTest {
         changelog.setMigrationGuide("");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(changelogJson);
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(changelogJson));
 
         assertDoesNotThrow(() -> writerStep.execute(context));
     }
@@ -162,7 +176,7 @@ class WriterStepTest {
 
     @Test
     void execute_handlesLlmFailureGracefully() throws Exception {
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         assertDoesNotThrow(() -> writerStep.execute(context));
@@ -201,8 +215,8 @@ class WriterStepTest {
         changelog.setMigrationGuide("Migrate to API v2");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(changelogJson);
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(changelogJson));
 
         writerStep.execute(context);
 
@@ -235,8 +249,8 @@ class WriterStepTest {
         changelog.setMigrationGuide("Update your API calls to use the new signature");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(changelogJson);
+        lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(changelogJson));
 
         writerStep.execute(context);
 
@@ -258,7 +272,8 @@ class WriterStepTest {
 
         writerStep.execute(context);
 
-        verify(llmService, atLeastOnce()).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, atLeastOnce())
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -293,8 +308,8 @@ class WriterStepTest {
         changelog.setMigrationGuide("");
 
         String changelogJson = objectMapper.writeValueAsString(changelog);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(changelogJson);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(changelogJson));
 
         assertDoesNotThrow(() -> writerStep.execute(context));
     }
@@ -342,8 +357,10 @@ class WriterStepTest {
 
         try {
             String changelogJson = objectMapper.writeValueAsString(changelog);
-            lenient().when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
-                    .thenReturn(changelogJson);
+            lenient()
+                    .when(llmService.generateStructuredOutput(
+                            anyString(), contains("Changelog"), anyMap(), any(TaskComplexity.class)))
+                    .thenReturn(LlmResult.primary(changelogJson));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -358,14 +375,16 @@ class WriterStepTest {
 
         try {
             String readmeJson = objectMapper.writeValueAsString(readmeUpdate);
-            lenient().when(llmService.generateStructuredOutput(anyString(), contains("README"), anyMap()))
-                    .thenReturn(readmeJson);
+            lenient()
+                    .when(llmService.generateStructuredOutput(
+                            anyString(), contains("README"), anyMap(), any(TaskComplexity.class)))
+                    .thenReturn(LlmResult.primary(readmeJson));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
 
         String codeDocPrompt = "Documentation guide for affected code";
-        lenient().when(llmService.generateCompletion(anyString(), anyString()))
+        lenient().when(llmService.generateCompletion(anyString(), anyString(), any(TaskComplexity.class)))
                 .thenReturn(codeDocPrompt);
     }
 
@@ -384,8 +403,10 @@ class WriterStepTest {
 
         try {
             String changelogJson = objectMapper.writeValueAsString(changelog);
-            lenient().when(llmService.generateStructuredOutput(anyString(), contains("Changelog"), anyMap()))
-                    .thenReturn(changelogJson);
+            lenient()
+                    .when(llmService.generateStructuredOutput(
+                            anyString(), contains("Changelog"), anyMap(), any(TaskComplexity.class)))
+                    .thenReturn(LlmResult.primary(changelogJson));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

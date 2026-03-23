@@ -15,13 +15,22 @@ public class ArchitectStep implements AgentStep {
     private static final Logger log = LoggerFactory.getLogger(ArchitectStep.class);
 
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final GitHubApiClient gitHubApiClient;
     private final ObjectMapper objectMapper;
+    private final AgentContractLoader agentContractLoader;
 
-    public ArchitectStep(LlmService llmService, GitHubApiClient gitHubApiClient, ObjectMapper objectMapper) {
+    public ArchitectStep(
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            GitHubApiClient gitHubApiClient,
+            ObjectMapper objectMapper,
+            AgentContractLoader agentContractLoader) {
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.gitHubApiClient = gitHubApiClient;
         this.objectMapper = objectMapper;
+        this.agentContractLoader = agentContractLoader;
     }
 
     @Override
@@ -60,7 +69,11 @@ public class ArchitectStep implements AgentStep {
                     baseSha,
                     true);
 
+            @SuppressWarnings("unchecked")
             List<Map<String, Object>> treeItems = (List<Map<String, Object>>) tree.get("tree");
+            if (treeItems == null) {
+                treeItems = List.of();
+            }
 
             repoContext.append("## Repository Structure\n\n");
             repoContext.append("### Key Files and Directories:\n");
@@ -79,7 +92,7 @@ public class ArchitectStep implements AgentStep {
             tryFetchKeyFiles(context, repoContext);
 
         } catch (Exception e) {
-            log.warn("Failed to gather full repository context: {}", e.getMessage());
+            log.warn("Failed to gather full repository context: {}", e.getMessage(), e);
             repoContext.append("Repository context gathering was limited.\n");
         }
 
@@ -123,28 +136,52 @@ public class ArchitectStep implements AgentStep {
     }
 
     private void tryFetchKeyFiles(RunContext context, StringBuilder repoContext) {
-        List<String> keyFiles = Arrays.asList(
-                "AGENTS.md",
-                "README.md",
-                "pom.xml",
-                "package.json");
+        tryAppendRepoFile(context, repoContext, "AGENTS.md", List.of("AGENTS.md"));
+        tryAppendRepoFile(context, repoContext, "README.md", List.of("README.md"));
+        tryAppendRepoFile(context, repoContext, "pom.xml", List.of("pom.xml", "ai-orchestrator/pom.xml"));
+        tryAppendRepoFile(
+                context, repoContext, "package.json", List.of("package.json", "frontend/package.json"));
+    }
 
-        for (String fileName : keyFiles) {
+    /**
+     * Best-effort: GitHub may 404 (wrong path), circuit breaker may throw, or JSON may not be a single file blob.
+     * Never propagate — optional context for the architect prompt only.
+     */
+    private void tryAppendRepoFile(
+            RunContext context, StringBuilder repoContext, String displayLabel, List<String> pathCandidates) {
+        for (String path : pathCandidates) {
             try {
                 Map<String, Object> fileContent = gitHubApiClient.getRepoContent(
-                        context.getOwner(),
-                        context.getRepo(),
-                        fileName);
-
-                String content = (String) fileContent.get("content");
-                if (content != null) {
-                    String decoded = new String(Base64.getDecoder().decode(content));
-                    repoContext.append("\n### ").append(fileName).append(" (excerpt):\n```\n");
-                    repoContext.append(truncateContent(decoded, 800));
-                    repoContext.append("\n```\n");
+                        context.getOwner(), context.getRepo(), path);
+                if (fileContent == null) {
+                    continue;
                 }
-            } catch (Exception e) {
-                log.debug("Could not fetch {}: {}", fileName, e.getMessage());
+                if (!"file".equals(fileContent.get("type"))) {
+                    continue;
+                }
+                String content = (String) fileContent.get("content");
+                if (content == null || content.isBlank()) {
+                    continue;
+                }
+                String encoding = (String) fileContent.getOrDefault("encoding", "base64");
+                if (!"base64".equalsIgnoreCase(encoding)) {
+                    log.debug("Skipping {} at {}: encoding={}", displayLabel, path, encoding);
+                    continue;
+                }
+                byte[] decodedBytes;
+                try {
+                    decodedBytes = Base64.getDecoder().decode(content.replaceAll("\\s", ""));
+                } catch (IllegalArgumentException e) {
+                    log.debug("Invalid base64 for {} at {}: {}", displayLabel, path, e.getMessage());
+                    continue;
+                }
+                String decoded = new String(decodedBytes);
+                repoContext.append("\n### ").append(displayLabel).append(" (excerpt):\n```\n");
+                repoContext.append(truncateContent(decoded, 800));
+                repoContext.append("\n```\n");
+                return;
+            } catch (Throwable t) {
+                log.debug("Could not fetch {} at {}: {}", displayLabel, path, t.getMessage());
             }
         }
     }
@@ -163,7 +200,10 @@ public class ArchitectStep implements AgentStep {
             Map<String, Object> schema = buildArchitectureAnalysisSchema();
 
             log.info("Requesting LLM architecture analysis");
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(
+                            systemPrompt, userPrompt, schema, complexityResolver.forAgent("architect"))
+                    .content();
 
             log.debug("Received architecture analysis from LLM");
             ArchitectureAnalysis analysis = objectMapper.readValue(llmResponse, ArchitectureAnalysis.class);
@@ -178,7 +218,9 @@ public class ArchitectStep implements AgentStep {
     }
 
     private String buildArchitectureSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("architect");
+        return yamlPrefix
+                + """
                 You are a software architect analyzing a codebase to provide architectural guidance for implementing new features or fixing issues.
 
                 Your responsibilities:
@@ -362,6 +404,46 @@ public class ArchitectStep implements AgentStep {
         if (analysis.getArchitectureDecisions() == null || analysis.getArchitectureDecisions().isEmpty()) {
             log.warn("No architecture decisions from LLM, adding defaults");
             analysis.setArchitectureDecisions(getDefaultArchitectureDecisions());
+        }
+
+        if (analysis.getComponentsAffected() == null || analysis.getComponentsAffected().isEmpty()) {
+            log.warn("No componentsAffected from LLM, using generic defaults");
+            analysis.setComponentsAffected(new ArrayList<>(List.of(
+                    "Backend services",
+                    "Frontend (if applicable)",
+                    "Persistence / schema (if applicable)")));
+        }
+
+        if (analysis.getIntegrationPoints() == null) {
+            analysis.setIntegrationPoints(new ArrayList<>());
+        }
+
+        if (analysis.getDataFlow() == null || analysis.getDataFlow().isBlank()) {
+            analysis.setDataFlow(
+                    "Follow existing layered flow: client → API → service → persistence as appropriate for this codebase.");
+        }
+
+        if (analysis.getTechnicalRisks() == null) {
+            analysis.setTechnicalRisks(new ArrayList<>());
+        }
+
+        if (analysis.getTestingStrategy() == null) {
+            log.warn("No testingStrategy from LLM, adding defaults");
+            analysis.setTestingStrategy(new TestingStrategy(
+                    "Unit tests for new or changed business logic.",
+                    "Integration tests for affected API and database paths.",
+                    "E2E tests where user-visible behavior changes."));
+        } else {
+            TestingStrategy ts = analysis.getTestingStrategy();
+            if (ts.getUnitTests() == null) {
+                ts.setUnitTests("");
+            }
+            if (ts.getIntegrationTests() == null) {
+                ts.setIntegrationTests("");
+            }
+            if (ts.getE2eTests() == null) {
+                ts.setE2eTests("");
+            }
         }
     }
 

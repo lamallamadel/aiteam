@@ -10,6 +10,7 @@ public class CorrelationIdHolder {
     private static final String USER_ID_KEY = "userId";
     private static final String AGENT_NAME_KEY = "agentName";
     private static final String GITHUB_TOKEN_KEY = "githubToken";
+    private static final String REPOSITORY_KEY = "repository";
 
     private CorrelationIdHolder() {
     }
@@ -62,12 +63,24 @@ public class CorrelationIdHolder {
         return MDC.get(GITHUB_TOKEN_KEY);
     }
 
+    /** {@code owner/repo} for cost attribution (workflow context). */
+    public static void setRepository(String repository) {
+        if (repository != null && !repository.isBlank()) {
+            MDC.put(REPOSITORY_KEY, repository);
+        }
+    }
+
+    public static String getRepository() {
+        return MDC.get(REPOSITORY_KEY);
+    }
+
     public static void clear() {
         MDC.remove(CORRELATION_ID_KEY);
         MDC.remove(RUN_ID_KEY);
         MDC.remove(USER_ID_KEY);
         MDC.remove(AGENT_NAME_KEY);
         MDC.remove(GITHUB_TOKEN_KEY);
+        MDC.remove(REPOSITORY_KEY);
     }
 
     public static void clearAll() {

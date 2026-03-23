@@ -1,6 +1,7 @@
 package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.RunEntity;
+import com.atlasia.ai.model.TaskComplexity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.model.TicketPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,12 @@ class PmStepTest {
     @Mock
     private LlmService llmService;
 
+    @Mock
+    private LlmComplexityResolver complexityResolver;
+
+    @Mock
+    private AgentContractLoader agentContractLoader;
+
     private ObjectMapper objectMapper;
     private PmStep pmStep;
     private RunContext context;
@@ -34,7 +41,9 @@ class PmStepTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        pmStep = new PmStep(gitHubApiClient, llmService, objectMapper);
+        lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+        lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
+        pmStep = new PmStep(gitHubApiClient, llmService, complexityResolver, objectMapper, agentContractLoader);
 
         runEntity = new RunEntity(
                 UUID.randomUUID(),
@@ -63,8 +72,8 @@ class PmStepTest {
                 List.of("bug", "high-priority"));
 
         String llmResponse = objectMapper.writeValueAsString(expectedPlan);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         String result = pmStep.execute(context);
 
@@ -84,7 +93,7 @@ class PmStepTest {
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         String result = pmStep.execute(context);
@@ -115,15 +124,16 @@ class PmStepTest {
                 List.of("bug"));
 
         String llmResponse = objectMapper.writeValueAsString(expectedPlan);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         pmStep.execute(context);
 
         verify(llmService).generateStructuredOutput(
                 anyString(),
                 contains("Comments"),
-                anyMap());
+                anyMap(),
+                any(TaskComplexity.class));
     }
 
     @Test
@@ -140,7 +150,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -164,7 +174,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -189,7 +199,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -207,7 +217,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -225,7 +235,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -258,8 +268,8 @@ class PmStepTest {
                 List.of("bug"));
 
         String llmResponse = objectMapper.writeValueAsString(incompletePlan);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         String result = pmStep.execute(context);
 
@@ -285,8 +295,8 @@ class PmStepTest {
                 List.of("bug"));
 
         String llmResponse = "```json\n" + objectMapper.writeValueAsString(expectedPlan) + "\n```";
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         String result = pmStep.execute(context);
 
@@ -309,7 +319,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -327,7 +337,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);
@@ -355,8 +365,8 @@ class PmStepTest {
                 List.of("bug"));
 
         String llmResponse = objectMapper.writeValueAsString(expectedPlan);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         doThrow(new RuntimeException("GitHub API error"))
                 .when(gitHubApiClient).addLabelsToIssue(anyString(), anyString(), anyInt(), anyList());
@@ -384,8 +394,8 @@ class PmStepTest {
                 List.of());
 
         String llmResponse = objectMapper.writeValueAsString(expectedPlan);
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         pmStep.execute(context);
 
@@ -405,7 +415,7 @@ class PmStepTest {
 
         when(gitHubApiClient.readIssue("owner", "repo", 123)).thenReturn(issueData);
         when(gitHubApiClient.listIssueComments("owner", "repo", 123)).thenReturn(List.of());
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Force fallback"));
 
         String result = pmStep.execute(context);

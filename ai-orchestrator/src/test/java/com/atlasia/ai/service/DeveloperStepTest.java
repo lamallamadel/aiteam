@@ -3,6 +3,7 @@ package com.atlasia.ai.service;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,13 @@ class DeveloperStepTest {
         private LlmService llmService;
 
         @Mock
+        private LlmComplexityResolver complexityResolver;
+
+        @Mock
         private OrchestratorProperties properties;
+
+        @Mock
+        private AgentContractLoader agentContractLoader;
 
         private ObjectMapper objectMapper;
         private DeveloperStep developerStep;
@@ -40,8 +47,16 @@ class DeveloperStepTest {
                 objectMapper = new ObjectMapper();
                 lenient().when(properties.repoAllowlist()).thenReturn("src/,docs/,pom.xml");
                 lenient().when(properties.workflowProtectPrefix()).thenReturn(".github/workflows/");
+                lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+                lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
 
-                developerStep = new DeveloperStep(gitHubApiClient, llmService, objectMapper, properties);
+                developerStep = new DeveloperStep(
+                        gitHubApiClient,
+                        llmService,
+                        complexityResolver,
+                        objectMapper,
+                        properties,
+                        agentContractLoader);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
@@ -101,8 +116,8 @@ class DeveloperStepTest {
                                     "implementationNotes": "Follows existing patterns"
                                 }
                                 """;
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 when(gitHubApiClient.createBlob(eq("owner"), eq("repo"), anyString(), eq("utf-8")))
                                 .thenReturn(Map.of("sha", "blob-sha-123"));
@@ -131,7 +146,7 @@ class DeveloperStepTest {
                 assertEquals("https://github.com/owner/repo/pull/1", context.getPrUrl());
 
                 verify(gitHubApiClient).createBranch("owner", "repo", "ai/issue-123", "main-sha-123");
-                verify(llmService).generateStructuredOutput(anyString(), anyString(), anyMap());
+                verify(llmService).generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
                 verify(gitHubApiClient).createBlob(eq("owner"), eq("repo"), anyString(), eq("utf-8"));
                 verify(gitHubApiClient).createTree(eq("owner"), eq("repo"), anyList(), eq("main-sha-123"));
                 verify(gitHubApiClient).createCommit(
@@ -421,7 +436,7 @@ class DeveloperStepTest {
                                 .thenReturn(Map.of("sha", "tree-sha", "tree", List.of()));
 
                 // LLM fails
-                lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+                lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
                 setupGitHubTreeMocks();
@@ -512,8 +527,8 @@ class DeveloperStepTest {
                                     "implementationNotes": "Following patterns"
                                 }
                                 """;
-                lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                lenient().when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 setupGitHubTreeMocks();
 

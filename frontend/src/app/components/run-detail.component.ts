@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { OrchestratorService } from '../services/orchestrator.service';
 import { WorkflowStreamStore } from '../services/workflow-stream.store';
 import { NeuralTraceComponent, GraftEvent } from './neural-trace.component';
-import { RunResponse, ArtifactResponse, EnvironmentLifecycle } from '../models/orchestrator.model';
+import { RunResponse, ArtifactResponse, EnvironmentLifecycle, LlmBudgetSnapshot } from '../models/orchestrator.model';
 import { ArtifactRendererComponent } from './artifact-renderer.component';
 import { CollaborationNotificationsComponent } from './collaboration-notifications.component';
 import { ConnectionHealthComponent } from './connection-health.component';
@@ -151,6 +151,23 @@ import { ConnectionHealthComponent } from './connection-health.component';
                 {{ resuming() ? 'Resuming…' : '↺ Resume from Checkpoint' }}
               </button>
             </div>
+          </div>
+
+          <div class="budget-mini" *ngIf="llmBudget() as b">
+            <h4>LLM budget (est.)</h4>
+            <div class="info-row">
+              <span class="label">This run</span>
+              <span class="value mono">
+                \${{ b.spentRunUsd | number:'1.2-4' }} / \${{ b.maxRunUsd | number:'1.2-2' }}
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="label">Today (UTC)</span>
+              <span class="value mono">
+                \${{ b.spentDayUsd | number:'1.2-4' }} / \${{ b.maxDayUsd | number:'1.2-2' }}
+              </span>
+            </div>
+            <p class="budget-hint">Downgrade near {{ (b.downgradeThreshold * 100) | number:'1.0-0' }}% of caps (see docs/LLM_ROUTING.md).</p>
           </div>
         </div>
 
@@ -350,6 +367,18 @@ import { ConnectionHealthComponent } from './connection-health.component';
       font-size: 1rem;
       font-weight: 600;
     }
+    .budget-mini {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .budget-mini h4 { margin: 0 0 8px; font-size: 0.85rem; color: #38bdf8; }
+    .budget-hint {
+      margin: 8px 0 0;
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.35);
+      line-height: 1.35;
+    }
     .info-row {
       display: flex;
       justify-content: space-between;
@@ -536,13 +565,18 @@ export class RunDetailComponent implements OnInit, OnDestroy {
   prunedSteps = signal<string[]>([]);
   pendingGrafts = signal<{ after: string; agentName: string }[]>([]);
 
+  llmBudget = signal<LlmBudgetSnapshot | null>(null);
+
   constructor() {
     // Reload artifacts whenever a new step completes during a live run
     effect(() => {
       const count = this.streamStore.completedSteps();
       if (count > 0) {
         const id = this.run()?.id;
-        if (id) this.loadArtifacts(id);
+        if (id) {
+          this.loadArtifacts(id);
+          this.loadLlmBudget(id);
+        }
       }
     });
   }
@@ -576,6 +610,7 @@ export class RunDetailComponent implements OnInit, OnDestroy {
         this.run.set(run);
         this.loadArtifacts(id);
         this.loadEnvironment(id);
+        this.loadLlmBudget(id);
 
         // Connect SSE for live updates if run is in progress
         const activeStatuses = ['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DEVELOPER',
@@ -592,6 +627,13 @@ export class RunDetailComponent implements OnInit, OnDestroy {
     this.orchestratorService.getArtifacts(id).subscribe({
       next: (artifacts) => this.restArtifacts.set(artifacts),
       error: () => {}
+    });
+  }
+
+  private loadLlmBudget(id: string) {
+    this.orchestratorService.getLlmBudget(id).subscribe({
+      next: (b) => this.llmBudget.set(b),
+      error: () => this.llmBudget.set(null)
     });
   }
 
@@ -622,6 +664,7 @@ export class RunDetailComponent implements OnInit, OnDestroy {
       next: (run) => {
         this.run.set(run);
         this.resuming.set(false);
+        this.loadLlmBudget(id);
         this.streamStore.connectToRun(id);
       },
       error: () => this.resuming.set(false)

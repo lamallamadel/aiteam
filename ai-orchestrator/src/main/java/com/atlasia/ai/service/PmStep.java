@@ -1,5 +1,6 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.TicketPlan;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,42 +19,71 @@ public class PmStep implements AgentStep {
 
     private final GitHubApiClient gitHubApiClient;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final ObjectMapper objectMapper;
+    private final AgentContractLoader agentContractLoader;
 
-    public PmStep(GitHubApiClient gitHubApiClient, LlmService llmService, ObjectMapper objectMapper) {
+    public PmStep(
+            GitHubApiClient gitHubApiClient,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            ObjectMapper objectMapper,
+            AgentContractLoader agentContractLoader) {
         this.gitHubApiClient = gitHubApiClient;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.objectMapper = objectMapper;
+        this.agentContractLoader = agentContractLoader;
     }
 
     @Override
     public String execute(RunContext context) throws Exception {
-        Map<String, Object> issueData = gitHubApiClient.readIssue(
-                context.getOwner(),
-                context.getRepo(),
-                context.getRunEntity().getIssueNumber());
-        context.setIssueData(issueData);
+        RunEntity runEntity = context.getRunEntity();
+        Map<String, Object> issueData;
+        String title;
+        String body;
+        List<?> labelsData;
+        List<Map<String, Object>> comments;
 
-        String title = (String) issueData.get("title");
-        String body = (String) issueData.getOrDefault("body", "");
-        List<?> labelsData = (List<?>) issueData.getOrDefault("labels", List.of());
-
-        List<Map<String, Object>> comments = fetchIssueComments(context);
+        if (runEntity.getIssueNumber() != null && runEntity.getIssueNumber() >= 1) {
+            // Issue-mode: fetch from GitHub
+            issueData = gitHubApiClient.readIssue(
+                    context.getOwner(),
+                    context.getRepo(),
+                    runEntity.getIssueNumber());
+            context.setIssueData(issueData);
+            title = (String) issueData.get("title");
+            body = (String) issueData.getOrDefault("body", "");
+            labelsData = (List<?>) issueData.getOrDefault("labels", List.of());
+            comments = fetchIssueComments(context);
+        } else {
+            // Goal-mode: synthesize issueData from the natural-language goal
+            String goal = runEntity.getGoal() != null ? runEntity.getGoal() : "";
+            title = "Goal: " + (goal.length() > 80 ? goal.substring(0, 80) + "…" : goal);
+            body = goal;
+            labelsData = List.of();
+            comments = List.of();
+            issueData = new java.util.LinkedHashMap<>();
+            issueData.put("title", title);
+            issueData.put("body", body);
+            issueData.put("labels", labelsData);
+            context.setIssueData(issueData);
+        }
 
         TicketPlan ticketPlan = generateTicketPlanWithLlm(
-                context.getRunEntity().getIssueNumber(),
+                runEntity.getIssueNumber() != null ? runEntity.getIssueNumber() : 0,
                 title,
                 body,
                 labelsData,
                 comments);
 
-        if (ticketPlan.getLabelsToApply() != null) {
+        if (ticketPlan.getLabelsToApply() != null && runEntity.getIssueNumber() != null && runEntity.getIssueNumber() >= 1) {
             if (!ticketPlan.getLabelsToApply().isEmpty()) {
                 try {
                     gitHubApiClient.addLabelsToIssue(
                             context.getOwner(),
                             context.getRepo(),
-                            context.getRunEntity().getIssueNumber(),
+                            runEntity.getIssueNumber(),
                             ticketPlan.getLabelsToApply());
                 } catch (Exception e) {
                     String errorMsg = (e.getMessage() != null) ? e.getMessage() : e.getClass().getSimpleName();
@@ -92,7 +122,9 @@ public class PmStep implements AgentStep {
             Map<String, Object> schema = buildTicketPlanSchema();
 
             log.info("Sending request to LLM for ticket plan generation for issue #{}", issueNumber);
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(systemPrompt, userPrompt, schema, complexityResolver.forAgent("pm"))
+                    .content();
 
             log.debug("Received LLM response: {}", llmResponse);
             TicketPlan plan = parseAndValidateLlmResponse(llmResponse, issueNumber, title, body);
@@ -109,7 +141,9 @@ public class PmStep implements AgentStep {
     }
 
     private String buildSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("pm");
+        return yamlPrefix
+                + """
                 You are a product manager analyzing GitHub issues to create structured ticket plans.
                 Your job is to extract key information from the issue and create a comprehensive plan.
 

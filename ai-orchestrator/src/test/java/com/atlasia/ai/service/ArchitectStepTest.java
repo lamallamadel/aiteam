@@ -2,6 +2,7 @@ package com.atlasia.ai.service;
 
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,12 @@ class ArchitectStepTest {
         @Mock
         private GitHubApiClient gitHubApiClient;
 
+        @Mock
+        private AgentContractLoader agentContractLoader;
+
+        @Mock
+        private LlmComplexityResolver complexityResolver;
+
         private ObjectMapper objectMapper;
         private ArchitectStep architectStep;
         private RunContext context;
@@ -33,7 +40,10 @@ class ArchitectStepTest {
         @BeforeEach
         void setUp() {
                 objectMapper = new ObjectMapper();
-                architectStep = new ArchitectStep(llmService, gitHubApiClient, objectMapper);
+                lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+                lenient().when(complexityResolver.forAgent(anyString())).thenReturn(TaskComplexity.MEDIUM);
+                architectStep = new ArchitectStep(
+                        llmService, complexityResolver, gitHubApiClient, objectMapper, agentContractLoader);
 
                 runEntity = new RunEntity(
                                 UUID.randomUUID(),
@@ -52,8 +62,8 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -66,12 +76,34 @@ class ArchitectStepTest {
         }
 
         @Test
+        void execute_normalizesNullComponentsAffectedAndRelatedFields_noNpe() throws Exception {
+                ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
+                analysis.setComponentsAffected(null);
+                analysis.setIntegrationPoints(null);
+                analysis.setDataFlow(null);
+                analysis.setTechnicalRisks(null);
+                analysis.setTestingStrategy(null);
+                String llmResponse = objectMapper.writeValueAsString(analysis);
+
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
+
+                String result = architectStep.execute(context);
+
+                assertNotNull(result);
+                assertTrue(result.contains("Components Affected"));
+                assertTrue(result.contains("Backend services"));
+                assertTrue(result.contains("Integration Points"));
+                assertTrue(result.contains("Testing Strategy"));
+        }
+
+        @Test
         void execute_identifiesRepositoryPattern() throws Exception {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -84,8 +116,8 @@ class ArchitectStepTest {
                 analysis.setComponentDiagram("graph TB\n  A[Component A] --> B[Component B]");
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -96,7 +128,7 @@ class ArchitectStepTest {
 
         @Test
         void execute_withLlmFailure_usesFallback() throws Exception {
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
                 String result = architectStep.execute(context);
@@ -111,8 +143,8 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 architectStep.execute(context);
 
@@ -125,8 +157,8 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 architectStep.execute(context);
 
@@ -146,8 +178,8 @@ class ArchitectStepTest {
                 analysis.setTechnicalRisks(List.of(risk));
 
                 String llmResponse = objectMapper.writeValueAsString(analysis);
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -166,8 +198,8 @@ class ArchitectStepTest {
                 analysis.setTestingStrategy(strategy);
 
                 String llmResponse = objectMapper.writeValueAsString(analysis);
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -182,8 +214,8 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 architectStep.execute(context);
 
@@ -202,8 +234,8 @@ class ArchitectStepTest {
                 analysis.setArchitectureDecisions(List.of(decision));
 
                 String llmResponse = objectMapper.writeValueAsString(analysis);
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -221,8 +253,8 @@ class ArchitectStepTest {
                 analysis.setRecommendedPatterns(List.of(pattern));
 
                 String llmResponse = objectMapper.writeValueAsString(analysis);
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -236,8 +268,8 @@ class ArchitectStepTest {
                 analysis.setDataFlow("Request flows through controller → service → repository → database");
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -254,8 +286,8 @@ class ArchitectStepTest {
                                 "Message queue integration"));
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -271,13 +303,14 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), contains("Ticket Plan"), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(
+                                        anyString(), contains("Ticket Plan"), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
                 assertNotNull(result);
-                verify(llmService).generateStructuredOutput(anyString(), contains("Ticket Plan"), anyMap());
+                verify(llmService).generateStructuredOutput(anyString(), contains("Ticket Plan"), anyMap(), any(TaskComplexity.class));
         }
 
         @Test
@@ -298,8 +331,8 @@ class ArchitectStepTest {
                 ArchitectStep.ArchitectureAnalysis analysis = createValidAnalysis();
                 String llmResponse = objectMapper.writeValueAsString(analysis);
 
-                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                                .thenReturn(llmResponse);
+                when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                                .thenReturn(LlmResult.primary(llmResponse));
 
                 String result = architectStep.execute(context);
 
@@ -307,7 +340,8 @@ class ArchitectStepTest {
                 verify(llmService).generateStructuredOutput(
                                 anyString(),
                                 contains("Backend (Java)"),
-                                anyMap());
+                                anyMap(),
+                                any(TaskComplexity.class));
         }
 
         // Helper methods

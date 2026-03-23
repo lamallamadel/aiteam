@@ -2,9 +2,10 @@ import { Component, OnInit, OnDestroy, signal, computed, inject } from '@angular
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Subscription, interval } from 'rxjs';
-import { switchMap, startWith } from 'rxjs/operators';
+import { Subscription, interval, of } from 'rxjs';
+import { switchMap, startWith, catchError } from 'rxjs/operators';
 import { OrchestratorService } from '../services/orchestrator.service';
+import { SettingsService } from '../services/settings.service';
 import { RunResponse, RunRequest } from '../models/orchestrator.model';
 import { IntentPreviewModalComponent, IntentConfirmation } from './intent-preview-modal.component';
 
@@ -53,6 +54,12 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
         (cancelled)="showNewBoltModal.set(false)">
       </app-intent-preview-modal>
 
+      <!-- Bolt creation error banner -->
+      <div *ngIf="boltError()" class="bolt-error-banner">
+        ⚠ {{ boltError() }}
+        <button (click)="boltError.set(null)" class="bolt-error-close">✕</button>
+      </div>
+
       <div class="run-table">
         <div class="table-header">
           <div class="col col-id">ID</div>
@@ -88,7 +95,10 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
             <div class="col col-date dim">{{ formatAge(run.createdAt) }}</div>
           </div>
 
-          <div *ngIf="filteredRuns().length === 0 && !loading()" class="empty-state">
+          <div *ngIf="loadError()" class="empty-state error-state">
+            <p>⚠ {{ loadError() }}</p>
+          </div>
+          <div *ngIf="filteredRuns().length === 0 && !loading() && !loadError()" class="empty-state">
             <p>No runs found</p>
           </div>
           <div *ngIf="filteredRuns().length === 0 && loading()" class="empty-state">
@@ -269,10 +279,33 @@ const ACTIVE_STATUSES = new Set(['RECEIVED', 'PM', 'QUALIFIER', 'ARCHITECT', 'DE
     .btn-pagination:disabled { opacity: 0.4; cursor: not-allowed; }
     .page-info { color: #94a3b8; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
     .empty-state { text-align: center; padding: 48px; color: #94a3b8; }
+    .error-state { color: #f87171; }
+    .bolt-error-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      color: #f87171;
+      font-size: 0.85rem;
+    }
+    .bolt-error-close {
+      background: none;
+      border: none;
+      color: #f87171;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0 4px;
+      line-height: 1;
+    }
   `]
 })
 export class RunListComponent implements OnInit, OnDestroy {
   private orchestratorService = inject(OrchestratorService);
+  private settingsService = inject(SettingsService);
   private router = inject(Router);
 
   private allRuns = signal<RunResponse[]>([]);
@@ -284,6 +317,8 @@ export class RunListComponent implements OnInit, OnDestroy {
 
   showNewBoltModal = signal(false);
   newBoltRequest = signal<RunRequest>({ repo: '', issueNumber: 0, mode: 'EXECUTION' });
+  loadError = signal<string | null>(null);
+  boltError = signal<string | null>(null);
 
   private pollSub: Subscription | null = null;
 
@@ -306,15 +341,28 @@ export class RunListComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.pollSub = interval(5000).pipe(
       startWith(0),
-      switchMap(() => this.orchestratorService.getRuns())
-    ).subscribe({
-      next: (runs) => {
+      // catchError inside switchMap keeps the interval alive after any HTTP error
+      switchMap(() => this.orchestratorService.getRuns().pipe(
+        catchError(err => {
+          this.loading.set(false);
+          const status: number | undefined = err?.status;
+          if (status === 401 || status === 403) {
+            this.loadError.set('Session expirée ou accès refusé. Rechargez la page.');
+          } else if (status === 0 || status == null) {
+            this.loadError.set('Serveur inaccessible. Vérifiez votre connexion.');
+          } else {
+            this.loadError.set(err?.error?.message ?? err?.message ?? `Erreur ${status}.`);
+          }
+          return of(null); // keep polling alive
+        })
+      ))
+    ).subscribe(runs => {
+      if (runs !== null) {
         this.allRuns.set(runs);
         this.loading.set(false);
-        // Reset to page 0 if current page is out of range
+        this.loadError.set(null);
         if (this.currentPage() >= this.totalPages()) this.currentPage.set(0);
-      },
-      error: () => this.loading.set(false)
+      }
     });
   }
 
@@ -357,16 +405,28 @@ export class RunListComponent implements OnInit, OnDestroy {
   nextPage() { if (this.currentPage() < this.totalPages() - 1) this.currentPage.update(p => p + 1); }
 
   openNewBolt() {
-    this.newBoltRequest.set({ repo: '', issueNumber: 0, mode: 'EXECUTION' });
+    const defaultRepo = this.settingsService.defaultRepo();
+    this.newBoltRequest.set({ repo: defaultRepo, mode: 'EXECUTION' });
     this.showNewBoltModal.set(true);
   }
 
   onBoltConfirmed(evt: IntentConfirmation) {
     this.showNewBoltModal.set(false);
+    this.boltError.set(null);
     const req: RunRequest = { ...evt.request, autonomy: evt.autonomy };
     this.orchestratorService.createRun(req).subscribe({
       next: (run) => this.router.navigate(['/runs', run.id]),
-      error: () => { /* toast would go here */ }
+      error: (err) => {
+        const msg = err?.error?.message ?? err?.error?.detail ?? err?.message;
+        const status: number | undefined = err?.status;
+        if (status === 401 || status === 403) {
+          this.boltError.set('Accès refusé. Reconnectez-vous.');
+        } else if (status === 0 || status == null) {
+          this.boltError.set('Serveur inaccessible.');
+        } else {
+          this.boltError.set(msg ?? `Erreur ${status} — impossible de démarrer le run.`);
+        }
+      }
     });
   }
 }

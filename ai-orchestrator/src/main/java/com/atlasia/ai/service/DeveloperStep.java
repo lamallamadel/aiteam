@@ -21,15 +21,24 @@ public class DeveloperStep implements AgentStep {
 
     private final GitHubApiClient gitHubApiClient;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final ObjectMapper objectMapper;
     private final OrchestratorProperties properties;
+    private final AgentContractLoader agentContractLoader;
 
-    public DeveloperStep(GitHubApiClient gitHubApiClient, LlmService llmService,
-            ObjectMapper objectMapper, OrchestratorProperties properties) {
+    public DeveloperStep(
+            GitHubApiClient gitHubApiClient,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            ObjectMapper objectMapper,
+            OrchestratorProperties properties,
+            AgentContractLoader agentContractLoader) {
         this.gitHubApiClient = gitHubApiClient;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.agentContractLoader = agentContractLoader;
     }
 
     @Override
@@ -301,7 +310,10 @@ public class DeveloperStep implements AgentStep {
 
                 log.info("Requesting LLM code generation for issue #{} (attempt {}/{})",
                         context.getRunEntity().getIssueNumber(), attempt, maxRetries);
-                String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+                String llmResponse = llmService
+                        .generateStructuredOutput(
+                                systemPrompt, userPrompt, schema, complexityResolver.forAgent("developer"))
+                        .content();
 
                 if (llmResponse == null || llmResponse.trim().isEmpty()) {
                     throw new IllegalStateException("LLM returned empty response");
@@ -337,7 +349,9 @@ public class DeveloperStep implements AgentStep {
     }
 
     private String buildDeveloperSystemPrompt() {
-        return """
+        String yamlPrefix = agentContractLoader.systemPromptPrefix("developer");
+        return yamlPrefix
+                + """
                 You are an expert software developer implementing code changes based on requirements and architectural guidance.
 
                 Your responsibilities:
@@ -777,7 +791,10 @@ public class DeveloperStep implements AgentStep {
         message.append("\n\n");
         message.append(codeChanges.getSummary()).append("\n\n");
 
-        message.append("Closes #").append(context.getRunEntity().getIssueNumber()).append("\n\n");
+        Integer issueNum = context.getRunEntity().getIssueNumber();
+        if (issueNum != null) {
+            message.append("Closes #").append(issueNum).append("\n\n");
+        }
 
         message.append("Changes:\n");
         for (FileChange file : codeChanges.getFiles()) {
@@ -834,7 +851,7 @@ public class DeveloperStep implements AgentStep {
             String title = (String) context.getIssueData().get("title");
             return "[AI] " + title;
         }
-        return "[AI] Fix issue #" + context.getRunEntity().getIssueNumber();
+        return "[AI] Implement goal: " + context.getRunEntity().getId().toString().substring(0, 8);
     }
 
     private String buildPrBody(RunContext context, CodeChanges codeChanges) {
@@ -843,7 +860,10 @@ public class DeveloperStep implements AgentStep {
         body.append("## Summary\n\n");
         body.append(codeChanges.getSummary()).append("\n\n");
 
-        body.append("Closes #").append(context.getRunEntity().getIssueNumber()).append("\n\n");
+        Integer issueNum = context.getRunEntity().getIssueNumber();
+        if (issueNum != null) {
+            body.append("Closes #").append(issueNum).append("\n\n");
+        }
 
         if (context.getIssueData() != null) {
             String issueBody = (String) context.getIssueData().getOrDefault("body", "");

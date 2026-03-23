@@ -4,8 +4,10 @@ import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.persistence.RunArtifactRepository;
 import com.atlasia.ai.persistence.RunRepository;
+import com.atlasia.ai.service.event.WorkflowEvent;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.observability.CorrelationIdHolder;
+import com.atlasia.ai.service.trace.TraceEventService;
 import com.atlasia.ai.service.observability.OrchestratorMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +41,7 @@ public class BlackboardService {
     private final JsonSchemaValidator schemaValidator;
     private final OrchestratorMetrics metrics;
     private final WorkflowEventBus eventBus;
+    private final TraceEventService traceEventService;
 
     /**
      * Access control matrix: entry_key → authorized producers.
@@ -91,7 +94,8 @@ public class BlackboardService {
             "test_report", "test_report.schema.json",
             "judge_verdict", "judge_verdict.schema.json",
             "quality_report", "quality_report.schema.json",
-            "conflict_resolution", "conflict_resolution.schema.json"
+            "conflict_resolution", "conflict_resolution.schema.json",
+            "escalation", "escalation.schema.json"
     );
 
     /**
@@ -105,12 +109,14 @@ public class BlackboardService {
             RunArtifactRepository artifactRepository,
             JsonSchemaValidator schemaValidator,
             OrchestratorMetrics metrics,
-            WorkflowEventBus eventBus) {
+            WorkflowEventBus eventBus,
+            TraceEventService traceEventService) {
         this.runRepository = runRepository;
         this.artifactRepository = artifactRepository;
         this.schemaValidator = schemaValidator;
         this.metrics = metrics;
         this.eventBus = eventBus;
+        this.traceEventService = traceEventService;
     }
 
     /**
@@ -164,6 +170,11 @@ public class BlackboardService {
 
         log.info("BLACKBOARD WRITE: run_id={}, agent={}, entry={}, version={}, correlation_id={}",
                 runId, agentName, entryKey, version, correlationId);
+
+        WorkflowEvent.BlackboardWrite bbEvent = new WorkflowEvent.BlackboardWrite(
+                runId, Instant.now(), entryKey, agentName, version);
+        eventBus.emit(runId, bbEvent);
+        traceEventService.recordEvent(bbEvent);
     }
 
     /**

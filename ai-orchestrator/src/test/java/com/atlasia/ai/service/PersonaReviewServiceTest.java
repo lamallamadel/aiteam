@@ -4,6 +4,7 @@ import com.atlasia.ai.config.PersonaConfig;
 import com.atlasia.ai.config.PersonaConfigLoader;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,13 @@ class PersonaReviewServiceTest {
     private LlmService llmService;
 
     @Mock
+    private LlmComplexityResolver complexityResolver;
+
+    @Mock
     private JudgeService judgeService;
+
+    @Mock
+    private AgentContractLoader agentContractLoader;
 
     private ObjectMapper objectMapper;
     private PersonaReviewService personaReviewService;
@@ -38,7 +45,10 @@ class PersonaReviewServiceTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        personaReviewService = new PersonaReviewService(personaConfigLoader, llmService, judgeService, objectMapper);
+        lenient().when(agentContractLoader.systemPromptPrefix(anyString())).thenReturn("");
+        lenient().when(complexityResolver.forAgent(eq("review"))).thenReturn(TaskComplexity.MEDIUM);
+        personaReviewService = new PersonaReviewService(
+                personaConfigLoader, llmService, complexityResolver, judgeService, objectMapper, agentContractLoader);
 
         RunEntity runEntity = new RunEntity(
                 UUID.randomUUID(),
@@ -97,7 +107,8 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -113,7 +124,8 @@ class PersonaReviewServiceTest {
         assertEquals("critical", issue.getSeverity());
         assertTrue(issue.isMandatory());
 
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(1))
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -148,7 +160,8 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -166,7 +179,8 @@ class PersonaReviewServiceTest {
         assertFalse(issue.isMandatory());
 
         assertTrue(report.getMergedRecommendations().size() > 0);
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(1))
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -206,7 +220,8 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap())).thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -225,7 +240,8 @@ class PersonaReviewServiceTest {
         assertTrue(report.getMergedRecommendations().stream()
                 .anyMatch(r -> r.contains("accessibility")));
 
-        verify(llmService, times(1)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(1))
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -265,8 +281,8 @@ class PersonaReviewServiceTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(securityEngineerResponse, codeQualityEngineerResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(securityEngineerResponse), LlmResult.primary(codeQualityEngineerResponse));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);
 
@@ -274,7 +290,8 @@ class PersonaReviewServiceTest {
         assertEquals(2, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        verify(llmService, times(2)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(2))
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
@@ -287,14 +304,15 @@ class PersonaReviewServiceTest {
         assertEquals(0, report.getFindings().size());
         assertFalse(report.isSecurityFixesApplied());
 
-        verify(llmService, never()).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, never())
+                .generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
     void testReviewCodeChanges_withLlmFailure() throws Exception {
         PersonaConfig securityEngineerConfig = createSecurityEngineerPersonaConfig();
         when(personaConfigLoader.getPersonas()).thenReturn(List.of(securityEngineerConfig));
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("LLM service unavailable"));
 
         PersonaReviewService.PersonaReviewReport report = personaReviewService.reviewCodeChanges(context, codeChanges);

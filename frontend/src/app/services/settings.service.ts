@@ -1,5 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { GitProvider, UsageData, RateLimitConfig, AIPreferences } from '../models/orchestrator.model';
+import { GitProvider, GithubRepo, GithubUser, UsageData, RateLimitConfig, AIPreferences } from '../models/orchestrator.model';
+import { Observable, of } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 
 export interface GitProviderWithId extends GitProvider {
     id: string;
@@ -23,6 +25,8 @@ export class SettingsService {
     private readonly RATE_LIMIT_KEY = `${this.STORAGE_PREFIX}rate_limit`;
     private readonly AI_PREFERENCES_KEY = `${this.STORAGE_PREFIX}ai_preferences`;
     private readonly MONTHLY_REQUESTS_KEY = `${this.STORAGE_PREFIX}monthly_requests`;
+    private readonly GITHUB_REPOS_KEY = `${this.STORAGE_PREFIX}github_repos`;
+    private readonly DEFAULT_REPO_KEY = `${this.STORAGE_PREFIX}default_repo`;
 
     private readonly defaultGitProvider: GitProvider = {
         provider: null,
@@ -49,6 +53,8 @@ export class SettingsService {
 
     readonly gitProvider = signal<GitProvider>(this.loadGitProvider());
     readonly gitProviders = signal<GitProviderWithId[]>(this.loadGitProviders());
+    readonly githubRepos = signal<GithubRepo[]>(this.loadGithubRepos());
+    readonly defaultRepo = signal<string>(localStorage.getItem(this.DEFAULT_REPO_KEY) ?? '');
     readonly usageData = signal<UsageData>(this.loadUsageData());
     readonly usageHistory = signal<UsageHistory[]>(this.loadUsageHistory());
     readonly monthlyRequests = signal<number>(this.loadMonthlyRequests());
@@ -127,6 +133,24 @@ export class SettingsService {
             }
         }
         return this.defaultAIPreferences;
+    }
+
+    private loadGithubRepos(): GithubRepo[] {
+        const stored = localStorage.getItem(this.GITHUB_REPOS_KEY);
+        if (stored) {
+            try { return JSON.parse(stored); } catch { return []; }
+        }
+        return [];
+    }
+
+    setGithubRepos(repos: GithubRepo[]): void {
+        this.githubRepos.set(repos);
+        localStorage.setItem(this.GITHUB_REPOS_KEY, JSON.stringify(repos));
+    }
+
+    setDefaultRepo(fullName: string): void {
+        this.defaultRepo.set(fullName);
+        localStorage.setItem(this.DEFAULT_REPO_KEY, fullName);
     }
 
     private loadGitProviders(): GitProviderWithId[] {

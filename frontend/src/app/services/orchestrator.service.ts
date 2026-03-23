@@ -1,8 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus, PendingInterrupt, InterruptDecisionRequest, CurrentUserDto, UserRegistrationRequest, UserRegistrationResponse } from '../models/orchestrator.model';
+import { RunRequest, RunResponse, ArtifactResponse, Persona, ChatResponse, LlmBudgetSnapshot, AgentCard, AgentBinding, GraftExecution, CircuitBreakerStatus, PendingInterrupt, InterruptDecisionRequest, CurrentUserDto, UserRegistrationRequest, UserRegistrationResponse, GithubRepo, GithubUser } from '../models/orchestrator.model';
 import { CollaborationEventEntity } from '../models/collaboration.model';
+import { AuthService } from './auth.service';
+import { SettingsService } from './settings.service';
 
 export interface OversightInterruptRule {
   ruleName: string;
@@ -23,7 +25,7 @@ export interface OversightConfigPayload {
 export class OrchestratorService {
     private apiUrl = '/api/runs'; // Using relative path, assuming proxy configuration
 
-    constructor(private http: HttpClient) { }
+    constructor(private http: HttpClient, private auth: AuthService, private settings: SettingsService) { }
 
     getRuns(): Observable<RunResponse[]> {
         return this.http.get<RunResponse[]>(this.apiUrl);
@@ -40,7 +42,9 @@ export class OrchestratorService {
     /** Backend accepts mode only "code" or "chat"; map UI values (PLANNING/EXECUTION) to "code". */
     createRun(request: RunRequest): Observable<RunResponse> {
         const mode = request.mode === 'EXECUTION' || request.mode === 'PLANNING' ? 'code' : request.mode;
-        const body = { ...request, mode };
+        const githubProvider = this.settings.gitProviders().find(p => p.provider === 'github');
+        const githubToken = request.githubToken ?? githubProvider?.token ?? undefined;
+        const body = { ...request, mode, githubToken };
         return this.http.post<RunResponse>(this.apiUrl, body);
     }
 
@@ -48,8 +52,15 @@ export class OrchestratorService {
         return this.http.get<Persona[]>('/api/personas');
     }
 
+    /** Optional runId scopes run spend; omit for global/day-only view. */
+    getLlmBudget(runId?: string): Observable<LlmBudgetSnapshot> {
+        const q = runId ? `?runId=${encodeURIComponent(runId)}` : '';
+        return this.http.get<LlmBudgetSnapshot>(`/api/budget${q}`);
+    }
+
     chat(personaName: string, message: string): Observable<ChatResponse> {
-        return this.http.post<ChatResponse>(`/api/chat/${personaName}`, { message });
+        const userId = this.auth.currentUser()?.username ?? this.auth.currentUser()?.id ?? 'anonymous';
+        return this.http.post<ChatResponse>(`/api/chat/${personaName}`, { userId, message });
     }
 
     getRunArtifacts(id: string): Observable<ArtifactResponse[]> {
@@ -69,6 +80,14 @@ export class OrchestratorService {
 
     resumeRun(runId: string): Observable<RunResponse> {
         return this.http.post<RunResponse>(`${this.apiUrl}/${runId}/resume`, {});
+    }
+
+    getGithubRepos(githubToken: string): Observable<GithubRepo[]> {
+        return this.http.get<GithubRepo[]>(`/api/github/repos?token=${encodeURIComponent(githubToken)}`);
+    }
+
+    validateGithubToken(githubToken: string): Observable<GithubUser> {
+        return this.http.get<GithubUser>(`/api/github/validate?token=${encodeURIComponent(githubToken)}`);
     }
 
     // A2A endpoints

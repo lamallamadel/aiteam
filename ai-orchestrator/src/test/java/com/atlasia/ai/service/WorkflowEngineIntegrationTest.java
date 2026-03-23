@@ -1,5 +1,6 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
 import com.atlasia.ai.persistence.RunRepository;
@@ -75,6 +76,9 @@ class WorkflowEngineIntegrationTest {
         private BlackboardService blackboardService;
 
         @MockBean
+        private HitlGateService hitlGateService;
+
+        @MockBean
         private DynamicInterruptService interruptService;
 
         @MockBean
@@ -123,7 +127,7 @@ class WorkflowEngineIntegrationTest {
                 lenient().when(personaReviewService.reviewCodeChanges(any(), any())).thenReturn(report);
 
                 JudgeService.JudgeVerdict passingVerdict = new JudgeService.JudgeVerdict(
-                                java.util.UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                java.util.UUID.randomUUID(), "pre_merge", "persona_review", "code_quality",
                                 0.85, "pass", 0.9, java.util.Map.of(),
                                 java.util.List.of(), "Artifact meets quality bar. Proceed to next step.",
                                 null, java.time.Instant.now());
@@ -132,6 +136,19 @@ class WorkflowEngineIntegrationTest {
 
                 DynamicInterruptService.InterruptDecision proceed = DynamicInterruptService.InterruptDecision.proceed();
                 lenient().when(interruptService.evaluate(any(), any(), any(), any(), any())).thenReturn(proceed);
+
+                lenient().when(hitlGateService.shouldPauseAfterArchitecture(any(), any())).thenReturn(false);
+
+                lenient().doAnswer(invocation -> {
+                        RunEntity re = invocation.getArgument(0);
+                        String entryKey = invocation.getArgument(1);
+                        String agent = invocation.getArgument(2);
+                        String payload = invocation.getArgument(3);
+                        re.addArtifact(new RunArtifactEntity(agent, entryKey, payload, Instant.now()));
+                        // Persist cascade so Hibernate never sees transient children on flush (orphanRemoval).
+                        runRepository.save(re);
+                        return null;
+                }).when(blackboardService).write(any(), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -247,7 +264,8 @@ class WorkflowEngineIntegrationTest {
                 assertEquals(RunStatus.ESCALATED, savedRun.getStatus());
 
                 assertTrue(savedRun.getArtifacts().stream()
-                                .anyMatch(a -> "escalation.json".equals(a.getArtifactType())));
+                                .anyMatch(a -> "escalation".equals(a.getArtifactType())
+                                                || "escalation.json".equals(a.getArtifactType())));
         }
 
         @Test

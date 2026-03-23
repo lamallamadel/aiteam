@@ -9,6 +9,7 @@ public enum RunStatus {
     REVIEW,
     TESTER,
     WRITER,
+    WAITING_GATE,
     DONE,
     ESCALATED,
     FAILED

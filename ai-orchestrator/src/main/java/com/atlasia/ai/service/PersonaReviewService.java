@@ -19,18 +19,25 @@ public class PersonaReviewService {
 
     private final PersonaConfigLoader personaConfigLoader;
     private final LlmService llmService;
+    private final LlmComplexityResolver complexityResolver;
     private final JudgeService judgeService;
     private final ObjectMapper objectMapper;
+    private final AgentContractLoader agentContractLoader;
     private final ExecutorService executorService;
 
-    public PersonaReviewService(PersonaConfigLoader personaConfigLoader,
-                                LlmService llmService,
-                                JudgeService judgeService,
-                                ObjectMapper objectMapper) {
+    public PersonaReviewService(
+            PersonaConfigLoader personaConfigLoader,
+            LlmService llmService,
+            LlmComplexityResolver complexityResolver,
+            JudgeService judgeService,
+            ObjectMapper objectMapper,
+            AgentContractLoader agentContractLoader) {
         this.personaConfigLoader = personaConfigLoader;
         this.llmService = llmService;
+        this.complexityResolver = complexityResolver;
         this.judgeService = judgeService;
         this.objectMapper = objectMapper;
+        this.agentContractLoader = agentContractLoader;
         this.executorService = Executors.newFixedThreadPool(4);
     }
 
@@ -101,7 +108,10 @@ public class PersonaReviewService {
             String userPrompt = buildPersonaUserPrompt(artifactPayload, persona);
             Map<String, Object> schema = buildReviewSchema();
             
-            String llmResponse = llmService.generateStructuredOutput(systemPrompt, userPrompt, schema);
+            String llmResponse = llmService
+                    .generateStructuredOutput(
+                            systemPrompt, userPrompt, schema, complexityResolver.forAgent("review"))
+                    .content();
             
             PersonaReview review = objectMapper.readValue(llmResponse, PersonaReview.class);
             review.personaName = persona.name();
@@ -118,7 +128,10 @@ public class PersonaReviewService {
 
     private String buildPersonaSystemPrompt(PersonaConfig persona) {
         StringBuilder prompt = new StringBuilder();
-        
+        String reviewContract = agentContractLoader.systemPromptPrefix("review");
+        if (!reviewContract.isBlank()) {
+            prompt.append(reviewContract);
+        }
         prompt.append("You are ").append(persona.name()).append(", a ").append(persona.role()).append(".\n\n");
         prompt.append("**Mission:** ").append(persona.mission()).append("\n\n");
         

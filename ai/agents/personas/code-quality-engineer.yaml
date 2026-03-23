@@ -159,7 +159,7 @@ anti_patterns:
 output_defaults:
   always_include:
     - Severity classification for every finding (CRITICAL / HIGH / MEDIUM / LOW)
-    - Specific metric violation when applicable (e.g., "cyclomatic complexity: 23, limit: 15")
+    - 'Specific metric violation when applicable (e.g., "cyclomatic complexity: 23, limit: 15")'
     - Before/after code diff for every suggested change
     - Reference to the Atlasia convention being violated (CLAUDE.md or persona domain_knowledge)
   file_path_pattern: "src/main/java/com/atlasia/ai/"

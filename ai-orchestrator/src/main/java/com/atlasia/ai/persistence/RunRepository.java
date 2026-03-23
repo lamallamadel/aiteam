@@ -48,7 +48,7 @@ public interface RunRepository extends JpaRepository<RunEntity, UUID> {
                      @Param("start") Instant start,
                      @Param("end") Instant end);
 
-       @Query("SELECT r FROM RunEntity r JOIN r.artifacts a WHERE r.status = 'ESCALATED' AND a.artifactType = 'escalation.json'")
+       @Query("SELECT r FROM RunEntity r JOIN r.artifacts a WHERE r.status = 'ESCALATED' AND (a.artifactType = 'escalation' OR a.artifactType = 'escalation.json')")
        List<RunEntity> findEscalatedRunsWithArtifacts();
 
        @Query("SELECT r FROM RunEntity r WHERE r.ciFixCount > :threshold OR r.e2eFixCount > :threshold")

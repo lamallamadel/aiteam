@@ -57,15 +57,24 @@ public class GitHubApiClient {
     }
 
     private String getToken() {
+        // 1. Per-request token (GitHub PAT forwarded from caller)
         String githubToken = CorrelationIdHolder.getGitHubToken();
         if (StringUtils.hasText(githubToken)) {
             return githubToken;
         }
 
+        // 2. GitHub App installation token
         String appToken = gitHubAppService.getInstallationToken();
         if (appToken != null) {
             return appToken;
         }
+
+        // 3. Static GitHub PAT (GITHUB_PAT / GITHUB_TOKEN env var)
+        if (properties.github() != null && StringUtils.hasText(properties.github().pat())) {
+            return properties.github().pat();
+        }
+
+        // 4. Last resort: orchestrator token (only works if it happens to be a GitHub PAT)
         return properties.token();
     }
 

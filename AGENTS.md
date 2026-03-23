@@ -2,20 +2,23 @@
 
 ## Setup
 ```bash
-# Prerequisites: Java 17, Node 20+, Docker
+# Prerequisites: Java 21 (JDK), Node 20+, Docker
+# Si `mvn` échoue avec « invalid target release: 21 », le shell n’utilise pas le bon JDK :
+#   Windows (PowerShell, à la racine du repo) : . .\scripts\use-temurin-21.ps1
+#   Unix : source scripts/use-temurin-21.sh
 cd ai-orchestrator && mvn clean install  # Install backend dependencies
 cd frontend && npm ci                     # Install frontend dependencies
 docker compose -f infra/docker-compose.ai.yml up -d  # Start infrastructure
 ```
 
 ## Commands
-- **Build**: `cd ai-orchestrator && mvn clean verify`
+- **Build**: `cd ai-orchestrator && mvn clean verify` (JDK 21 sur le PATH)
 - **Lint**: `cd frontend && npm run lint`
 - **Test**: `cd ai-orchestrator && mvn test` | `cd frontend && npm test -- --watch=false`
 - **Dev server**: `cd ai-orchestrator && mvn spring-boot:run` | `cd frontend && npm run start`
 
 ## Tech Stack
-- **Backend**: Spring Boot 3.3, Java 17, Maven, PostgreSQL, JPA, Spring Cloud Vault
+- **Backend**: Spring Boot 3.3, Java 21, Maven, PostgreSQL, JPA, Spring Cloud Vault
 - **Frontend**: Node 20+, Angular (inferred), Playwright E2E
 - **Infra**: Docker Compose, Postgres 16, HashiCorp Vault
 - **Secrets**: HashiCorp Vault for secure secrets management
@@ -32,6 +35,12 @@ Access them directly via the "Chat Mode" in the UI.
 ## Architecture
 Monorepo with `/ai-orchestrator` (Spring Boot API), `/frontend` (Angular UI), `/ai` (agent configurations), `/infra` (Docker setup). 
 The system uses a **Dual-Mode** engine (Code vs Chat) to provide both autonomous engineering and lightweight AI dialogue.
+
+### LLM routing and budget (Code vs Chat)
+- **Code Mode (pipeline)**: `LlmService` + `TaskComplexity` → `atlasia.model-tiers` (dual primary/secondary legs per tier, Resilience4j per provider, soft budget caps via `BudgetTracker`). Provider IDs must match `persona.ai.providers`.
+- **Chat Mode**: `ChatService` → **`AiProviderRouter`** (persona → provider), not `LlmService`.
+- **API**: `GET /api/budget?runId=<uuid>` for run + daily spend snapshot (run detail dashboard); optional query when MDC has `runId`.
+- **Docs**: [docs/LLM_ROUTING.md](docs/LLM_ROUTING.md) — variables, Vertex/Gemini notes, structured-output caveats.
 
 ### Secrets Management (NEW)
 HashiCorp Vault integration for secure secrets management:

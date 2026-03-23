@@ -87,6 +87,9 @@ class WorkflowEngineTest {
         @Mock
         private io.opentelemetry.api.trace.Tracer tracer;
 
+        @Mock
+        private HitlGateService hitlGateService;
+
         private WorkflowEngine workflowEngine;
         private RunEntity runEntity;
 
@@ -102,6 +105,18 @@ class WorkflowEngineTest {
                 lenient().when(mockBuilder.startSpan()).thenReturn(mockSpan);
                 lenient().when(mockSpan.makeCurrent()).thenReturn(mock(io.opentelemetry.context.Scope.class));
                 
+                lenient().when(hitlGateService.shouldPauseAfterArchitecture(any(), any())).thenReturn(false);
+
+                lenient().doAnswer(invocation -> {
+                        RunEntity re = invocation.getArgument(0);
+                        String entryKey = invocation.getArgument(1);
+                        String agent = invocation.getArgument(2);
+                        String payload = invocation.getArgument(3);
+                        re.addArtifact(new com.atlasia.ai.model.RunArtifactEntity(
+                                        agent, entryKey, payload, java.time.Instant.now()));
+                        return null;
+                }).when(blackboardService).write(any(), anyString(), anyString(), anyString());
+
                 workflowEngine = new WorkflowEngine(
                                 runRepository,
                                 schemaValidator,
@@ -118,7 +133,9 @@ class WorkflowEngineTest {
                                 new com.atlasia.ai.service.InterruptDecisionStore(),
                                 new ObjectMapper(),
                                 graftExecutionService,
-                                tracer);
+                                tracer,
+                                new TaskLedgerBuilder(new ObjectMapper()),
+                                hitlGateService);
                 ReflectionTestUtils.setField(workflowEngine, "self", workflowEngine);
 
                 // Wire the factory to return the appropriate step mocks
@@ -152,7 +169,7 @@ class WorkflowEngineTest {
 
         private void setupJudgeMock() {
                 JudgeService.JudgeVerdict passingVerdict = new JudgeService.JudgeVerdict(
-                                UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                UUID.randomUUID(), "pre_merge", "persona_review", "code_quality",
                                 0.85, "pass", 0.9, Map.of(),
                                 List.of(), "Artifact meets quality bar. Proceed to next step.",
                                 null, Instant.now());
@@ -283,22 +300,22 @@ class WorkflowEngineTest {
 
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "PM".equals(a.getAgentName())
-                                                && "ticket_plan.json".equals(a.getArtifactType())));
+                                                && "ticket_plan".equals(a.getArtifactType())));
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "QUALIFIER".equals(a.getAgentName())
-                                                && "work_plan.json".equals(a.getArtifactType())));
+                                                && "work_plan".equals(a.getArtifactType())));
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "ARCHITECT".equals(a.getAgentName())
-                                                && "architecture_notes.md".equals(a.getArtifactType())));
+                                                && "architecture_notes".equals(a.getArtifactType())));
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "DEVELOPER".equals(a.getAgentName())
                                                 && "pr_url".equals(a.getArtifactType())));
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "TESTER".equals(a.getAgentName())
-                                                && "test_report.json".equals(a.getArtifactType())));
+                                                && "test_report".equals(a.getArtifactType())));
                 assertTrue(runEntity.getArtifacts().stream()
                                 .anyMatch(a -> "WRITER".equals(a.getAgentName())
-                                                && "docs_update".equals(a.getArtifactType())));
+                                                && "docs_patch".equals(a.getArtifactType())));
         }
 
         @Test
@@ -478,7 +495,7 @@ class WorkflowEngineTest {
 
                 // Override judge majority voting to return veto
                 JudgeService.JudgeVerdict vetoVerdict = new JudgeService.JudgeVerdict(
-                                UUID.randomUUID(), "pre_merge", "persona_review_report", "code_quality",
+                                UUID.randomUUID(), "pre_merge", "persona_review", "code_quality",
                                 0.30, "veto", 0.8, Map.of(),
                                 List.of(), "VETO: Artifact fails quality bar.",
                                 null, Instant.now());

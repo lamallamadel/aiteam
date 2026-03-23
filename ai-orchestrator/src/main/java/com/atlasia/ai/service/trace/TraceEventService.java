@@ -57,6 +57,10 @@ public class TraceEventService {
                 handleGraftComplete(e);
             } else if (event instanceof WorkflowEvent.GraftFailed e) {
                 handleGraftFailed(e);
+            } else if (event instanceof WorkflowEvent.BlackboardWrite e) {
+                handleBlackboardWrite(e);
+            } else if (event instanceof WorkflowEvent.GatePause e) {
+                handleGatePause(e);
             }
             // ToolCall events are not persisted as trace spans
         } catch (Exception ex) {
@@ -194,6 +198,27 @@ public class TraceEventService {
                             event.graftId(), event.errorType(), event.message().replace("\"", "\\\"")));
                     traceEventRepository.save(span);
                 });
+    }
+
+    private void handleBlackboardWrite(WorkflowEvent.BlackboardWrite event) {
+        UUID parentSpanId = currentStepSpan.get(event.runId());
+        TraceEventEntity span = new TraceEventEntity(
+                UUID.randomUUID(), event.runId(), parentSpanId, "BLACKBOARD",
+                event.agentName(), "Write " + event.entryKey() + " v" + event.version(),
+                event.timestamp());
+        span.setEndTime(event.timestamp());
+        span.setDurationMs(0L);
+        traceEventRepository.save(span);
+    }
+
+    private void handleGatePause(WorkflowEvent.GatePause event) {
+        TraceEventEntity span = new TraceEventEntity(
+                UUID.randomUUID(), event.runId(), null, "GATE_PAUSE",
+                event.gateName(), event.message(),
+                event.timestamp());
+        span.setEndTime(event.timestamp());
+        span.setDurationMs(0L);
+        traceEventRepository.save(span);
     }
 
     public void cleanup(UUID runId) {

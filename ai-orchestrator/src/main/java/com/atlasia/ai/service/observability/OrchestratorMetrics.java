@@ -23,6 +23,7 @@ public class OrchestratorMetrics {
     private final Counter llmErrorsTotal;
     private final Timer llmDuration;
     private final Counter llmTokensUsed;
+    private final Counter llmMockResponsesTotal;
 
     private final Counter agentStepExecutionsTotal;
     private final Counter agentStepErrorsTotal;
@@ -107,6 +108,10 @@ public class OrchestratorMetrics {
 
         this.llmTokensUsed = Counter.builder("orchestrator.llm.tokens.used")
                 .description("Total number of LLM tokens used")
+                .register(meterRegistry);
+
+        this.llmMockResponsesTotal = Counter.builder("orchestrator.llm.mock.count")
+                .description("Structured LLM calls that returned a synthetic mock after endpoint failures")
                 .register(meterRegistry);
 
         this.agentStepExecutionsTotal = Counter.builder("orchestrator.agent.step.executions.total")
@@ -367,6 +372,21 @@ public class OrchestratorMetrics {
         if (tokensUsed > 0) {
             llmTokensUsed.increment(tokensUsed);
         }
+    }
+
+    /** Tiered routing: secondary leg used after primary failure (or circuit open). */
+    public void recordLlmDualFailover(String tier, String fromLeg, String toLeg) {
+        Counter.builder("orchestrator.llm.dual.failover.total")
+                .description("LLM dual-leg failover count")
+                .tag("tier", tier != null ? tier : "unknown")
+                .tag("from_leg", fromLeg != null ? fromLeg : "unknown")
+                .tag("to_leg", toLeg != null ? toLeg : "unknown")
+                .register(meterRegistry)
+                .increment();
+    }
+
+    public void recordLlmMockResponse() {
+        llmMockResponsesTotal.increment();
     }
 
     public void recordLlmError(String model, String errorType) {

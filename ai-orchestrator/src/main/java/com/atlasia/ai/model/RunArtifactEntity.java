@@ -1,5 +1,6 @@
 package com.atlasia.ai.model;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.Type;
@@ -53,11 +54,32 @@ public class RunArtifactEntity {
 
     protected RunArtifactEntity() {}
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     public RunArtifactEntity(String agentName, String artifactType, String payload, Instant createdAt) {
         this.agentName = agentName;
         this.artifactType = artifactType;
-        this.payload = payload;
+        this.payload = ensureValidJson(payload);
         this.createdAt = createdAt;
+    }
+
+    /**
+     * Garantit que la valeur stockée dans la colonne jsonb est du JSON valide.
+     * Si ce n'est pas le cas (ex. message d'erreur en texte brut), on l'encapsule
+     * dans {"raw":"..."} pour que PostgreSQL accepte l'INSERT.
+     */
+    private static String ensureValidJson(String raw) {
+        if (raw == null) return null;
+        try {
+            MAPPER.readTree(raw);
+            return raw;
+        } catch (Exception e) {
+            try {
+                return MAPPER.writeValueAsString(raw);
+            } catch (Exception ex) {
+                return "{\"raw\":\"[unserializable]\"}";
+            }
+        }
     }
 
     public UUID getId() { return id; }

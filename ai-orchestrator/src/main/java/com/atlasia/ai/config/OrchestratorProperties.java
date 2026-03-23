@@ -14,7 +14,8 @@ public record OrchestratorProperties(
         public record GitHub(
                         String appId,
                         String privateKeyPath,
-                        String installationId) {
+                        String installationId,
+                        String pat) {
         }
 
         public record Llm(

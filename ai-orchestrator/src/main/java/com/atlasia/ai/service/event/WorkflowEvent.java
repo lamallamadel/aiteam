@@ -16,7 +16,9 @@ public sealed interface WorkflowEvent permits
         WorkflowEvent.EscalationRaised,
         WorkflowEvent.GraftStart,
         WorkflowEvent.GraftComplete,
-        WorkflowEvent.GraftFailed {
+        WorkflowEvent.GraftFailed,
+        WorkflowEvent.BlackboardWrite,
+        WorkflowEvent.GatePause {
 
     UUID runId();
 
@@ -99,5 +101,16 @@ public sealed interface WorkflowEvent permits
             String errorType, String message) implements WorkflowEvent {
         @Override
         public String eventType() { return "GRAFT_FAILED"; }
+    }
+
+    record BlackboardWrite(UUID runId, Instant timestamp, String entryKey, String agentName,
+            int version) implements WorkflowEvent {
+        @Override
+        public String eventType() { return "BLACKBOARD_WRITE"; }
+    }
+
+    record GatePause(UUID runId, Instant timestamp, String gateName, String message) implements WorkflowEvent {
+        @Override
+        public String eventType() { return "GATE_PAUSE"; }
     }
 }

@@ -135,7 +135,9 @@ class A2AContractTest {
         RunRequest request = new RunRequest(
             requestBody.get("repo").asText(),
             requestBody.get("issueNumber").asInt(),
+            null,
             requestBody.get("mode").asText(),
+            null,
             null
         );
 

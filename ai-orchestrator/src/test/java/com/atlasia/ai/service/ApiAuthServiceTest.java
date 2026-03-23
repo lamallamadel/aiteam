@@ -81,9 +81,6 @@ class ApiAuthServiceTest {
 
     @Test
     void isAuthorized_securityContextAuthenticated_returnsTrue() {
-        when(orchestratorProperties.token()).thenReturn(null);
-        when(gitHubApiClient.isValidToken("jwt-token")).thenReturn(false);
-
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("user", null, java.util.Collections.emptyList()));
 

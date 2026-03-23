@@ -3,12 +3,13 @@ FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /build
 
 # Copy Maven files first for better layer caching
-COPY pom.xml settings.xml* ./
+COPY ai-orchestrator/pom.xml ai-orchestrator/settings.xml* ./
 RUN --mount=type=cache,target=/root/.m2 \
     mvn dependency:go-offline -q -DskipTests
 
-# Copy source code
-COPY src ./src
+# Copy source code and persona YAML files required by pom.xml resource plugin
+COPY ai-orchestrator/src ./src
+COPY ai/agents/personas ../ai/agents/personas
 
 # Build the application
 RUN --mount=type=cache,target=/root/.m2 \

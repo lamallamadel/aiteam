@@ -6,7 +6,7 @@ import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import { SettingsService, GitProviderWithId } from '../services/settings.service';
 import { AuthService } from '../services/auth.service';
 import { OrchestratorService } from '../services/orchestrator.service';
-import { CurrentUserDto } from '../models/orchestrator.model';
+import { CurrentUserDto, GithubRepo } from '../models/orchestrator.model';
 import { ToastService } from '../services/toast.service';
 import { NotificationService, NotificationConfig, CreateNotificationConfig } from '../services/notification.service';
 
@@ -103,9 +103,9 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
                     <button class="btn-secondary" (click)="cancelProviderForm()">Cancel</button>
                     <button 
                       class="btn-primary" 
-                      [disabled]="!canSaveProvider()"
+                      [disabled]="!canSaveProvider() || validatingToken()"
                       (click)="saveProvider()">
-                      {{ editingProviderId() ? 'Update' : 'Add' }} Provider
+                      @if (validatingToken()) { Validation… } @else { {{ editingProviderId() ? 'Update' : 'Add' }} Provider }
                     </button>
                   </div>
                 </div>
@@ -143,6 +143,22 @@ type TabId = 'integrations' | 'usage' | 'ai-customization';
                       </div>
                     </div>
                   }
+                </div>
+              }
+
+              @if (githubRepos().length > 0) {
+                <div class="section-header" style="margin-top:8px">
+                  <h3>Default Repository</h3>
+                </div>
+                <div class="provider-form glass-panel" style="padding:16px">
+                  <div class="form-group">
+                    <label>Repository used when launching a new run</label>
+                    <select class="input-field" [ngModel]="defaultRepo()" (ngModelChange)="settingsService.setDefaultRepo($event)">
+                      @for (repo of githubRepos(); track repo.id) {
+                        <option [value]="repo.full_name">{{ repo.full_name }}{{ repo.private ? ' 🔒' : '' }}</option>
+                      }
+                    </select>
+                  </div>
                 </div>
               }
 
@@ -1141,6 +1157,9 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
   formLabel = signal('');
   formToken = signal('');
   formUrl = signal('');
+  validatingToken = signal(false);
+  githubRepos = computed(() => this.settingsService.githubRepos());
+  defaultRepo = computed(() => this.settingsService.defaultRepo());
 
   editRpm = signal(60);
   editTpm = signal(90000);
@@ -1206,7 +1225,7 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
   };
 
   constructor(
-    private settingsService: SettingsService,
+    readonly settingsService: SettingsService,
     private authService: AuthService,
     private orchestratorService: OrchestratorService,
     private toastService: ToastService,
@@ -1291,21 +1310,61 @@ export class SettingsDashboardComponent implements OnInit, OnDestroy {
   saveProvider() {
     if (!this.canSaveProvider()) return;
 
-    const provider = {
-      provider: this.formProvider(),
-      label: this.formLabel(),
-      token: this.formToken(),
-      url: this.formUrl() || null,
-      status: 'connected' as const
-    };
-
-    if (this.editingProviderId()) {
-      this.settingsService.updateGitProviderById(this.editingProviderId()!, provider);
+    if (this.formProvider() === 'github') {
+      this.validatingToken.set(true);
+      this.orchestratorService.validateGithubToken(this.formToken()).subscribe({
+        next: (user) => {
+          const provider = {
+            provider: this.formProvider(),
+            label: this.formLabel() || user.login,
+            token: this.formToken(),
+            url: this.formUrl() || null,
+            status: 'connected' as const
+          };
+          if (this.editingProviderId()) {
+            this.settingsService.updateGitProviderById(this.editingProviderId()!, provider);
+          } else {
+            this.settingsService.addGitProvider(provider);
+          }
+          this.toastService.show(`GitHub connecté en tant que ${user.login}`, 'success');
+          this.fetchGithubRepos(this.formToken());
+          this.validatingToken.set(false);
+          this.cancelProviderForm();
+        },
+        error: (err) => {
+          this.validatingToken.set(false);
+          const msg = err?.status === 401 ? 'Token invalide ou expiré.' : 'Impossible de valider le token GitHub.';
+          this.toastService.show(msg, 'error');
+        }
+      });
     } else {
-      this.settingsService.addGitProvider(provider);
+      const provider = {
+        provider: this.formProvider(),
+        label: this.formLabel(),
+        token: this.formToken(),
+        url: this.formUrl() || null,
+        status: 'connected' as const
+      };
+      if (this.editingProviderId()) {
+        this.settingsService.updateGitProviderById(this.editingProviderId()!, provider);
+      } else {
+        this.settingsService.addGitProvider(provider);
+      }
+      this.cancelProviderForm();
     }
+  }
 
-    this.cancelProviderForm();
+  private fetchGithubRepos(token: string) {
+    this.orchestratorService.getGithubRepos(token).subscribe({
+      next: (repos) => {
+        this.settingsService.setGithubRepos(repos);
+        if (repos.length > 0 && !this.settingsService.defaultRepo()) {
+          this.settingsService.setDefaultRepo(repos[0].full_name);
+        }
+        this.toastService.show(`${repos.length} dépôts chargés`, 'success');
+      },
+      error: () => this.toastService.show('Repos chargés partiellement', 'error')
+    });
   }
 
   editProvider(provider: GitProviderWithId) {

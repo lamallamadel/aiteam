@@ -1,14 +1,33 @@
 export interface RunRequest {
     repo: string;
-    issueNumber: number;
+    issueNumber?: number;
+    goal?: string;
     mode: string;
-    autonomy?: string; // "autonomous" (default) | "confirm" | "observe"
+    autonomy?: string;
+    githubToken?: string;
+}
+
+export interface GithubRepo {
+    id: number;
+    full_name: string;
+    name: string;
+    private: boolean;
+    description?: string;
+    html_url: string;
+    updated_at: string;
+}
+
+export interface GithubUser {
+    login: string;
+    name?: string;
+    avatar_url?: string;
 }
 
 export interface RunResponse {
     id: string;
     repo: string;
-    issueNumber: number;
+    issueNumber?: number;
+    goal?: string;
     mode: string;
     status: string;
     createdAt: string;
@@ -51,6 +70,17 @@ export interface ChatRequest {
 
 export interface ChatResponse {
     response: string;
+}
+
+/** GET /api/budget — estimated LLM spend (pipeline tier routing). */
+export interface LlmBudgetSnapshot {
+    currentRunId: string | null;
+    spentRunUsd: number;
+    maxRunUsd: number;
+    spentDayUsd: number;
+    maxDayUsd: number;
+    downgradeThreshold: number;
+    agentComplexityKeys: Record<string, string>;
 }
 
 // A2A Protocol models (matching backend A2ADiscoveryService + AgentBindingService)

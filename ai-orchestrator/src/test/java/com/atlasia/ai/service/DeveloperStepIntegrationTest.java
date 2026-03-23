@@ -4,6 +4,7 @@ import com.atlasia.ai.config.OpenTelemetryTestConfig;
 import com.atlasia.ai.config.OrchestratorProperties;
 import com.atlasia.ai.model.RunEntity;
 import com.atlasia.ai.model.RunStatus;
+import com.atlasia.ai.model.TaskComplexity;
 import com.atlasia.ai.service.exception.AgentStepException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,12 @@ class DeveloperStepIntegrationTest {
     @Autowired
     private OrchestratorProperties properties;
 
+    @Autowired
+    private AgentContractLoader agentContractLoader;
+
+    @Autowired
+    private LlmComplexityResolver complexityResolver;
+
     @MockBean
     private GitHubApiClient gitHubApiClient;
 
@@ -46,7 +53,8 @@ class DeveloperStepIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        developerStep = new DeveloperStep(gitHubApiClient, llmService, objectMapper, properties);
+        developerStep = new DeveloperStep(
+                gitHubApiClient, llmService, complexityResolver, objectMapper, properties, agentContractLoader);
 
         runEntity = new RunEntity(
                 UUID.randomUUID(),
@@ -99,8 +107,8 @@ class DeveloperStepIntegrationTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         var result = developerStep.execute(context);
 
@@ -121,10 +129,10 @@ class DeveloperStepIntegrationTest {
     void testLlmRetryMechanism() throws Exception {
         setupMocksForSuccessfulFlow();
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("Temporary failure"))
                 .thenThrow(new RuntimeException("Temporary failure"))
-                .thenReturn("""
+                .thenReturn(LlmResult.primary("""
                         {
                             "summary": "Test implementation",
                             "files": [
@@ -138,25 +146,25 @@ class DeveloperStepIntegrationTest {
                             "testingNotes": "Tests included",
                             "implementationNotes": "Clean implementation"
                         }
-                        """);
+                        """));
 
         var result = developerStep.execute(context);
 
         assertNotNull(result);
-        verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
     }
 
     @Test
     void testFallbackWhenLlmCompletelyFails() throws Exception {
         setupMocksForSuccessfulFlow();
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
                 .thenThrow(new RuntimeException("LLM service down"));
 
         var result = developerStep.execute(context);
 
         assertNotNull(result);
-        verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap());
+        verify(llmService, times(3)).generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class));
         verify(gitHubApiClient).createBlob(eq("test-owner"), eq("test-repo"), contains("Implementation Plan"),
                 eq("utf-8"));
     }
@@ -181,8 +189,8 @@ class DeveloperStepIntegrationTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         assertThrows(AgentStepException.class, () -> {
             developerStep.execute(context);
@@ -209,8 +217,8 @@ class DeveloperStepIntegrationTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         assertThrows(AgentStepException.class, () -> {
             developerStep.execute(context);
@@ -263,8 +271,8 @@ class DeveloperStepIntegrationTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         developerStep.execute(context);
 
@@ -308,8 +316,8 @@ class DeveloperStepIntegrationTest {
                 }
                 """;
 
-        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap()))
-                .thenReturn(llmResponse);
+        when(llmService.generateStructuredOutput(anyString(), anyString(), anyMap(), any(TaskComplexity.class)))
+                .thenReturn(LlmResult.primary(llmResponse));
 
         developerStep.execute(context);
 

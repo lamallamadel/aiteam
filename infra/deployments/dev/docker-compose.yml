@@ -1,9 +1,11 @@
 # ═════════════════════════════════════════════════════════════════════════════
 # DEVELOPMENT ENVIRONMENT - AITEAM
 # ═════════════════════════════════════════════════════════════════════════════
-# Start: docker-compose -f infra/deployments/dev/docker-compose.yml up -d
-# Logs:  docker-compose -f infra/deployments/dev/docker-compose.yml logs -f
-# Stop:  docker-compose -f infra/deployments/dev/docker-compose.yml down
+# Start (DB + backend + frontend): docker compose -f infra/deployments/dev/docker-compose.yml --profile full up -d
+# Build images:              docker compose -f infra/deployments/dev/docker-compose.yml --profile full build
+# Logs:                      docker compose -f infra/deployments/dev/docker-compose.yml --profile full logs -f
+# Stop:                      docker compose -f infra/deployments/dev/docker-compose.yml --profile full down
+# Sans --profile full, seul Postgres (ai-db) démarre — ai-orchestrator et ai-dashboard ont profiles: full|backend / full|frontend.
 # ═════════════════════════════════════════════════════════════════════════════
 
 services:
@@ -42,8 +44,8 @@ services:
 
   ai-orchestrator:
     build:
-      context: ../../../ai-orchestrator
-      dockerfile: Dockerfile
+      context: ../../..
+      dockerfile: ai-orchestrator/Dockerfile
       args:
         BUILDKIT_INLINE_CACHE: 1
     container_name: aiteam_backend_dev
@@ -56,7 +58,11 @@ services:
       ORCHESTRATOR_TOKEN: ${ORCHESTRATOR_TOKEN:-dev-token-change-me}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-min-256-bits-for-local-docker-only}
       AUTH_MODE: ${AUTH_MODE:-local}
-      LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key-change-me}
+      # LLM_API_KEY / LLM_ENDPOINT / LLM_* : uniquement via env_file (.env.dev).
+      # Ne pas les mettre ici avec ${VAR:-default} : Compose interpole depuis le shell ou
+      # un fichier .env à côté du compose, PAS depuis env_file → ça écrasait .env.dev
+      # par dev-llm-key-change-me même avec une vraie clé dans .env.dev.
+      # GITHUB_PAT est chargé depuis .env.dev via env_file — ne pas l'overrider ici
       REPO_ALLOWLIST: ${REPO_ALLOWLIST:-backend/,frontend/,docs/,infra/,ai/}
       WORKFLOW_PROTECT: ${WORKFLOW_PROTECT:-.github/workflows/}
       # Disable Vault in dev (no Vault server running locally)
@@ -69,6 +75,9 @@ services:
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: dev-placeholder
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITLAB_CLIENT_ID: dev-placeholder
       SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GITLAB_CLIENT_SECRET: dev-placeholder
+      # Disable OTel gRPC exporter in dev (no collector running locally)
+      OTEL_SDK_DISABLED: "true"
+      MANAGEMENT_TRACING_ENABLED: "false"
       # Debug settings
       LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       LOGGING_LEVEL_COM_EXAMPLE: ${LOGGING_LEVEL_COM_EXAMPLE:-DEBUG}

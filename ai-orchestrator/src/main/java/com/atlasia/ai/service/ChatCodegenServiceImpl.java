@@ -1,8 +1,11 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.api.AiProviderRouter;
+import com.atlasia.ai.api.dto.AiWireTypes.AiPrompt;
 import com.atlasia.ai.api.dto.CodegenRequest;
 import com.atlasia.ai.api.dto.CodegenResponse;
 import com.atlasia.ai.config.ChatPersonaLoader;
+import com.atlasia.ai.model.ConversationTurnEntity;
 import com.atlasia.ai.domain.CodeGenerationResult;
 import com.atlasia.ai.model.ChatArtifactEntity;
 import com.atlasia.ai.model.ChatGenerationRunEntity;
@@ -15,13 +18,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Implements Chat Mode code generation without Spring AI.
  *
- * The LLM is prompted via the existing {@link LlmService} (OpenAI-compatible).
+ * The LLM is prompted via {@link AiProviderRouter} (multi-provider Chat Mode).
  * A JSON schema instruction is appended to the system prompt so the model returns
  * structured output. The response is parsed with Jackson; if parsing fails the run
  * is recorded as PARTIAL and the raw text is returned in the summary field.
@@ -58,7 +62,7 @@ No text before or after the JSON. Use this exact schema:
 artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
 """;
 
-    private final LlmService llmService;
+    private final AiProviderRouter aiProviderRouter;
     private final ChatPersonaLoader personaLoader;
     private final ConversationMemoryService memoryService;
     private final ChatArtifactRepository artifactRepo;
@@ -66,13 +70,13 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
     private final ObjectMapper objectMapper;
 
     public ChatCodegenServiceImpl(
-            LlmService llmService,
+            AiProviderRouter aiProviderRouter,
             ChatPersonaLoader personaLoader,
             ConversationMemoryService memoryService,
             ChatArtifactRepository artifactRepo,
             ChatGenerationRunRepository runRepo,
             ObjectMapper objectMapper) {
-        this.llmService = llmService;
+        this.aiProviderRouter = aiProviderRouter;
         this.personaLoader = personaLoader;
         this.memoryService = memoryService;
         this.artifactRepo = artifactRepo;
@@ -88,15 +92,17 @@ artifact_type values: SOURCE_CODE, SPEC, CONFIG, TEST, MIGRATION, OTHER
         String systemPrompt = buildCodegenSystemPrompt(request.personaId(), sessionKey);
 
         var history = memoryService.getContextWindow(request.userId(), request.personaId());
-        String historyBlock = memoryService.formatContextForPrompt(history);
-        if (!historyBlock.isBlank()) {
-            systemPrompt = systemPrompt + "\n\n" + historyBlock;
+        List<Map<String, String>> histMaps = new ArrayList<>();
+        for (ConversationTurnEntity t : history) {
+            histMaps.add(Map.of("role", t.getRole(), "content", t.getContent()));
         }
 
         log.debug("Codegen: userId={} persona={} historyTurns={}", request.userId(),
                 request.personaId(), history.size());
 
-        String rawReply = llmService.generateCompletion(systemPrompt, request.message());
+        var aiResponse = aiProviderRouter.call(
+                request.personaId(), new AiPrompt(systemPrompt, request.message(), histMaps));
+        String rawReply = aiResponse.content();
 
         memoryService.saveTurns(request.userId(), request.personaId(), request.message(), rawReply);
 

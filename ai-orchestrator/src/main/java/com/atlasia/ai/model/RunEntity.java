@@ -19,8 +19,11 @@ public class RunEntity {
     @Column(name = "repo", nullable = false)
     private String repo;
 
-    @Column(name = "issue_number", nullable = false)
-    private int issueNumber;
+    @Column(name = "issue_number")
+    private Integer issueNumber;
+
+    @Column(name = "goal", columnDefinition = "TEXT")
+    private String goal;
 
     @Column(name = "mode", nullable = false)
     private String mode;
@@ -72,12 +75,19 @@ public class RunEntity {
     @Column(name = "executed_grafts", columnDefinition = "jsonb")
     private String executedGrafts;
 
+    @Column(name = "pending_hitl_gate")
+    private String pendingHitlGate;
+
+    /** When set, next executeWorkflow resumes mid-pipeline (e.g. AFTER_ARCHITECTURE_GATE). */
+    @Column(name = "workflow_resume_from")
+    private String workflowResumeFrom;
+
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RunArtifactEntity> artifacts = new ArrayList<>();
 
     protected RunEntity() {}
 
-    public RunEntity(UUID id, String repo, int issueNumber, String mode, RunStatus status, Instant createdAt) {
+    public RunEntity(UUID id, String repo, Integer issueNumber, String mode, RunStatus status, Instant createdAt) {
         this.id = id;
         this.repo = repo;
         this.issueNumber = issueNumber;
@@ -89,7 +99,9 @@ public class RunEntity {
 
     public UUID getId() { return id; }
     public String getRepo() { return repo; }
-    public int getIssueNumber() { return issueNumber; }
+    public Integer getIssueNumber() { return issueNumber; }
+    public String getGoal() { return goal; }
+    public void setGoal(String goal) { this.goal = goal; this.updatedAt = Instant.now(); }
     public String getMode() { return mode; }
     public RunStatus getStatus() { return status; }
     public String getCurrentAgent() { return currentAgent; }
@@ -105,6 +117,8 @@ public class RunEntity {
     public String getPrunedSteps() { return prunedSteps; }
     public String getPendingGrafts() { return pendingGrafts; }
     public String getExecutedGrafts() { return executedGrafts; }
+    public String getPendingHitlGate() { return pendingHitlGate; }
+    public String getWorkflowResumeFrom() { return workflowResumeFrom; }
 
     /** Returns true if the given step name appears in the pruned steps list. */
     public boolean isStepPruned(String stepName) {
@@ -127,6 +141,16 @@ public class RunEntity {
 
     public void setExecutedGrafts(String executedGrafts) {
         this.executedGrafts = executedGrafts;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setPendingHitlGate(String pendingHitlGate) {
+        this.pendingHitlGate = pendingHitlGate;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setWorkflowResumeFrom(String workflowResumeFrom) {
+        this.workflowResumeFrom = workflowResumeFrom;
         this.updatedAt = Instant.now();
     }
 

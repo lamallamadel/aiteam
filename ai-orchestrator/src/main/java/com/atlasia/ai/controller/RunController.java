@@ -2,6 +2,7 @@ package com.atlasia.ai.controller;
 
 import com.atlasia.ai.api.ArtifactResponse;
 import com.atlasia.ai.api.EscalationDecisionRequest;
+import com.atlasia.ai.api.GateRespondRequest;
 import com.atlasia.ai.api.RunRequest;
 import com.atlasia.ai.api.RunResponse;
 import com.atlasia.ai.config.RequiresPermission;
@@ -11,6 +12,7 @@ import com.atlasia.ai.model.RunArtifactEntity;
 import com.atlasia.ai.persistence.RunRepository;
 import com.atlasia.ai.service.ApiAuthService;
 import com.atlasia.ai.service.RoleService;
+import com.atlasia.ai.service.HitlGateService;
 import com.atlasia.ai.service.WorkflowEngine;
 import com.atlasia.ai.service.event.WorkflowEventBus;
 import com.atlasia.ai.service.CollaborationService;
@@ -41,16 +43,19 @@ public class RunController {
     private final WorkflowEventBus eventBus;
     private final CollaborationService collaborationService;
     private final ApiAuthService apiAuthService;
+    private final HitlGateService hitlGateService;
 
     public RunController(RunRepository runRepository,
             WorkflowEngine workflowEngine,
             WorkflowEventBus eventBus, CollaborationService collaborationService,
-            ApiAuthService apiAuthService) {
+            ApiAuthService apiAuthService,
+            HitlGateService hitlGateService) {
         this.runRepository = runRepository;
         this.workflowEngine = workflowEngine;
         this.eventBus = eventBus;
         this.collaborationService = collaborationService;
         this.apiAuthService = apiAuthService;
+        this.hitlGateService = hitlGateService;
     }
 
     @GetMapping
@@ -77,16 +82,25 @@ public class RunController {
         if (!apiAuthService.isAuthorized(authorization)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
+        boolean hasIssue = request.issueNumber() != null && request.issueNumber() >= 1;
+        boolean hasGoal  = request.goal() != null && !request.goal().isBlank();
+        if (!hasIssue && !hasGoal) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        String token = (request.githubToken() != null && !request.githubToken().isBlank())
+                ? request.githubToken()
+                : apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
 
         UUID id = UUID.randomUUID();
         RunEntity entity = new RunEntity(
                 id,
                 request.repo(),
-                request.issueNumber(),
+                hasIssue ? request.issueNumber() : null,
                 request.mode(),
                 RunStatus.RECEIVED,
                 Instant.now());
+        if (hasGoal) entity.setGoal(request.goal());
         if (request.autonomy() != null && !request.autonomy().isBlank()) {
             entity.setAutonomy(request.autonomy());
         }
@@ -181,6 +195,40 @@ public class RunController {
      * Resume a run from its environment checkpoint.
      * Re-executes the workflow; WorkflowEngine will load checkpoint context.
      */
+    /**
+     * Respond to a paused HITL gate (e.g. architecture_approval). On approve/modify, the workflow
+     * resumes from the checkpoint after the architect step.
+     */
+    @PostMapping("/{id}/gates/{gateName}/respond")
+    @PreAuthorize("hasRole('USER')")
+    @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_UPDATE)
+    public ResponseEntity<RunResponse> respondToGate(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("id") UUID id,
+            @PathVariable("gateName") String gateName,
+            @Valid @RequestBody GateRespondRequest request) {
+        if (!apiAuthService.isAuthorized(authorization)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String token = apiAuthService.getApiTokenForWorkflow(authorization).orElse(null);
+        try {
+            hitlGateService.applyGateResponse(id, gateName, request.decision(), request.comment());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+        RunEntity updated = runRepository.findById(id).orElse(null);
+        if (updated == null) {
+            return ResponseEntity.notFound().build();
+        }
+        if (updated.getStatus() == RunStatus.FAILED && updated.getPendingHitlGate() == null) {
+            return ResponseEntity.ok(toRunResponse(updated));
+        }
+        workflowEngine.executeWorkflowAsync(id, token);
+        return ResponseEntity.accepted().body(toRunResponse(updated));
+    }
+
     @PostMapping("/{id}/resume")
     @PreAuthorize("hasRole('USER')")
     @RequiresPermission(resource = RoleService.RESOURCE_RUN, action = RoleService.ACTION_UPDATE)
@@ -376,6 +424,7 @@ public class RunController {
                 entity.getId(),
                 entity.getRepo(),
                 entity.getIssueNumber(),
+                entity.getGoal(),
                 entity.getMode(),
                 entity.getStatus().name(),
                 entity.getCreatedAt(),

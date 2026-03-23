@@ -1,5 +1,8 @@
 package com.atlasia.ai.service;
 
+import com.atlasia.ai.api.AiProviderRouter;
+import com.atlasia.ai.api.dto.AiWireTypes.AiPrompt;
+import com.atlasia.ai.api.dto.AiWireTypes.AiResponse;
 import com.atlasia.ai.config.ChatPersonaLoader;
 import com.atlasia.ai.config.PersonaConfig;
 import com.atlasia.ai.config.PersonaConfigLoader;
@@ -7,6 +10,7 @@ import com.atlasia.ai.model.ConversationTurnEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,17 +25,32 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ChatServiceTest {
 
-    @Mock private LlmService llmService;
-    @Mock private ChatPersonaLoader chatPersonaLoader;
-    @Mock private PersonaConfigLoader personaConfigLoader;
-    @Mock private ConversationMemoryService memoryService;
+    @Mock
+    private AiProviderRouter aiProviderRouter;
 
-    @InjectMocks private ChatService chatService;
+    @Mock
+    private ChatPersonaLoader chatPersonaLoader;
+
+    @Mock
+    private PersonaConfigLoader personaConfigLoader;
+
+    @Mock
+    private ConversationMemoryService memoryService;
+
+    @Mock
+    private HandoffService handoffService;
+
+    @Mock
+    private HandoffRouter handoffRouter;
+
+    @InjectMocks
+    private ChatService chatService;
 
     private PersonaConfig reviewPersona;
 
     @BeforeEach
     void setUp() {
+        lenient().when(handoffRouter.isAutoTrigger(anyString(), anyString())).thenReturn(false);
         reviewPersona = new PersonaConfig(
                 "security-engineer",
                 "Security Engineer",
@@ -39,8 +58,7 @@ class ChatServiceTest {
                 List.of("OWASP", "threat modeling"),
                 List.of(),
                 Map.of(),
-                List.of()
-        );
+                List.of());
     }
 
     @Test
@@ -48,8 +66,8 @@ class ChatServiceTest {
         when(chatPersonaLoader.hasPersona("architect")).thenReturn(true);
         when(chatPersonaLoader.getSystemPrompt("architect")).thenReturn("# Identity\nYou are an architect.");
         when(memoryService.getContextWindow("user1", "architect")).thenReturn(List.of());
-        when(memoryService.formatContextForPrompt(List.of())).thenReturn("");
-        when(llmService.generateCompletion(anyString(), anyString())).thenReturn("Design advice.");
+        when(aiProviderRouter.call(eq("architect"), any(AiPrompt.class)))
+                .thenReturn(new AiResponse("Design advice.", 0, 0, "test", "test", 0L));
 
         var reply = chatService.chat("user1", "architect", "Design the auth module.");
 
@@ -64,8 +82,8 @@ class ChatServiceTest {
         when(chatPersonaLoader.hasPersona("security-engineer")).thenReturn(false);
         when(personaConfigLoader.getPersonaByName("security-engineer")).thenReturn(reviewPersona);
         when(memoryService.getContextWindow("user1", "security-engineer")).thenReturn(List.of());
-        when(memoryService.formatContextForPrompt(List.of())).thenReturn("");
-        when(llmService.generateCompletion(anyString(), anyString())).thenReturn("Looks secure.");
+        when(aiProviderRouter.call(eq("security-engineer"), any(AiPrompt.class)))
+                .thenReturn(new AiResponse("Looks secure.", 0, 0, "test", "test", 0L));
 
         var reply = chatService.chat("user1", "security-engineer", "Is my JWT safe?");
 
@@ -74,17 +92,25 @@ class ChatServiceTest {
     }
 
     @Test
-    void chat_withHistory_injectsHistoryIntoPrompt() {
+    void chat_withHistory_passesHistoryToRouter() {
         var turn = mock(ConversationTurnEntity.class);
+        when(turn.getRole()).thenReturn("user");
+        when(turn.getContent()).thenReturn("previous");
         when(chatPersonaLoader.hasPersona("architect")).thenReturn(true);
         when(chatPersonaLoader.getSystemPrompt("architect")).thenReturn("# Identity\nYou are an architect.");
         when(memoryService.getContextWindow("user1", "architect")).thenReturn(List.of(turn));
-        when(memoryService.formatContextForPrompt(List.of(turn))).thenReturn("## Conversation history\n[user]: previous\n## End of history\n");
-        when(llmService.generateCompletion(anyString(), anyString())).thenReturn("Follow-up.");
+        when(aiProviderRouter.call(eq("architect"), any(AiPrompt.class)))
+                .thenReturn(new AiResponse("Follow-up.", 0, 0, "test", "test", 0L));
 
         chatService.chat("user1", "architect", "follow-up");
 
-        verify(llmService).generateCompletion(contains("Conversation history"), eq("follow-up"));
+        ArgumentCaptor<AiPrompt> promptCaptor = ArgumentCaptor.forClass(AiPrompt.class);
+        verify(aiProviderRouter).call(eq("architect"), promptCaptor.capture());
+        AiPrompt sent = promptCaptor.getValue();
+        assertEquals("follow-up", sent.userMessage());
+        assertEquals(1, sent.history().size());
+        assertEquals("user", sent.history().get(0).get("role"));
+        assertEquals("previous", sent.history().get(0).get("content"));
     }
 
     @Test
@@ -92,9 +118,8 @@ class ChatServiceTest {
         when(chatPersonaLoader.hasPersona("unknown")).thenReturn(false);
         when(personaConfigLoader.getPersonaByName("unknown")).thenReturn(null);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> chatService.chat("user1", "unknown", "hello"));
+        assertThrows(IllegalArgumentException.class, () -> chatService.chat("user1", "unknown", "hello"));
 
-        verifyNoInteractions(llmService, memoryService);
+        verifyNoInteractions(aiProviderRouter, memoryService);
     }
 }

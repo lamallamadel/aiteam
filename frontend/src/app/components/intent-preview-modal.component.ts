@@ -1,8 +1,9 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, signal } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorService } from '../services/orchestrator.service';
-import { RunRequest, AgentCard } from '../models/orchestrator.model';
+import { SettingsService } from '../services/settings.service';
+import { RunRequest, AgentCard, GithubRepo } from '../models/orchestrator.model';
 
 // Pipeline step definitions — fixed order
 const PIPELINE_STEPS = [
@@ -40,23 +41,56 @@ export interface IntentConfirmation {
           <button class="btn-close" (click)="cancel()">✕</button>
         </div>
 
-        <!-- Run summary -->
-        <div class="run-summary">
-          <div class="summary-field">
-            <span class="field-label">Repository</span>
-            <span class="field-value mono">{{ request.repo }}</span>
+        <!-- Run configuration form -->
+        <div class="run-form">
+          <!-- Repository -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Repository</label>
+              @if (githubRepos().length > 0) {
+                <select class="form-input" [ngModel]="formRepo()" (ngModelChange)="formRepo.set($event)">
+                  @for (r of githubRepos(); track r.id) {
+                    <option [value]="r.full_name">{{ r.full_name }}{{ r.private ? ' 🔒' : '' }}</option>
+                  }
+                </select>
+              } @else {
+                <input type="text" class="form-input" placeholder="owner/repo"
+                  [ngModel]="formRepo()" (ngModelChange)="formRepo.set($event)" />
+              }
+            </div>
+            <div class="form-group form-group-sm">
+              <label class="form-label">Mode</label>
+              <select class="form-input" [ngModel]="formMode()" (ngModelChange)="formMode.set($event)">
+                <option value="EXECUTION">Execution</option>
+                <option value="PLANNING">Planning</option>
+              </select>
+            </div>
           </div>
-          <div class="summary-field">
-            <span class="field-label">Issue</span>
-            <span class="field-value mono">#{{ request.issueNumber }}</span>
+
+          <!-- Goal vs Issue toggle -->
+          <div class="intent-toggle">
+            <button class="toggle-btn" [class.active]="intentMode() === 'issue'" (click)="intentMode.set('issue')">
+              Issue #
+            </button>
+            <button class="toggle-btn" [class.active]="intentMode() === 'goal'" (click)="intentMode.set('goal')">
+              Goal (natural language)
+            </button>
           </div>
-          <div class="summary-field">
-            <span class="field-label">Mode</span>
-            <select class="mode-select" [ngModel]="request.mode" (ngModelChange)="updateMode($event)">
-              <option value="PLANNING">Planning</option>
-              <option value="EXECUTION">Execution</option>
-            </select>
-          </div>
+
+          @if (intentMode() === 'issue') {
+            <div class="form-group">
+              <label class="form-label">Issue number</label>
+              <input type="number" class="form-input" placeholder="42" min="1"
+                [ngModel]="formIssueNumber()" (ngModelChange)="formIssueNumber.set($event)" />
+            </div>
+          } @else {
+            <div class="form-group">
+              <label class="form-label">Describe what you want to achieve</label>
+              <textarea class="form-textarea" rows="4"
+                placeholder="e.g. Add rate limiting to the /api/runs endpoint, write tests, and update the README."
+                [ngModel]="formGoal()" (ngModelChange)="formGoal.set($event)"></textarea>
+            </div>
+          }
         </div>
 
         <!-- Pipeline visualization -->
@@ -122,8 +156,8 @@ export interface IntentConfirmation {
         <!-- Footer actions -->
         <div class="modal-footer">
           <button class="btn-cancel" (click)="cancel()">Cancel</button>
-          <button class="btn-start" (click)="confirm()">
-            Launch {{ request.mode === 'PLANNING' ? 'Planning' : 'Execution' }}
+          <button class="btn-start" [disabled]="!canConfirm()" (click)="confirm()">
+            Launch {{ formMode() === 'PLANNING' ? 'Planning' : 'Execution' }}
           </button>
         </div>
       </div>
@@ -189,30 +223,48 @@ export interface IntentConfirmation {
     }
     .btn-close:hover { color: white; }
 
-    /* ── Run summary ─────────────────────────────────────────────── */
-    .run-summary {
-      display: flex;
-      gap: 20px;
-      padding: 12px 16px;
-      border-radius: 10px;
-      flex-wrap: wrap;
-      background: var(--surface);
-      border: 1px solid var(--border);
-    }
-    .summary-field { display: flex; align-items: center; gap: 8px; }
-    .field-label { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
-    .field-value { font-size: 0.9rem; color: white; font-weight: 600; }
-    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-    .mode-select {
+    /* ── Run form ────────────────────────────────────────────────── */
+    .run-form { display: flex; flex-direction: column; gap: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group-sm { min-width: 130px; }
+    .form-label { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-input {
+      padding: 9px 12px;
       background: rgba(255,255,255,0.06);
       border: 1px solid var(--border);
+      border-radius: 8px;
       color: white;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      cursor: pointer;
+      font-size: 0.9rem;
       outline: none;
+      transition: border-color 0.2s;
+      width: 100%;
+      box-sizing: border-box;
     }
+    .form-input:focus { border-color: rgba(56,189,248,0.5); background: rgba(255,255,255,0.08); }
+    .form-textarea {
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: white;
+      font-size: 0.9rem;
+      outline: none;
+      resize: vertical;
+      font-family: inherit;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    .form-textarea:focus { border-color: rgba(56,189,248,0.5); background: rgba(255,255,255,0.08); }
+    .intent-toggle { display: flex; gap: 4px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 3px; }
+    .toggle-btn {
+      flex: 1; padding: 7px 12px; border: none; border-radius: 6px;
+      background: transparent; color: rgba(255,255,255,0.45); font-size: 0.82rem;
+      font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .toggle-btn.active { background: var(--accent-active); color: white; }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
     /* ── Section label ───────────────────────────────────────────── */
     .section-label {
@@ -366,21 +418,53 @@ export class IntentPreviewModalComponent implements OnInit, OnChanges {
   private agentCards = signal<AgentCard[]>([]);
   autonomy = signal<AutonomyLevel>('confirm');
 
+  // Form state
+  intentMode = signal<'issue' | 'goal'>('issue');
+  formRepo = signal('');
+  formMode = signal('EXECUTION');
+  formIssueNumber = signal<number | null>(null);
+  formGoal = signal('');
+  githubRepos = computed(() => this.settingsService.githubRepos());
+
+  canConfirm = computed(() => {
+    if (!this.formRepo()) return false;
+    if (this.intentMode() === 'issue') return (this.formIssueNumber() ?? 0) >= 1;
+    return this.formGoal().trim().length > 0;
+  });
+
   autonomyOptions: { value: AutonomyLevel; label: string; icon: string }[] = [
     { value: 'observe',    label: 'Observe',    icon: '👁️' },
     { value: 'confirm',    label: 'Confirm',    icon: '🤝' },
     { value: 'autonomous', label: 'Autonomous', icon: '⚡' },
   ];
 
-  constructor(private orchestratorService: OrchestratorService) {}
+  constructor(
+    private orchestratorService: OrchestratorService,
+    private settingsService: SettingsService
+  ) {}
 
   ngOnInit() {
     this.fetchCards();
+    this.initForm();
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['visible']?.currentValue === true && this.agentCards().length === 0) {
-      this.fetchCards();
+    if (changes['visible']?.currentValue === true) {
+      this.initForm();
+      if (this.agentCards().length === 0) this.fetchCards();
+    }
+  }
+
+  private initForm() {
+    const defaultRepo = this.settingsService.defaultRepo();
+    this.formRepo.set(this.request?.repo || defaultRepo || '');
+    this.formMode.set(this.request?.mode || 'EXECUTION');
+    if (this.request?.goal) {
+      this.intentMode.set('goal');
+      this.formGoal.set(this.request.goal);
+    } else {
+      this.intentMode.set('issue');
+      this.formIssueNumber.set(this.request?.issueNumber ?? null);
     }
   }
 
@@ -411,13 +495,17 @@ export class IntentPreviewModalComponent implements OnInit, OnChanges {
     }
   }
 
-  updateMode(mode: string) {
-    // Request is an input — emit back through confirmed, or just mutate locally for preview
-    this.request = { ...this.request, mode };
-  }
-
   confirm() {
-    this.confirmed.emit({ request: this.request, autonomy: this.autonomy() });
+    const mode = this.formMode() === 'PLANNING' || this.formMode() === 'EXECUTION'
+      ? this.formMode() : 'EXECUTION';
+    const req: RunRequest = {
+      repo: this.formRepo(),
+      mode,
+      ...(this.intentMode() === 'issue'
+        ? { issueNumber: this.formIssueNumber() ?? undefined }
+        : { goal: this.formGoal().trim() })
+    };
+    this.confirmed.emit({ request: req, autonomy: this.autonomy() });
   }
 
   cancel() {
